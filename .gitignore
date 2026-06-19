@@ -1,0 +1,59 @@
+# Context (internal research docs)
+context/
+
+# Rust
+/target
+Cargo.lock
+**/*.rs.bk
+
+# Environment
+.env
+.env.local
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite
+
+# Node (for dashboard)
+dashboard/node_modules/
+dashboard/.next/
+out/
+dist/
+build/
+
+# Python (for evaluators)
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+
+# Docker
+docker-compose.override.yml
+
+# Terraform (if used for infrastructure)
+*.tfstate
+*.tfstate.backup
+.terraform/
+
+# Temporary files
+tmp/
+temp/

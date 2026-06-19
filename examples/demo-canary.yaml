@@ -1,0 +1,78 @@
+apiVersion: repath/v1
+kind: Rollout
+metadata:
+  name: demo-customer-support
+  labels:
+    team: ai-platform
+    service: chatbot
+
+spec:
+  # Baseline: strong system prompt with specific instructions
+  baseline:
+    provider: openai
+    model: gpt-4o-mini
+    prompt:
+      system: |
+        You are a helpful customer support agent for a SaaS product.
+        Always respond with specific, actionable steps.
+        Keep responses under 150 words.
+        Be professional and empathetic.
+    parameters:
+      temperature: 0.7
+      max_tokens: 256
+
+  # Candidate: intentionally weaker prompt — the evaluator should catch this
+  candidate:
+    provider: openai
+    model: gpt-4o-mini
+    prompt:
+      system: "You are a support agent. Help users."
+    parameters:
+      temperature: 0.9
+      max_tokens: 512
+
+  strategy:
+    type: canary
+    steps:
+      - weight: 10
+        duration: 2m
+        gate:
+          quality_score: ">= 0.8"
+          error_rate: "< 0.05"
+      - weight: 50
+        duration: 5m
+        gate:
+          quality_score: ">= 0.8"
+      - weight: 100
+
+    rollback:
+      trigger:
+        quality_score: "< 0.7"
+        error_rate: "> 0.1"
+      action: instant
+      cooldown: 10m
+
+  evaluation:
+    - type: programmatic
+      checks:
+        - response_not_empty
+        - no_refusal
+        - latency_under_5s
+
+    - type: llm_judge
+      model: gpt-4o-mini
+      sample_rate: 1.0
+      criteria:
+        - name: helpfulness
+          prompt: "Rate 1-5: Does this response give specific, actionable help?"
+          weight: 0.5
+        - name: completeness
+          prompt: "Rate 1-5: Does this response fully address the user's question?"
+          weight: 0.3
+        - name: clarity
+          prompt: "Rate 1-5: Is this response clear and well-structured?"
+          weight: 0.2
+
+  routing:
+    sticky_sessions: true
+    session_key: "x-user-id"
