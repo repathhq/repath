@@ -58,8 +58,14 @@ pub struct ActiveRollout {
     pub candidate_weight: f64,
     pub baseline_model: String,
     pub baseline_prompt: Option<String>,
+    /// Provider base URL for baseline (e.g. "https://api.openai.com/v1")
+    pub baseline_provider_url: String,
     pub candidate_model: String,
     pub candidate_prompt: Option<String>,
+    /// Provider base URL for candidate (may differ from baseline)
+    pub candidate_provider_url: String,
+    /// Tenant ID — used for circuit breaker isolation
+    pub tenant_id: String,
 }
 
 impl RolloutCache {
@@ -119,11 +125,12 @@ pub async fn run_cache_refresher(
 
 /// Query the database for the currently active rollout.
 ///
-/// Returns a `RolloutCache` with `active = None` if no rollout is in
-/// `shadow` or `canary` state.
+/// In self-hosted mode (REPATH_CLOUD_MODE not set) this returns the single
+/// active rollout. In cloud mode the gateway receives tenant_id per-request
+/// and the handler filters in the hot path — this cache holds all active
+/// rollouts, keyed by tenant_id, but for simplicity we only support one
+/// active rollout per tenant at a time.
 async fn fetch_active_rollout(pool: &PgPool) -> Result<RolloutCache> {
-    // Uses sqlx::query (not sqlx::query!) to avoid requiring DATABASE_URL at
-    // compile time. Column types are mapped manually below.
     let row = sqlx::query(
         r#"
         SELECT
@@ -133,8 +140,11 @@ async fn fetch_active_rollout(pool: &PgPool) -> Result<RolloutCache> {
             r.current_weight        AS candidate_weight,
             bv.model                AS baseline_model,
             bv.prompt_template      AS baseline_prompt,
+            COALESCE(bv.provider_url, 'https://api.openai.com/v1') AS baseline_provider_url,
             cv.model                AS candidate_model,
-            cv.prompt_template      AS candidate_prompt
+            cv.prompt_template      AS candidate_prompt,
+            COALESCE(cv.provider_url, 'https://api.openai.com/v1') AS candidate_provider_url,
+            COALESCE(r.tenant_id, 'default')  AS tenant_id
         FROM rollouts r
         JOIN versions bv ON r.baseline_version_id = bv.id
         JOIN versions cv ON r.candidate_version_id = cv.id
@@ -153,14 +163,17 @@ async fn fetch_active_rollout(pool: &PgPool) -> Result<RolloutCache> {
     let active = row.map(|r: sqlx::postgres::PgRow| {
         use sqlx::Row;
         ActiveRollout {
-            rollout_id:           r.get("rollout_id"),
-            baseline_version_id:  r.get("baseline_version_id"),
-            candidate_version_id: r.get("candidate_version_id"),
-            candidate_weight:     r.get("candidate_weight"),
-            baseline_model:       r.get("baseline_model"),
-            baseline_prompt:      r.get("baseline_prompt"),
-            candidate_model:      r.get("candidate_model"),
-            candidate_prompt:     r.get("candidate_prompt"),
+            rollout_id:               r.get("rollout_id"),
+            baseline_version_id:      r.get("baseline_version_id"),
+            candidate_version_id:     r.get("candidate_version_id"),
+            candidate_weight:         r.get("candidate_weight"),
+            baseline_model:           r.get("baseline_model"),
+            baseline_prompt:          r.get("baseline_prompt"),
+            baseline_provider_url:    r.get("baseline_provider_url"),
+            candidate_model:          r.get("candidate_model"),
+            candidate_prompt:         r.get("candidate_prompt"),
+            candidate_provider_url:   r.get("candidate_provider_url"),
+            tenant_id:                r.get("tenant_id"),
         }
     });
 

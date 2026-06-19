@@ -27,6 +27,7 @@ use tracing::{error, info};
 
 mod api;
 mod auth;
+mod circuit_breaker;
 mod config;
 mod db;
 mod observability;
@@ -86,6 +87,8 @@ pub struct AppState {
     /// Reads happen on every proxied request; writes happen ~once/30s from
     /// the controller. ArcSwap gives O(1) lock-free reads.
     pub rollout_cache: Arc<arc_swap::ArcSwap<router::RolloutCache>>,
+    /// Per-tenant circuit breaker — ensures Repath is never a bottleneck.
+    pub circuit_breaker: circuit_breaker::CircuitBreakerRegistry,
 }
 
 #[tokio::main]
@@ -198,6 +201,7 @@ async fn main() -> Result<()> {
         metrics: metrics.clone(),
         record_tx,
         rollout_cache,
+        circuit_breaker: circuit_breaker::CircuitBreakerRegistry::new(),
     };
 
     // Create Axum server

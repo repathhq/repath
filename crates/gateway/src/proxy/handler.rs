@@ -24,7 +24,7 @@
 //! `X-Repath-Request-Id` and `X-Repath-Version` for observability.
 
 use crate::{
-    proxy::streaming,
+    proxy::{provider::Provider, streaming},
     recorder::RecordRequest,
     router::{select_version, ActiveRollout, VersionAssignment},
     AppState,
@@ -87,10 +87,25 @@ pub async fn handle_proxy(
     let span = tracing::Span::current();
     span.record("request_id", request_id.to_string());
 
-    match proxy_inner(state, req, request_id).await {
-        Ok(response) => response,
+    // Extract tenant ID early for circuit breaker check.
+    let tenant_id = extract_tenant_id(req.headers());
+
+    // Circuit breaker: if open, return bypass response immediately.
+    // The client SDK sees X-Repath-Bypass: true and calls the provider directly.
+    // This guarantees Repath is NEVER a bottleneck to the customer's app.
+    if state.circuit_breaker.is_open(&tenant_id) {
+        warn!(tenant_id, "Circuit open — returning bypass response");
+        return bypass_response(request_id);
+    }
+
+    match proxy_inner(state.clone(), req, request_id, &tenant_id).await {
+        Ok(response) => {
+            state.circuit_breaker.record_success(&tenant_id);
+            response
+        }
         Err(e) => {
-            warn!(error = %e, "Proxy request failed");
+            state.circuit_breaker.record_failure(&tenant_id);
+            warn!(error = %e, tenant_id, "Proxy request failed");
             error_response(e.status_code(), e.to_string())
         }
     }
@@ -104,6 +119,7 @@ async fn proxy_inner(
     state: AppState,
     req: Request<Body>,
     request_id: Uuid,
+    _tenant_id: &str,
 ) -> Result<Response<Body>> {
     let span = tracing::Span::current();
 
@@ -170,8 +186,21 @@ async fn proxy_inner(
     // Reconstruct the request to pass to read_request_body
     let req = Request::from_parts(parts, body);
 
+    // Detect provider for request/response translation
+    let detected_provider = Provider::from_url(&version.provider_url);
+
     // Read body; optionally inject system prompt for candidate version
-    let (body_bytes, is_streaming) = read_request_body(req, &version).await?;
+    let (body_bytes_raw, is_streaming) = read_request_body(req, &version).await?;
+
+    // Translate request body for non-OpenAI providers (e.g. Anthropic format)
+    let body_bytes = crate::proxy::provider::translate_request_body(
+        &body_bytes_raw, &detected_provider,
+    );
+
+    // Normalize headers for the target provider (Anthropic needs x-api-key, not Bearer)
+    let upstream_headers = crate::proxy::provider::normalize_headers(
+        upstream_headers, &detected_provider, None,
+    );
 
     // ── Forward to upstream ───────────────────────────────────────────────
     let start = Instant::now();
@@ -183,7 +212,7 @@ async fn proxy_inner(
         .send()
         .await
         .map_err(|e| Error::Provider {
-            provider: "upstream".to_string(),
+            provider: detected_provider.clone().to_str().to_string(),
             message: e.to_string(),
             status_code: None,
             source: Some(e.into()),
@@ -221,7 +250,7 @@ async fn proxy_inner(
     let (response_body, stream_result) = if is_streaming {
         build_streaming_response(upstream_response.bytes_stream()).await?
     } else {
-        build_buffered_response(upstream_response).await?
+        build_buffered_response(upstream_response, &detected_provider).await?
     };
 
     let latency_ms = start.elapsed().as_millis() as u32;
@@ -290,13 +319,13 @@ fn active_version(rollout: &ActiveRollout, assignment: VersionAssignment) -> Req
     match assignment {
         VersionAssignment::Baseline => RequestVersion {
             version_id: rollout.baseline_version_id,
-            provider_url: "https://api.openai.com/v1".to_string(), // TODO: from provider config
+            provider_url: rollout.baseline_provider_url.clone(),
             model: rollout.baseline_model.clone(),
             prompt_override: rollout.baseline_prompt.clone(),
         },
         VersionAssignment::Candidate => RequestVersion {
             version_id: rollout.candidate_version_id,
-            provider_url: "https://api.openai.com/v1".to_string(), // TODO: from provider config
+            provider_url: rollout.candidate_provider_url.clone(),
             model: rollout.candidate_model.clone(),
             prompt_override: rollout.candidate_prompt.clone(),
         },
@@ -419,14 +448,18 @@ async fn build_streaming_response(
 
 async fn build_buffered_response(
     upstream_response: reqwest::Response,
+    provider: &Provider,
 ) -> Result<(Body, ResponseParts)> {
-    let body_bytes = upstream_response
+    let raw_bytes = upstream_response
         .bytes()
         .await
         .map_err(|e| Error::Network {
             context: "Failed to read upstream response body".to_string(),
             source: e.into(),
         })?;
+
+    // Translate Anthropic format → OpenAI format for uniform recording/evaluation
+    let body_bytes = crate::proxy::provider::translate_response_body(&raw_bytes, provider);
 
     // Extract token counts from the JSON response
     let (input_tokens, output_tokens, response_text) =
@@ -469,13 +502,48 @@ fn extract_non_streaming_metadata(body: &Bytes) -> (Option<u32>, Option<u32>, St
 // ── Utility helpers ────────────────────────────────────────────────────────
 
 fn extract_session_id(headers: &HeaderMap) -> Option<String> {
-    // Try common session identifier headers
     headers
         .get("x-user-id")
         .or_else(|| headers.get("x-session-id"))
         .or_else(|| headers.get("x-request-id"))
         .and_then(|v| v.to_str().ok())
         .map(str::to_owned)
+}
+
+/// Extract tenant ID from request headers.
+/// Cloud: set via X-Repath-Tenant-Id. Self-hosted: always "default".
+fn extract_tenant_id(headers: &HeaderMap) -> String {
+    headers
+        .get("x-repath-tenant-id")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("default")
+        .to_string()
+}
+
+/// Bypass response — tells the client SDK to call the provider directly.
+///
+/// The gateway returns HTTP 503 with X-Repath-Bypass: true.
+/// A properly instrumented SDK (or a proxy-aware client) sees this header and
+/// immediately retries the request directly against the LLM provider without
+/// any Repath involvement. The end user experiences zero downtime.
+///
+/// For clients without the SDK, the 503 body includes the fallback instruction.
+fn bypass_response(request_id: Uuid) -> Response<Body> {
+    let body = serde_json::json!({
+        "error": {
+            "message": "Repath gateway is temporarily bypassed. Call your LLM provider directly.",
+            "type": "bypass",
+            "code": "circuit_open"
+        },
+        "x_repath_bypass": true
+    });
+    Response::builder()
+        .status(503)
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("x-repath-bypass", "true")
+        .header("x-repath-request-id", request_id.to_string())
+        .body(Body::from(body.to_string()))
+        .unwrap_or_else(|_| Response::new(Body::empty()))
 }
 
 fn is_blocked_header(name: &str) -> bool {

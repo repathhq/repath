@@ -8,6 +8,7 @@
 
 pub mod client;
 pub mod handler;
+pub mod provider;
 pub mod streaming;
 
 pub use client::create_http_client;

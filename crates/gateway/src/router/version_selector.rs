@@ -90,8 +90,11 @@ mod tests {
             candidate_weight: weight,
             baseline_model: "gpt-4o".into(),
             baseline_prompt: None,
+            baseline_provider_url: "https://api.openai.com/v1".into(),
             candidate_model: "gpt-4o-mini".into(),
             candidate_prompt: None,
+            candidate_provider_url: "https://api.openai.com/v1".into(),
+            tenant_id: "default".into(),
         }
     }
 
