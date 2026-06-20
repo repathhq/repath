@@ -237,67 +237,91 @@ export default function BillingPage() {
         </div>
       )}
 
-      {/* Upgrade plans */}
-      {(usage?.plan === "trial" || usage?.plan === "starter" || !usage) && (
+      {/* Plans — always shown so users can buy at any time */}
+      {usage?.plan !== "enterprise" && (
         <div id="upgrade">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-[16px] font-semibold text-gray-900">Upgrade your plan</h2>
+            <h2 className="text-[16px] font-semibold text-gray-900">
+              {usage?.plan === "pro" ? "Your plan" : "Choose a plan"}
+            </h2>
             <p className="text-[12px] text-gray-500">
-              {isIndia ? "🇮🇳 Pay in INR via UPI, cards, net banking" : "Pay via cards or PayPal"}
+              {isIndia ? "🇮🇳 UPI, cards, net banking via Razorpay" : "Cards & PayPal via Paddle"}
             </p>
           </div>
 
           <div className="grid md:grid-cols-2 gap-4 mb-4">
-            {plans.filter(p => p.id !== usage?.plan).map(plan => (
-              <div key={plan.id} className={`relative rounded-2xl border p-6 flex flex-col ${
-                plan.highlight
-                  ? "border-violet-300 shadow-md shadow-violet-100"
-                  : "border-gray-200"
-              } bg-white`}>
-                {plan.highlight && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="flex items-center gap-1 px-3 py-1 bg-violet-600 text-white text-[10px] font-bold rounded-full">
-                      <Star className="w-3 h-3" /> MOST POPULAR
-                    </span>
-                  </div>
-                )}
+            {plans.map(plan => {
+              const isCurrent = usage?.plan === plan.id;
+              return (
+                <div key={plan.id} className={`relative rounded-2xl border p-6 flex flex-col bg-white ${
+                  isCurrent
+                    ? "border-emerald-300 shadow-sm"
+                    : plan.highlight
+                    ? "border-violet-300 shadow-md shadow-violet-100"
+                    : "border-gray-200"
+                }`}>
+                  {/* Badge — current or popular */}
+                  {isCurrent && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                      <span className="flex items-center gap-1 px-3 py-1 bg-emerald-600 text-white text-[10px] font-bold rounded-full">
+                        <Check className="w-3 h-3" /> CURRENT PLAN
+                      </span>
+                    </div>
+                  )}
+                  {!isCurrent && plan.highlight && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                      <span className="flex items-center gap-1 px-3 py-1 bg-violet-600 text-white text-[10px] font-bold rounded-full">
+                        <Star className="w-3 h-3" /> MOST POPULAR
+                      </span>
+                    </div>
+                  )}
 
-                <div className="mb-5">
-                  <p className="text-[14px] font-bold text-gray-500 uppercase tracking-wide mb-2">{plan.name}</p>
-                  <div className="flex items-baseline gap-1 mb-0.5">
-                    <span className="text-[36px] font-bold text-gray-900">{isIndia ? plan.inr : plan.usd}</span>
-                    <span className="text-[14px] text-gray-500">/month</span>
+                  <div className="mb-5">
+                    <p className="text-[14px] font-bold text-gray-500 uppercase tracking-wide mb-2">{plan.name}</p>
+                    <div className="flex items-baseline gap-1 mb-0.5">
+                      <span className="text-[36px] font-bold text-gray-900">{isIndia ? plan.inr : plan.usd}</span>
+                      <span className="text-[14px] text-gray-500">/month</span>
+                    </div>
+                    <p className="text-[13px] font-semibold text-violet-600">{plan.evals}</p>
                   </div>
-                  <p className="text-[13px] font-semibold text-violet-600">{plan.evals}</p>
+
+                  <ul className="space-y-2.5 mb-6 flex-1">
+                    {plan.features.map((f, i) => (
+                      <li key={i} className="flex items-center gap-2.5 text-[13px] text-gray-700">
+                        <div className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${isCurrent ? "bg-emerald-500" : "bg-violet-600"}`}>
+                          <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
+                        </div>
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+
+                  {isCurrent ? (
+                    <div className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-[14px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <Check className="w-4 h-4" /> Active plan
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleUpgrade(plan.id)}
+                      disabled={upgrading !== null}
+                      className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl text-[14px] font-semibold transition-all disabled:opacity-50 ${
+                        plan.highlight
+                          ? "bg-violet-600 hover:bg-violet-700 text-white shadow-md shadow-violet-200"
+                          : "border border-gray-300 bg-white hover:bg-gray-50 text-gray-900"
+                      }`}
+                    >
+                      {upgrading === plan.id
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <>
+                            {usage?.trial_active ? "Buy now" : "Upgrade"}
+                            <ArrowRight className="w-4 h-4" />
+                          </>
+                      }
+                    </button>
+                  )}
                 </div>
-
-                <ul className="space-y-2.5 mb-6 flex-1">
-                  {plan.features.map((f, i) => (
-                    <li key={i} className="flex items-center gap-2.5 text-[13px] text-gray-700">
-                      <div className="w-4 h-4 rounded-full bg-violet-600 flex items-center justify-center shrink-0">
-                        <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
-                      </div>
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-
-                <button
-                  onClick={() => handleUpgrade(plan.id)}
-                  disabled={upgrading !== null}
-                  className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl text-[14px] font-semibold transition-all disabled:opacity-50 ${
-                    plan.highlight
-                      ? "bg-violet-600 hover:bg-violet-700 text-white"
-                      : "border border-gray-300 bg-white hover:bg-gray-50 text-gray-900"
-                  }`}
-                >
-                  {upgrading === plan.id
-                    ? <Loader2 className="w-4 h-4 animate-spin" />
-                    : <>{plan.highlight ? "Start free trial" : `Start free trial`} <ArrowRight className="w-4 h-4" /></>
-                  }
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <p className="text-[12px] text-gray-400 text-center mb-8">
