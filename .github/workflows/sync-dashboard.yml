@@ -3,8 +3,6 @@ name: Sync Dashboard to Personal Repo
 on:
   push:
     branches: [main]
-    paths:
-      - "dashboard/**"
 
 jobs:
   sync:
