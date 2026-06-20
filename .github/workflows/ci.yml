@@ -164,8 +164,6 @@ jobs:
       - name: Audit Python dependencies
         working-directory: evaluators
         run: |
-          pip install pip-audit
-          # Use a venv so we only audit project deps, not Ubuntu system packages
           python -m venv /tmp/audit-venv
-          /tmp/audit-venv/bin/pip install -e "." --quiet
+          /tmp/audit-venv/bin/pip install pip-audit -e "." --quiet
           /tmp/audit-venv/bin/pip-audit

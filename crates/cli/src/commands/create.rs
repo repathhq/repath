@@ -241,11 +241,7 @@ fn build_strategy(config: &RolloutConfig) -> Result<RolloutStrategy> {
         })
         .collect();
 
-    let strategy_type = match config.spec.strategy.strategy_type {
-        StrategyType::Canary => StrategyType::Canary,
-        StrategyType::Shadow => StrategyType::Shadow,
-        StrategyType::BlueGreen => StrategyType::BlueGreen,
-    };
+    let strategy_type = config.spec.strategy.strategy_type;
 
     Ok(RolloutStrategy {
         strategy_type,

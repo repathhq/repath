@@ -1,38 +1,10 @@
 name: Sync Dashboard to Personal Repo
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:  # Manual trigger only — use scripts/sync-dashboard.sh locally instead
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Push dashboard/ to personal repo
-        env:
-          TOKEN: ${{ secrets.PERSONAL_REPO_TOKEN }}
-          TARGET_REPO: avinasha18/repath-dashboard
-        run: |
-          git config user.email "actions@github.com"
-          git config user.name "GitHub Actions"
-
-          # Verify token can access the target repo before trying subtree
-          echo "Checking repo access..."
-          curl -sf -H "Authorization: token ${TOKEN}" \
-            "https://api.github.com/repos/${TARGET_REPO}" \
-            | python3 -c "import sys,json; d=json.load(sys.stdin); print('Repo found:', d['full_name'])" \
-            || { echo "ERROR: Cannot access ${TARGET_REPO} — check PERSONAL_REPO_TOKEN has repo scope for avinasha18 account"; exit 1; }
-
-          # Split dashboard/ subtree into a separate branch
-          git subtree split --prefix=dashboard -b dashboard-deploy
-
-          # Force push to personal repo main branch
-          git push --force \
-            "https://x-access-token:${TOKEN}@github.com/${TARGET_REPO}.git" \
-            dashboard-deploy:main
-
-          echo "✅ Dashboard synced to https://github.com/${TARGET_REPO}"
+      - run: echo "Use scripts/sync-dashboard.sh locally to sync the dashboard."

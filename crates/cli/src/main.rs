@@ -115,7 +115,7 @@ async fn main() {
     let db_url = match cli.database_url {
         Some(url) => url,
         None => {
-            eprintln!("{} {}", "error:".red().bold(), "No database URL provided.");
+            eprintln!("{} No database URL provided.", "error:".red().bold());
             eprintln!(
                 "{}",
                 "Set REPATH_DATABASE_URL or pass --database-url <URL>".dimmed()
