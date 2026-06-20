@@ -259,11 +259,7 @@ function HeroTrafficFlow() {
   const [tick, setTick] = useState(0);
   const [phase, setPhase] = useState<"routing"|"rollback"|"shadow">("routing");
   const phaseRef = useRef(0);
-
-  useEffect(() => {
-    const id = setInterval(() => setTick(t => (t + 1) % 240), 40);
-    return () => clearInterval(id);
-  }, []);
+  useEffect(() => { const id = setInterval(() => setTick(t => (t + 1) % 240), 40); return () => clearInterval(id); }, []);
   useEffect(() => {
     const id = setInterval(() => {
       phaseRef.current = (phaseRef.current + 1) % 3;
@@ -271,6 +267,16 @@ function HeroTrafficFlow() {
     }, 5500);
     return () => clearInterval(id);
   }, []);
+
+  // ── Fixed coordinate layout — nothing can overlap ──
+  // viewBox: 820 × 500
+  // Zone A (left):   Your App    x=20–170   y=210–290
+  // Zone B (center): Gateway     x=220–390  y=195–315
+  // Zone C (top-r):  Baseline    x=530–780  y=60–160
+  // Zone D (bot-r):  Candidate   x=530–780  y=310–410
+  // Zone E (bot-c):  Judge       x=220–390  y=370–450
+  // Threshold badge: x=410–540   y=295–325  (between gateway and candidate — fixed)
+  // Phase chip:      x=20–230    y=14–44    (top, never overlaps nodes)
 
   const T = tick / 240;
   const R = phase === "rollback";
@@ -280,28 +286,20 @@ function HeroTrafficFlow() {
   function lp(pts: number[][], t: number) {
     const n = pts.length - 1;
     const seg = Math.min(Math.floor(t * n), n - 1);
-    const st  = (t * n) - seg;
+    const st = (t * n) - seg;
     const a = pts[seg], b = pts[seg + 1];
     return { x: a[0] + (b[0] - a[0]) * st, y: a[1] + (b[1] - a[1]) * st };
   }
 
-  // ── Compact layout: viewBox 760×480 ──
-  // App node:        cx=90  cy=240  w=130 h=76
-  // Gateway node:    cx=310 cy=240  w=140 h=100
-  // Baseline node:   cx=600 cy=130  w=150 h=92
-  // Candidate node:  cx=600 cy=350  w=150 h=96
-  // Judge node:      cx=310 cy=410  w=140 h=68
-
-  // Paths (elbow routing)
-  const pApp  = [[155,240],[238,240]] as number[][];
-  const pBL   = [[382,214],[480,214],[480,130],[522,130]] as number[][];
-  const pCand = [[382,266],[480,266],[480,350],[522,350]] as number[][];
-  const pJudge= [[310,292],[310,374]] as number[][];
-  const pRB   = [[382,410],[510,410],[510,242],[522,242]] as number[][];
+  const pApp   = [[170,250],[218,250]] as number[][];
+  const pBL    = [[392,222],[500,222],[500,110],[528,110]] as number[][];
+  const pCand  = [[392,278],[500,278],[500,360],[528,360]] as number[][];
+  const pJudge = [[305,316],[305,368]] as number[][];
+  const pRB    = [[392,420],[520,420],[520,278],[528,278]] as number[][];
 
   const cQ = R ? 0.62 : S ? 0.88 : 0.85;
 
-  const mkDots = (offs: number[], path: number[][], col: string, r: number, op = 1) =>
+  const D = (offs: number[], path: number[][], col: string, r: number, op = 1) =>
     offs.map((o, i) => {
       const t = (T + o) % 1; if (t > 0.96) return null;
       const p = lp(path, t);
@@ -309,149 +307,133 @@ function HeroTrafficFlow() {
     });
 
   return (
-    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[60%] min-w-[560px] h-[600px] pointer-events-none select-none" aria-hidden>
-      <svg viewBox="0 0 760 480" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[62%] min-w-[580px] h-[580px] pointer-events-none select-none" aria-hidden>
+      <svg viewBox="0 0 820 500" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
         <defs>
-          <filter id="ns"><feDropShadow dx="0" dy="2" stdDeviation="8" floodColor="#7c3aed" floodOpacity="0.08"/></filter>
-          <filter id="nw"><feDropShadow dx="0" dy="1" stdDeviation="6" floodColor="#000" floodOpacity="0.06"/></filter>
-          <marker id="ma" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
-            <path d="M0,0.5 L0,6.5 L7,3.5 z" fill="#818cf8"/>
-          </marker>
-          <marker id="mr" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
-            <path d="M0,0.5 L0,6.5 L7,3.5 z" fill="#f87171"/>
-          </marker>
-          <marker id="mv" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
-            <path d="M0,0.5 L0,6.5 L7,3.5 z" fill="#a78bfa"/>
-          </marker>
+          <filter id="sh1"><feDropShadow dx="0" dy="2" stdDeviation="8" floodColor="#6366f1" floodOpacity="0.09"/></filter>
+          <filter id="sh2"><feDropShadow dx="0" dy="1" stdDeviation="6" floodColor="#000" floodOpacity="0.06"/></filter>
+          <marker id="av" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,1 L0,7 L8,4 z" fill="#818cf8"/></marker>
+          <marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,1 L0,7 L8,4 z" fill="#f87171"/></marker>
+          <marker id="ap" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,1 L0,7 L8,4 z" fill="#a78bfa"/></marker>
         </defs>
 
-        {/* ── Lines ─────────────────────────────────── */}
+        {/* ══ CONNECTORS ══════════════════════════════════════ */}
         {/* App → Gateway */}
-        <line x1="155" y1="240" x2="238" y2="240" stroke="#818cf8" strokeWidth="2" markerEnd="url(#ma)"/>
+        <line x1="170" y1="250" x2="218" y2="250" stroke="#818cf8" strokeWidth="2" markerEnd="url(#av)"/>
 
-        {/* Gateway → Baseline */}
-        <path d="M 382 214 H 480 V 130 H 522"
-          stroke="#818cf8" strokeWidth="2" fill="none" markerEnd="url(#ma)"
-          opacity={R ? 0.25 : 1}/>
+        {/* Gateway → Baseline (elbow right then up) */}
+        <path d="M 392 222 H 500 V 110 H 528" stroke="#818cf8" strokeWidth="2" fill="none"
+          markerEnd="url(#av)" opacity={R ? 0.2 : 1}/>
 
-        {/* Gateway → Candidate */}
-        <path d="M 382 266 H 480 V 350 H 522"
-          stroke={R ? "#f87171" : S ? "#a78bfa" : "#6366f1"}
-          strokeWidth="2"
-          strokeDasharray={R ? "6 4" : S ? "5 4" : undefined}
-          fill="none"
-          markerEnd={R ? "url(#mr)" : "url(#ma)"}/>
+        {/* Gateway → Candidate (elbow right then down) */}
+        <path d="M 392 278 H 500 V 360 H 528"
+          stroke={R ? "#f87171" : S ? "#a78bfa" : "#818cf8"}
+          strokeWidth="2" fill="none"
+          strokeDasharray={R ? "7 4" : S ? "5 4" : undefined}
+          markerEnd={R ? "url(#ar)" : S ? "url(#ap)" : "url(#av)"}/>
 
-        {/* Gateway → Judge */}
-        <line x1="310" y1="292" x2="310" y2="374"
-          stroke="#a78bfa" strokeWidth="1.5" strokeDasharray="5 4" markerEnd="url(#mv)"/>
+        {/* Gateway → Judge (dashed down) */}
+        <line x1="305" y1="316" x2="305" y2="368" stroke="#c4b5fd" strokeWidth="1.5" strokeDasharray="5 4" markerEnd="url(#ap)"/>
 
-        {/* Judge → rollback (red, only R phase) */}
-        {R && <path d="M 382 410 H 510 V 242 H 522"
-          stroke="#f87171" strokeWidth="2" strokeDasharray="6 4" fill="none" markerEnd="url(#mr)"/>}
+        {/* Judge → Rollback return (only R) — goes right, then up into candidate zone */}
+        {R && <path d="M 392 420 H 520 V 278 H 528" stroke="#f87171" strokeWidth="2" strokeDasharray="6 4" fill="none" markerEnd="url(#ar)"/>}
 
-        {/* ── % pills on lines ────────────────────── */}
-        <rect x="458" y="200" width="46" height="22" rx="11" fill="#818cf8"/>
-        <text x="481" y="215" textAnchor="middle" fontSize="11" fill="white" fontFamily={F} fontWeight="700">80%</text>
+        {/* ══ % PILLS (fixed, on elbow midpoints — never overlap nodes) ══ */}
+        {/* 80% pill: on baseline elbow at x=500, y=165 */}
+        <rect x="478" y="152" width="44" height="20" rx="10" fill="#818cf8" opacity={R ? 0.3 : 1}/>
+        <text x="500" y="166" textAnchor="middle" fontSize="11" fill="white" fontFamily={F} fontWeight="700">80%</text>
 
-        <rect x="458" y="338" width="46" height="22" rx="11"
-          fill={R ? "#f87171" : S ? "#a78bfa" : "#6366f1"}/>
-        <text x="481" y="353" textAnchor="middle" fontSize="11" fill="white" fontFamily={F} fontWeight="700">20%</text>
+        {/* 20% pill: on candidate elbow at x=500, y=318 */}
+        <rect x="478" y="305" width="44" height="20" rx="10" fill={R ? "#f87171" : S ? "#a78bfa" : "#818cf8"}/>
+        <text x="500" y="319" textAnchor="middle" fontSize="11" fill="white" fontFamily={F} fontWeight="700">20%</text>
 
-        {/* threshold badge */}
-        {R && <>
-          <rect x="455" y="290" width="106" height="26" rx="7" fill="#fef2f2" stroke="#fca5a5" strokeWidth="1"/>
-          <text x="508" y="307" textAnchor="middle" fontSize="10.5" fill="#b91c1c" fontFamily={F} fontWeight="700">score &lt; 0.70 threshold</text>
-        </>}
+        {/* Threshold badge: FIXED at top-right of diagram, never overlaps */}
+        {R && (
+          <g>
+            <rect x="600" y="196" width="140" height="34" rx="8" fill="#fef2f2" stroke="#fca5a5" strokeWidth="1.2"/>
+            <text x="670" y="213" textAnchor="middle" fontSize="12" fill="#b91c1c" fontFamily={F} fontWeight="700">score &lt; 0.70</text>
+            <text x="670" y="225" textAnchor="middle" fontSize="10.5" fill="#ef4444" fontFamily={F}>rollback threshold</text>
+          </g>
+        )}
 
-        {/* ── YOUR APP node ─────────────────────── */}
-        <rect x="26" y="202" width="130" height="76" rx="14" fill="white" stroke="#e5e7eb" strokeWidth="1.5" filter="url(#nw)"/>
-        <rect x="42" y="217" width="7" height="7" rx="1.5" fill="#a78bfa"/>
-        <rect x="52" y="217" width="7" height="7" rx="1.5" fill="#c4b5fd"/>
-        <rect x="42" y="227" width="7" height="7" rx="1.5" fill="#c4b5fd"/>
-        <rect x="52" y="227" width="7" height="7" rx="1.5" fill="#a78bfa"/>
-        <text x="91" y="231" textAnchor="middle" fontSize="13.5" fill="#111827" fontFamily={F} fontWeight="800">YOUR APP</text>
-        <text x="91" y="249" textAnchor="middle" fontSize="11" fill="#9ca3af" fontFamily={F}>any LLM client</text>
-        <text x="91" y="266" textAnchor="middle" fontSize="10" fill="#d1d5db" fontFamily={F}>OpenAI · Anthropic · custom</text>
+        {/* ══ NODE A — YOUR APP ═══════════════════════════════ */}
+        {/* Fixed zone: x=20–170, y=215–285 */}
+        <rect x="20" y="215" width="150" height="70" rx="14" fill="white" stroke="#e5e7eb" strokeWidth="1.5" filter="url(#sh2)"/>
+        {/* 2×2 icon grid */}
+        <rect x="36" y="231" width="7" height="7" rx="2" fill="#a78bfa"/>
+        <rect x="46" y="231" width="7" height="7" rx="2" fill="#c4b5fd"/>
+        <rect x="36" y="241" width="7" height="7" rx="2" fill="#c4b5fd"/>
+        <rect x="46" y="241" width="7" height="7" rx="2" fill="#a78bfa"/>
+        <text x="100" y="244" textAnchor="middle" fontSize="14" fill="#111827" fontFamily={F} fontWeight="800">YOUR APP</text>
+        <text x="100" y="262" textAnchor="middle" fontSize="11" fill="#9ca3af" fontFamily={F}>any LLM client</text>
 
-        {/* ── REPATH GATEWAY node ──────────────── */}
-        <rect x="240" y="190" width="140" height="100" rx="16" fill="white" stroke="#c4b5fd" strokeWidth="1.5" filter="url(#ns)"/>
+        {/* ══ NODE B — REPATH GATEWAY ═════════════════════════ */}
+        {/* Fixed zone: x=220–390, y=195–315 */}
+        <rect x="220" y="195" width="172" height="120" rx="16" fill="white" stroke="#ddd6fe" strokeWidth="1.8" filter="url(#sh1)"/>
+        {/* pulsing ring — inside the node rect, safe */}
+        <circle cx="306" cy="252" r={42 + Math.sin(tick * 0.07) * 2} stroke="rgba(124,58,237,0.06)" strokeWidth="1.5" fill="none"/>
         {/* icon */}
-        <path d="M298 208 C298 208 306 203 310 208 C314 213 322 208 322 208" stroke="#7c3aed" strokeWidth="2" fill="none" strokeLinecap="round"/>
-        <circle cx="310" cy="214" r="3.5" fill="#7c3aed"/>
-        <text x="310" y="237" textAnchor="middle" fontSize="15" fill="#111827" fontFamily={F} fontWeight="800">REPATH</text>
-        <text x="310" y="253" textAnchor="middle" fontSize="15" fill="#111827" fontFamily={F} fontWeight="800">GATEWAY</text>
-        <text x="310" y="269" textAnchor="middle" fontSize="10.5" fill="#9ca3af" fontFamily={F}>routes · scores</text>
-        <text x="310" y="282" textAnchor="middle" fontSize="10" fill="#7c3aed" fontFamily={F} fontWeight="600">&lt;2ms overhead</text>
-        <circle cx="310" cy="240" r={46 + Math.sin(tick * 0.07) * 2.5}
-          stroke="rgba(124,58,237,0.06)" strokeWidth="1.5" fill="none"/>
+        <path d="M284 218 C284 218 292 213 306 218 C320 223 328 218 328 218" stroke="#7c3aed" strokeWidth="2" fill="none" strokeLinecap="round"/>
+        <circle cx="306" cy="224" r="3" fill="#7c3aed"/>
+        <text x="306" y="246" textAnchor="middle" fontSize="16" fill="#111827" fontFamily={F} fontWeight="800">REPATH</text>
+        <text x="306" y="263" textAnchor="middle" fontSize="16" fill="#111827" fontFamily={F} fontWeight="800">GATEWAY</text>
+        <text x="306" y="280" textAnchor="middle" fontSize="11" fill="#a78bfa" fontFamily={F}>routes · scores · &lt;2ms</text>
 
-        {/* ── BASELINE node ─────────────────────── */}
-        <rect x="522" y="84" width="216" height="92" rx="14" fill="white" stroke="#bfdbfe" strokeWidth="1.5" filter="url(#nw)"/>
-        <text x="630" y="113" textAnchor="middle" fontSize="15" fill="#1d4ed8" fontFamily={F} fontWeight="800">BASELINE</text>
-        <text x="630" y="130" textAnchor="middle" fontSize="12" fill="#3b82f6" fontFamily={F} fontWeight="600">80% of traffic  ·  score: 0.91 ✓</text>
-        <text x="630" y="147" textAnchor="middle" fontSize="10.5" fill="#93c5fd" fontFamily={F}>current prompt · stable</text>
-        {/* thin underline accent */}
-        <line x1="556" y1="157" x2="704" y2="157" stroke="#dbeafe" strokeWidth="1"/>
-        <text x="630" y="169" textAnchor="middle" fontSize="10" fill="#93c5fd" fontFamily={F}>quality gate: passing</text>
+        {/* ══ NODE C — BASELINE ═══════════════════════════════ */}
+        {/* Fixed zone: x=528–778, y=62–162 */}
+        <rect x="528" y="62" width="250" height="96" rx="14" fill="white" stroke="#bfdbfe" strokeWidth="1.5" filter="url(#sh2)"/>
+        <text x="653" y="92" textAnchor="middle" fontSize="16" fill="#1d4ed8" fontFamily={F} fontWeight="800">BASELINE</text>
+        <text x="653" y="112" textAnchor="middle" fontSize="12.5" fill="#3b82f6" fontFamily={F} fontWeight="600">80% of traffic</text>
+        <text x="653" y="130" textAnchor="middle" fontSize="11" fill="#93c5fd" fontFamily={F}>current prompt · score: 0.91 ✓</text>
+        <text x="653" y="148" textAnchor="middle" fontSize="10" fill="#bfdbfe" fontFamily={F}>stable · quality gate passing</text>
 
-        {/* ── CANDIDATE / SHADOW node ────────────── */}
-        <rect x="522" y="304" width="216" height="92" rx="14" fill="white"
-          stroke={R ? "#fca5a5" : S ? "#c4b5fd" : "#c7d2fe"} strokeWidth="1.5" filter="url(#nw)"/>
-        <text x="630" y="333" textAnchor="middle" fontSize="15"
+        {/* ══ NODE D — CANDIDATE / SHADOW ═════════════════════ */}
+        {/* Fixed zone: x=528–778, y=312–412 */}
+        <rect x="528" y="312" width="250" height="96" rx="14" fill="white"
+          stroke={R ? "#fca5a5" : S ? "#c4b5fd" : "#c7d2fe"} strokeWidth="1.5" filter="url(#sh2)"/>
+        <text x="653" y="342" textAnchor="middle" fontSize="16"
           fill={R ? "#b91c1c" : S ? "#6d28d9" : "#4338ca"} fontFamily={F} fontWeight="800">
           {S ? "SHADOW" : "CANDIDATE"}
         </text>
-        <text x="630" y="350" textAnchor="middle" fontSize="12"
+        <text x="653" y="362" textAnchor="middle" fontSize="12.5"
           fill={R ? "#ef4444" : S ? "#7c3aed" : "#6366f1"} fontFamily={F} fontWeight="600">
-          {S ? "parallel · no user impact" : `20% traffic  ·  score: ${cQ}`}
+          {S ? "parallel · no user impact" : "20% of traffic"}
         </text>
-        <text x="630" y="367" textAnchor="middle" fontSize="10.5"
+        <text x="653" y="380" textAnchor="middle" fontSize="11"
           fill={R ? "#fca5a5" : S ? "#a78bfa" : "#818cf8"} fontFamily={F}>
-          {R ? "⚠ auto-rollback triggered" : S ? "evaluating before expose" : "→ advancing"}
+          {R ? `score: ${cQ} · auto-rollback triggered` : S ? `score: ${cQ} · comparing` : `score: ${cQ} · advancing`}
         </text>
-        <line x1="556" y1="377" x2="704" y2="377" stroke={R ? "#fecaca" : "#e0e7ff"} strokeWidth="1"/>
-        <text x="630" y="389" textAnchor="middle" fontSize="10"
-          fill={R ? "#ef4444" : "#818cf8"} fontFamily={F} fontWeight="600">
-          {R ? "100% traffic returning to baseline" : S ? "shadow test · comparing" : "new prompt · testing"}
+        <text x="653" y="398" textAnchor="middle" fontSize="10"
+          fill={R ? "#ef4444" : S ? "#a78bfa" : "#a5b4fc"} fontFamily={F}>
+          {R ? "100% traffic returning to baseline" : S ? "shadow test · evaluating" : "new prompt · testing"}
         </text>
 
-        {/* ── LLM JUDGE node ────────────────────── */}
-        <rect x="240" y="374" width="140" height="68" rx="14" fill="white" stroke="#ddd6fe" strokeWidth="1.5" filter="url(#nw)"/>
-        <path d="M276 390 L279 384 L282 390 L288 393 L282 396 L279 402 L276 396 L270 393 Z" fill="#7c3aed" opacity="0.75"/>
-        <text x="310" y="401" textAnchor="middle" fontSize="13" fill="#111827" fontFamily={F} fontWeight="800">LLM JUDGE</text>
-        <text x="310" y="416" textAnchor="middle" fontSize="10.5" fill="#7c3aed" fontFamily={F}>scores every response · async · ~120ms</text>
-        <text x="310" y="432" textAnchor="middle" fontSize="10" fill="#c4b5fd" fontFamily={F}>0ms user impact</text>
+        {/* ══ NODE E — LLM JUDGE ══════════════════════════════ */}
+        {/* Fixed zone: x=220–390, y=370–450 */}
+        <rect x="220" y="370" width="172" height="78" rx="14" fill="white" stroke="#ede9fe" strokeWidth="1.5" filter="url(#sh2)"/>
+        <path d="M248 392 L251 385 L254 392 L261 395 L254 398 L251 405 L248 398 L241 395 Z" fill="#a78bfa" opacity="0.8"/>
+        <text x="306" y="400" textAnchor="middle" fontSize="14" fill="#111827" fontFamily={F} fontWeight="800">LLM JUDGE</text>
+        <text x="306" y="417" textAnchor="middle" fontSize="11" fill="#7c3aed" fontFamily={F}>scores every response</text>
+        <text x="306" y="433" textAnchor="middle" fontSize="10" fill="#c4b5fd" fontFamily={F}>async · ~120ms · 0ms user impact</text>
 
-        {/* ── Phase chip (top-left floating) ──── */}
-        <rect x="22" y="14" width={R ? 188 : S ? 152 : 178} height="28" rx="14"
+        {/* ══ PHASE CHIP (top-left, fixed zone x=20–240, y=14–44) ══ */}
+        <rect x="20" y="14" width={R ? 196 : S ? 160 : 188} height="28" rx="14"
           fill={R ? "#fef2f2" : S ? "#f5f3ff" : "#f0fdf4"}
           stroke={R ? "#fca5a5" : S ? "#ddd6fe" : "#86efac"} strokeWidth="1"/>
-        <circle cx="38" cy="28" r="5.5"
-          fill={R ? "#ef4444" : S ? "#7c3aed" : "#22c55e"}>
-          <animate attributeName="r" values="4.5;6;4.5" dur="1.6s" repeatCount="indefinite"/>
+        <circle cx="37" cy="28" r="5" fill={R ? "#ef4444" : S ? "#7c3aed" : "#22c55e"}>
+          <animate attributeName="r" values="4;5.5;4" dur="1.6s" repeatCount="indefinite"/>
         </circle>
-        <text x="50" y="33" fontSize="11.5" fill={R?"#b91c1c":S?"#6d28d9":"#15803d"} fontFamily={F} fontWeight="700">
+        <text x="49" y="33" fontSize="11.5" fill={R ? "#b91c1c" : S ? "#6d28d9" : "#15803d"} fontFamily={F} fontWeight="700">
           {R ? "ROLLBACK TRIGGERED" : S ? "SHADOW TESTING" : "CANARY ROUTING LIVE"}
         </text>
 
-        {/* ── Particles ────────────────────────── */}
-        {/* App → Gateway */}
-        {[0, 0.45, 0.8].map((o, i) => {
-          const t = (T + o) % 1; if (t > 0.96) return null;
-          const p = lp(pApp, t);
-          return <circle key={`a${i}`} cx={p.x} cy={p.y} r="5.5" fill="#818cf8" opacity="0.9"/>;
-        })}
-        {/* → Baseline (5 dots, blue) */}
-        {mkDots([0,0.18,0.36,0.54,0.72], pBL, "#3b82f6", 5, R ? 0.25 : 0.9)}
-        {/* → Candidate (2 dots) */}
-        {!S && mkDots([0,0.52], pCand, R?"#f87171":"#6366f1", 5, 0.9)}
-        {/* → shadow dots (violet, faint) */}
-        {S && mkDots([0,0.55], pCand, "#a78bfa", 4, 0.6)}
-        {/* → Judge */}
-        {mkDots([0,0.6], pJudge, "#a78bfa", 4.5, 0.75)}
-        {/* Judge → rollback */}
-        {R && mkDots([0,0.48], pRB, "#ef4444", 5.5, 0.9)}
+        {/* ══ ANIMATED PARTICLES ══════════════════════════════ */}
+        {[0,0.42,0.78].map((o,i)=>{const t=(T+o)%1;if(t>0.96)return null;const p=lp(pApp,t);return<circle key={`a${i}`}cx={p.x}cy={p.y}r="5"fill="#818cf8"opacity="0.9"/>;})}
+        {D([0,0.18,0.36,0.54,0.72],pBL,"#3b82f6",5,R?0.2:0.9)}
+        {!S&&D([0,0.55],pCand,R?"#f87171":"#6366f1",5,0.9)}
+        {S&&D([0,0.6],pCand,"#a78bfa",4,0.6)}
+        {D([0,0.6],pJudge,"#a78bfa",4,0.75)}
+        {R&&D([0,0.5],pRB,"#ef4444",5.5,0.9)}
       </svg>
     </div>
   );
