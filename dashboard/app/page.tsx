@@ -348,11 +348,11 @@ function HeroTrafficFlow() {
         <rect x="478" y="305" width="44" height="20" rx="10" fill={R ? "#f87171" : S ? "#a78bfa" : "#818cf8"}/>
         <text x="500" y="319" textAnchor="middle" fontSize="11" fill="white" fontFamily={F} fontWeight="700">20%</text>
 
-        {/* Threshold badge — sits right on the candidate elbow line, just left of 20% pill */}
+        {/* Threshold badge — below the candidate elbow, clear of all nodes */}
         {R && (
           <g>
-            <rect x="406" y="330" width="120" height="30" rx="8" fill="#fef2f2" stroke="#fca5a5" strokeWidth="1.2"/>
-            <text x="466" y="347" textAnchor="middle" fontSize="11" fill="#b91c1c" fontFamily={F} fontWeight="700">score &lt; 0.70 threshold</text>
+            <rect x="392" y="420" width="126" height="28" rx="8" fill="#fef2f2" stroke="#fca5a5" strokeWidth="1.2"/>
+            <text x="455" y="438" textAnchor="middle" fontSize="11" fill="#b91c1c" fontFamily={F} fontWeight="700">score &lt; 0.70 threshold</text>
           </g>
         )}
 
