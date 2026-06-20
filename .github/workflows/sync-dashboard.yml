@@ -17,8 +17,7 @@ jobs:
       - name: Push dashboard/ to personal repo
         env:
           TOKEN: ${{ secrets.PERSONAL_REPO_TOKEN }}
-          # Change this to your personal GitHub username/repo
-          TARGET_REPO: tejassriavinasha/repath-dashboard
+          TARGET_REPO: avinasha18/repath-dashboard
         run: |
           git config user.email "actions@github.com"
           git config user.name "GitHub Actions"
