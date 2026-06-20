@@ -1,43 +1,31 @@
 # Repath Multi-stage Dockerfile
 #
 # Stages:
-#   chef        — cargo-chef dependency cache (maximises Docker layer caching)
-#   planner     — compute dependency recipe
-#   builder     — compile Rust binaries
+#   builder     — compile Rust binaries (no cargo-chef; simpler and compatible)
 #   evaluator   — Python evaluator image
-#   gateway     — minimal gateway runtime image (~50MB)
-#   controller  — minimal controller runtime image (~20MB)
+#   gateway     — minimal gateway runtime image
+#   controller  — minimal controller runtime image
 #   dashboard   — Next.js production image
 
-# ── Rust build stages ──────────────────────────────────────────────────────────
+# ── Rust build ─────────────────────────────────────────────────────────────────
 
-FROM rust:1.88-slim-bookworm AS chef
-RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
-RUN cargo install cargo-chef
+FROM rust:1.88-slim-bookworm AS builder
+RUN apt-get update && apt-get install -y pkg-config libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-
-FROM chef AS planner
-COPY . .
-RUN cargo chef prepare --recipe-path recipe.json
-
-FROM chef AS builder
-COPY --from=planner /app/recipe.json recipe.json
-# Cache dependencies (this layer is reused across rebuilds if deps don't change)
-RUN cargo chef cook --release --recipe-path recipe.json
-COPY . .
+COPY Cargo.toml Cargo.lock ./
+COPY crates/ crates/
 RUN cargo build --release --bin repath-gateway --bin repath-controller --bin repath
 
 # ── Gateway runtime ────────────────────────────────────────────────────────────
 
 FROM debian:bookworm-slim AS gateway
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y ca-certificates wget && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=builder /app/target/release/repath-gateway /usr/local/bin/repath-gateway
 COPY migrations/ /app/migrations/
 EXPOSE 8080 9090
 HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
   CMD wget -qO- http://localhost:8080/health || exit 1
-USER nobody
 ENTRYPOINT ["repath-gateway"]
 
 # ── Controller runtime ─────────────────────────────────────────────────────────
@@ -46,7 +34,6 @@ FROM debian:bookworm-slim AS controller
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=builder /app/target/release/repath-controller /usr/local/bin/repath-controller
-USER nobody
 ENTRYPOINT ["repath-controller"]
 
 # ── Evaluator (Python) ─────────────────────────────────────────────────────────
@@ -59,7 +46,6 @@ COPY evaluators/pyproject.toml evaluators/
 WORKDIR /app/evaluators
 RUN pip install --no-cache-dir -e "."
 COPY evaluators/ /app/evaluators/
-USER nobody
 ENTRYPOINT ["python3", "-m", "repath_evaluators.worker"]
 
 # ── Dashboard (Next.js) ────────────────────────────────────────────────────────
@@ -89,5 +75,4 @@ COPY --from=dashboard-builder /app/public ./public
 COPY --from=dashboard-builder /app/package.json ./package.json
 EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=5s CMD wget -qO- http://localhost:3000 || exit 1
-USER nobody
 CMD ["node_modules/.bin/next", "start"]
