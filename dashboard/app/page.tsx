@@ -261,7 +261,7 @@ function HeroTrafficFlow() {
   const phaseRef = useRef(0);
 
   useEffect(() => {
-    const id = setInterval(() => setTick(t => (t + 1) % 300), 35);
+    const id = setInterval(() => setTick(t => (t + 1) % 240), 40);
     return () => clearInterval(id);
   }, []);
   useEffect(() => {
@@ -272,240 +272,186 @@ function HeroTrafficFlow() {
     return () => clearInterval(id);
   }, []);
 
-  const T = tick / 300;
+  const T = tick / 240;
   const R = phase === "rollback";
   const S = phase === "shadow";
+  const F = "Inter,system-ui,sans-serif";
 
-  // lerp point along a polyline defined by segments
-  function lerpPoly(pts: number[][], t: number) {
+  function lp(pts: number[][], t: number) {
     const n = pts.length - 1;
-    const seg = Math.floor(t * n);
-    const st = (t * n) - seg;
-    const a = pts[Math.min(seg, n - 1)];
-    const b = pts[Math.min(seg + 1, n)];
+    const seg = Math.min(Math.floor(t * n), n - 1);
+    const st  = (t * n) - seg;
+    const a = pts[seg], b = pts[seg + 1];
     return { x: a[0] + (b[0] - a[0]) * st, y: a[1] + (b[1] - a[1]) * st };
   }
 
-  // ── Layout (800 × 520 viewBox) ──
-  // YOUR APP:       x=30  y=210  w=160 h=90
-  // GATEWAY:        x=255 y=196  w=160 h=118  cx=335 cy=255
-  // BASELINE:       x=570 y=70   w=200 h=120
-  // CANDIDATE:      x=570 y=320  w=200 h=130
-  // LLM JUDGE:      x=255 y=400  w=160 h=100
-  // ROLLBACK BANNER:x=570 y=200  w=200 h=90
+  // ── Compact layout: viewBox 760×480 ──
+  // App node:        cx=90  cy=240  w=130 h=76
+  // Gateway node:    cx=310 cy=240  w=140 h=100
+  // Baseline node:   cx=600 cy=130  w=150 h=92
+  // Candidate node:  cx=600 cy=350  w=150 h=96
+  // Judge node:      cx=310 cy=410  w=140 h=68
 
-  // Elbow paths (orthogonal, matching reference)
-  // App → Gateway: straight horizontal
-  const pathApp   = [[190,255],[253,255]] as number[][];
-  // Gateway → Baseline: right then up-right elbow
-  const pathBL    = [[415,230],[490,230],[490,130],[568,130]] as number[][];
-  // Gateway → Candidate: right then down-right elbow
-  const pathCand  = [[415,280],[490,280],[490,385],[568,385]] as number[][];
-  // Gateway → Judge: straight down
-  const pathJudge = [[335,315],[335,398]] as number[][];
-  // Judge → Rollback (red dashed): right then up
-  const pathRB    = [[415,445],[530,445],[530,250],[568,250]] as number[][];
+  // Paths (elbow routing)
+  const pApp  = [[155,240],[238,240]] as number[][];
+  const pBL   = [[382,214],[480,214],[480,130],[522,130]] as number[][];
+  const pCand = [[382,266],[480,266],[480,350],[522,350]] as number[][];
+  const pJudge= [[310,292],[310,374]] as number[][];
+  const pRB   = [[382,410],[510,410],[510,242],[522,242]] as number[][];
 
-  const baselineQ  = 0.91;
-  const candidateQ = R ? 0.62 : S ? 0.88 : 0.85;
+  const cQ = R ? 0.62 : S ? 0.88 : 0.85;
 
-  const FONT = "Inter,system-ui,sans-serif";
-
-  // Dot helpers
-  const dots = (offsets: number[], path: number[][], start: number, color: string, r: number, filter?: string, opacity = 1) =>
-    offsets.map((o, i) => {
-      const t = ((T + o) % 1);
-      if (t < start || t > 0.97) return null;
-      const nt = (t - start) / (1 - start);
-      const p = lerpPoly(path, nt);
-      return <circle key={i} cx={p.x} cy={p.y} r={r} fill={color} filter={filter} opacity={opacity} />;
+  const mkDots = (offs: number[], path: number[][], col: string, r: number, op = 1) =>
+    offs.map((o, i) => {
+      const t = (T + o) % 1; if (t > 0.96) return null;
+      const p = lp(path, t);
+      return <circle key={i} cx={p.x} cy={p.y} r={r} fill={col} opacity={op}/>;
     });
 
   return (
-    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[64%] min-w-[620px] h-[640px] pointer-events-none select-none" aria-hidden>
-      <svg viewBox="0 0 800 520" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[60%] min-w-[560px] h-[600px] pointer-events-none select-none" aria-hidden>
+      <svg viewBox="0 0 760 480" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
         <defs>
-          <filter id="cs"><feDropShadow dx="0" dy="3" stdDeviation="6" floodColor="#6366f1" floodOpacity="0.10"/></filter>
-          <filter id="csw"><feDropShadow dx="0" dy="2" stdDeviation="5" floodColor="#000" floodOpacity="0.07"/></filter>
-          <filter id="gv"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-          <filter id="gb"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-          <marker id="arr-bl" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L8,3 z" fill="#818cf8"/>
+          <filter id="ns"><feDropShadow dx="0" dy="2" stdDeviation="8" floodColor="#7c3aed" floodOpacity="0.08"/></filter>
+          <filter id="nw"><feDropShadow dx="0" dy="1" stdDeviation="6" floodColor="#000" floodOpacity="0.06"/></filter>
+          <marker id="ma" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+            <path d="M0,0.5 L0,6.5 L7,3.5 z" fill="#818cf8"/>
           </marker>
-          <marker id="arr-rd" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L8,3 z" fill="#f87171"/>
+          <marker id="mr" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+            <path d="M0,0.5 L0,6.5 L7,3.5 z" fill="#f87171"/>
           </marker>
-          <marker id="arr-vi" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L8,3 z" fill="#a78bfa"/>
-          </marker>
-          <marker id="arr-am" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L8,3 z" fill="#fbbf24"/>
+          <marker id="mv" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto">
+            <path d="M0,0.5 L0,6.5 L7,3.5 z" fill="#a78bfa"/>
           </marker>
         </defs>
 
-        {/* ── Background panel ── */}
-        <rect x="0" y="0" width="800" height="520" rx="24" fill="rgba(238,240,255,0.55)"/>
+        {/* ── Lines ─────────────────────────────────── */}
+        {/* App → Gateway */}
+        <line x1="155" y1="240" x2="238" y2="240" stroke="#818cf8" strokeWidth="2" markerEnd="url(#ma)"/>
 
-        {/* ── Connector lines ── */}
-        {/* App → Gateway (violet solid) */}
-        <line x1="190" y1="255" x2="253" y2="255" stroke="#818cf8" strokeWidth="2.5" markerEnd="url(#arr-bl)"/>
+        {/* Gateway → Baseline */}
+        <path d="M 382 214 H 480 V 130 H 522"
+          stroke="#818cf8" strokeWidth="2" fill="none" markerEnd="url(#ma)"
+          opacity={R ? 0.25 : 1}/>
 
-        {/* Gateway → Baseline (indigo, elbow) */}
-        <path d={`M 415 230 H 490 V 130 H 568`} stroke="#818cf8" strokeWidth="2.5" fill="none" markerEnd="url(#arr-bl)" opacity={R ? 0.3 : 1}/>
+        {/* Gateway → Candidate */}
+        <path d="M 382 266 H 480 V 350 H 522"
+          stroke={R ? "#f87171" : S ? "#a78bfa" : "#6366f1"}
+          strokeWidth="2"
+          strokeDasharray={R ? "6 4" : S ? "5 4" : undefined}
+          fill="none"
+          markerEnd={R ? "url(#mr)" : "url(#ma)"}/>
 
-        {/* Gateway → Candidate (amber normal / red dashed on rollback) */}
-        <path d={`M 415 280 H 490 V 385 H 568`}
-          stroke={R ? "#f87171" : S ? "#a78bfa" : "#fbbf24"}
-          strokeWidth={R ? "2.5" : "2.5"}
-          strokeDasharray={R ? "7 4" : S ? "6 4" : "none"}
-          fill="none" markerEnd={R ? "url(#arr-rd)" : S ? "url(#arr-vi)" : "url(#arr-am)"}/>
+        {/* Gateway → Judge */}
+        <line x1="310" y1="292" x2="310" y2="374"
+          stroke="#a78bfa" strokeWidth="1.5" strokeDasharray="5 4" markerEnd="url(#mv)"/>
 
-        {/* Gateway → Judge (violet dashed, down) */}
-        <line x1="335" y1="315" x2="335" y2="398" stroke="#a78bfa" strokeWidth="2" strokeDasharray="6 4" markerEnd="url(#arr-vi)"/>
+        {/* Judge → rollback (red, only R phase) */}
+        {R && <path d="M 382 410 H 510 V 242 H 522"
+          stroke="#f87171" strokeWidth="2" strokeDasharray="6 4" fill="none" markerEnd="url(#mr)"/>}
 
-        {/* Judge → Rollback (red dashed, only rollback phase) */}
-        {R && (
-          <path d={`M 415 445 H 530 V 250 H 568`} stroke="#f87171" strokeWidth="2.5" strokeDasharray="7 4" fill="none" markerEnd="url(#arr-rd)"/>
-        )}
+        {/* ── % pills on lines ────────────────────── */}
+        <rect x="458" y="200" width="46" height="22" rx="11" fill="#818cf8"/>
+        <text x="481" y="215" textAnchor="middle" fontSize="11" fill="white" fontFamily={F} fontWeight="700">80%</text>
 
-        {/* ── 80% pill on baseline line ── */}
-        <rect x="465" y="115" width="52" height="26" rx="13" fill="#818cf8"/>
-        <text x="491" y="133" textAnchor="middle" fontSize="13" fill="white" fontFamily={FONT} fontWeight="700">80%</text>
+        <rect x="458" y="338" width="46" height="22" rx="11"
+          fill={R ? "#f87171" : S ? "#a78bfa" : "#6366f1"}/>
+        <text x="481" y="353" textAnchor="middle" fontSize="11" fill="white" fontFamily={F} fontWeight="700">20%</text>
 
-        {/* ── 20% pill on candidate line ── */}
-        <rect x="465" y="372" width="52" height="26" rx="13" fill={R ? "#f87171" : S ? "#a78bfa" : "#fbbf24"}/>
-        <text x="491" y="390" textAnchor="middle" fontSize="13" fill="white" fontFamily={FONT} fontWeight="700">20%</text>
+        {/* threshold badge */}
+        {R && <>
+          <rect x="455" y="290" width="106" height="26" rx="7" fill="#fef2f2" stroke="#fca5a5" strokeWidth="1"/>
+          <text x="508" y="307" textAnchor="middle" fontSize="10.5" fill="#b91c1c" fontFamily={F} fontWeight="700">score &lt; 0.70 threshold</text>
+        </>}
 
-        {/* ── score < 0.70 threshold badge (rollback) ── */}
-        {R && (
-          <g>
-            <rect x="470" y="302" width="126" height="32" rx="8" fill="#fef2f2" stroke="#f87171" strokeWidth="1.5"/>
-            <text x="533" y="316" textAnchor="middle" fontSize="11" fill="#b91c1c" fontFamily={FONT} fontWeight="700">score &lt; 0.70</text>
-            <text x="533" y="329" textAnchor="middle" fontSize="10" fill="#ef4444" fontFamily={FONT}>threshold</text>
-          </g>
-        )}
+        {/* ── YOUR APP node ─────────────────────── */}
+        <rect x="26" y="202" width="130" height="76" rx="14" fill="white" stroke="#e5e7eb" strokeWidth="1.5" filter="url(#nw)"/>
+        <rect x="42" y="217" width="7" height="7" rx="1.5" fill="#a78bfa"/>
+        <rect x="52" y="217" width="7" height="7" rx="1.5" fill="#c4b5fd"/>
+        <rect x="42" y="227" width="7" height="7" rx="1.5" fill="#c4b5fd"/>
+        <rect x="52" y="227" width="7" height="7" rx="1.5" fill="#a78bfa"/>
+        <text x="91" y="231" textAnchor="middle" fontSize="13.5" fill="#111827" fontFamily={F} fontWeight="800">YOUR APP</text>
+        <text x="91" y="249" textAnchor="middle" fontSize="11" fill="#9ca3af" fontFamily={F}>any LLM client</text>
+        <text x="91" y="266" textAnchor="middle" fontSize="10" fill="#d1d5db" fontFamily={F}>OpenAI · Anthropic · custom</text>
 
-        {/* ── YOUR APP node ── */}
-        <rect x="20" y="210" width="170" height="92" rx="16" fill="white" stroke="#e5e7eb" strokeWidth="1.5" filter="url(#csw)"/>
-        {/* grid icon */}
-        <rect x="48" y="229" width="8" height="8" rx="2" fill="#a78bfa"/>
-        <rect x="59" y="229" width="8" height="8" rx="2" fill="#a78bfa"/>
-        <rect x="48" y="240" width="8" height="8" rx="2" fill="#a78bfa"/>
-        <rect x="59" y="240" width="8" height="8" rx="2" fill="#a78bfa"/>
-        <text x="105" y="240" textAnchor="middle" fontSize="16" fill="#111827" fontFamily={FONT} fontWeight="800" letterSpacing="0.02em">YOUR APP</text>
-        <text x="105" y="259" textAnchor="middle" fontSize="12" fill="#9ca3af" fontFamily={FONT}>any LLM client</text>
-        <text x="105" y="278" textAnchor="middle" fontSize="11" fill="#d1d5db" fontFamily={FONT}>OpenAI · Anthropic · custom</text>
+        {/* ── REPATH GATEWAY node ──────────────── */}
+        <rect x="240" y="190" width="140" height="100" rx="16" fill="white" stroke="#c4b5fd" strokeWidth="1.5" filter="url(#ns)"/>
+        {/* icon */}
+        <path d="M298 208 C298 208 306 203 310 208 C314 213 322 208 322 208" stroke="#7c3aed" strokeWidth="2" fill="none" strokeLinecap="round"/>
+        <circle cx="310" cy="214" r="3.5" fill="#7c3aed"/>
+        <text x="310" y="237" textAnchor="middle" fontSize="15" fill="#111827" fontFamily={F} fontWeight="800">REPATH</text>
+        <text x="310" y="253" textAnchor="middle" fontSize="15" fill="#111827" fontFamily={F} fontWeight="800">GATEWAY</text>
+        <text x="310" y="269" textAnchor="middle" fontSize="10.5" fill="#9ca3af" fontFamily={F}>routes · scores</text>
+        <text x="310" y="282" textAnchor="middle" fontSize="10" fill="#7c3aed" fontFamily={F} fontWeight="600">&lt;2ms overhead</text>
+        <circle cx="310" cy="240" r={46 + Math.sin(tick * 0.07) * 2.5}
+          stroke="rgba(124,58,237,0.06)" strokeWidth="1.5" fill="none"/>
 
-        {/* ── REPATH GATEWAY node ── */}
-        <rect x="255" y="196" width="160" height="120" rx="18" fill="white" stroke="#c4b5fd" strokeWidth="2" filter="url(#cs)"/>
-        {/* Repath icon */}
-        <path d="M 316 218 C 316 218 326 212 335 218 C 344 224 354 218 354 218" stroke="#7c3aed" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
-        <circle cx="335" cy="225" r="4" fill="#7c3aed"/>
-        <text x="335" y="249" textAnchor="middle" fontSize="17" fill="#111827" fontFamily={FONT} fontWeight="900" letterSpacing="0.01em">REPATH</text>
-        <text x="335" y="266" textAnchor="middle" fontSize="17" fill="#111827" fontFamily={FONT} fontWeight="900">GATEWAY</text>
-        <text x="335" y="284" textAnchor="middle" fontSize="12" fill="#6b7280" fontFamily={FONT}>routes • scores</text>
-        <text x="335" y="299" textAnchor="middle" fontSize="11" fill="#7c3aed" fontFamily={FONT} fontWeight="600">&lt;2ms overhead</text>
-        {/* subtle pulse ring */}
-        <circle cx="335" cy="255" r={58 + Math.sin(tick * 0.07) * 3} stroke="rgba(124,58,237,0.06)" strokeWidth="1.5" fill="none"/>
+        {/* ── BASELINE node ─────────────────────── */}
+        <rect x="522" y="84" width="216" height="92" rx="14" fill="white" stroke="#bfdbfe" strokeWidth="1.5" filter="url(#nw)"/>
+        <text x="630" y="113" textAnchor="middle" fontSize="15" fill="#1d4ed8" fontFamily={F} fontWeight="800">BASELINE</text>
+        <text x="630" y="130" textAnchor="middle" fontSize="12" fill="#3b82f6" fontFamily={F} fontWeight="600">80% of traffic  ·  score: 0.91 ✓</text>
+        <text x="630" y="147" textAnchor="middle" fontSize="10.5" fill="#93c5fd" fontFamily={F}>current prompt · stable</text>
+        {/* thin underline accent */}
+        <line x1="556" y1="157" x2="704" y2="157" stroke="#dbeafe" strokeWidth="1"/>
+        <text x="630" y="169" textAnchor="middle" fontSize="10" fill="#93c5fd" fontFamily={F}>quality gate: passing</text>
 
-        {/* ── BASELINE node ── */}
-        <rect x="568" y="70" width="210" height="120" rx="16" fill="white" stroke="#bfdbfe" strokeWidth="2" filter="url(#csw)"/>
-        <text x="673" y="103" textAnchor="middle" fontSize="17" fill="#1d4ed8" fontFamily={FONT} fontWeight="900" letterSpacing="0.02em">BASELINE</text>
-        <text x="673" y="122" textAnchor="middle" fontSize="14" fill="#3b82f6" fontFamily={FONT} fontWeight="600">80% of traffic</text>
-        <text x="673" y="139" textAnchor="middle" fontSize="12" fill="#93c5fd" fontFamily={FONT}>current prompt • stable</text>
-        <rect x="613" y="150" width="120" height="28" rx="8" fill="#eff6ff" stroke="#bfdbfe" strokeWidth="1"/>
-        <text x="673" y="169" textAnchor="middle" fontSize="13" fill="#1d4ed8" fontFamily={FONT} fontWeight="700">score: 0.91 ✓</text>
-
-        {/* ── CANDIDATE node ── */}
-        <rect x="568" y="322" width="210" height="134" rx="16" fill="white"
-          stroke={R ? "#fca5a5" : S ? "#c4b5fd" : "#fde68a"} strokeWidth="2" filter="url(#csw)"/>
-        <text x="673" y="357" textAnchor="middle" fontSize="17"
-          fill={R ? "#b91c1c" : S ? "#6d28d9" : "#b45309"} fontFamily={FONT} fontWeight="900" letterSpacing="0.02em">
+        {/* ── CANDIDATE / SHADOW node ────────────── */}
+        <rect x="522" y="304" width="216" height="92" rx="14" fill="white"
+          stroke={R ? "#fca5a5" : S ? "#c4b5fd" : "#c7d2fe"} strokeWidth="1.5" filter="url(#nw)"/>
+        <text x="630" y="333" textAnchor="middle" fontSize="15"
+          fill={R ? "#b91c1c" : S ? "#6d28d9" : "#4338ca"} fontFamily={F} fontWeight="800">
           {S ? "SHADOW" : "CANDIDATE"}
         </text>
-        <text x="673" y="376" textAnchor="middle" fontSize="14"
-          fill={R ? "#ef4444" : S ? "#7c3aed" : "#d97706"} fontFamily={FONT} fontWeight="600">
-          {S ? "parallel • no user impact" : "20% of traffic"}
+        <text x="630" y="350" textAnchor="middle" fontSize="12"
+          fill={R ? "#ef4444" : S ? "#7c3aed" : "#6366f1"} fontFamily={F} fontWeight="600">
+          {S ? "parallel · no user impact" : `20% traffic  ·  score: ${cQ}`}
         </text>
-        <text x="673" y="392" textAnchor="middle" fontSize="12"
-          fill={R ? "#fca5a5" : S ? "#a78bfa" : "#fbbf24"} fontFamily={FONT}>
-          {S ? "shadow test • comparing" : "new prompt • testing"}
+        <text x="630" y="367" textAnchor="middle" fontSize="10.5"
+          fill={R ? "#fca5a5" : S ? "#a78bfa" : "#818cf8"} fontFamily={F}>
+          {R ? "⚠ auto-rollback triggered" : S ? "evaluating before expose" : "→ advancing"}
         </text>
-        <rect x="605" y="403" width="136" height="28" rx="8"
-          fill={R ? "#fef2f2" : S ? "#f5f3ff" : "#fffbeb"}
-          stroke={R ? "#fca5a5" : S ? "#c4b5fd" : "#fde68a"} strokeWidth="1"/>
-        <text x="673" y="421" textAnchor="middle" fontSize="13"
-          fill={R ? "#b91c1c" : S ? "#6d28d9" : "#92400e"} fontFamily={FONT} fontWeight="800">
-          {R ? `score: ${candidateQ} ◄ ROLLING BACK` : S ? `score: ${candidateQ} ● COMPARING` : `score: ${candidateQ} → ADVANCING`}
-        </text>
-        <text x="673" y="439" textAnchor="middle" fontSize="11"
-          fill={R ? "#ef4444" : S ? "#a78bfa" : "#d97706"} fontFamily={FONT} fontWeight="600">
-          {R ? "auto-rollback triggered" : S ? "evaluating before expose" : "quality gate: passing"}
+        <line x1="556" y1="377" x2="704" y2="377" stroke={R ? "#fecaca" : "#e0e7ff"} strokeWidth="1"/>
+        <text x="630" y="389" textAnchor="middle" fontSize="10"
+          fill={R ? "#ef4444" : "#818cf8"} fontFamily={F} fontWeight="600">
+          {R ? "100% traffic returning to baseline" : S ? "shadow test · comparing" : "new prompt · testing"}
         </text>
 
-        {/* ── LLM JUDGE node ── */}
-        <rect x="255" y="400" width="160" height="104" rx="16" fill="white" stroke="#ddd6fe" strokeWidth="2" filter="url(#csw)"/>
-        {/* sparkle icon */}
-        <path d="M 308 420 L 311 413 L 314 420 L 321 423 L 314 426 L 311 433 L 308 426 L 301 423 Z" fill="#7c3aed" opacity="0.8"/>
-        <text x="335" y="447" textAnchor="middle" fontSize="15" fill="#111827" fontFamily={FONT} fontWeight="800">LLM JUDGE</text>
-        <text x="335" y="464" textAnchor="middle" fontSize="13" fill="#374151" fontFamily={FONT} fontWeight="600">scores every response</text>
-        <text x="335" y="480" textAnchor="middle" fontSize="11" fill="#7c3aed" fontFamily={FONT}>async • ~120ms</text>
-        <text x="335" y="494" textAnchor="middle" fontSize="11" fill="#9ca3af" fontFamily={FONT}>0ms user impact</text>
+        {/* ── LLM JUDGE node ────────────────────── */}
+        <rect x="240" y="374" width="140" height="68" rx="14" fill="white" stroke="#ddd6fe" strokeWidth="1.5" filter="url(#nw)"/>
+        <path d="M276 390 L279 384 L282 390 L288 393 L282 396 L279 402 L276 396 L270 393 Z" fill="#7c3aed" opacity="0.75"/>
+        <text x="310" y="401" textAnchor="middle" fontSize="13" fill="#111827" fontFamily={F} fontWeight="800">LLM JUDGE</text>
+        <text x="310" y="416" textAnchor="middle" fontSize="10.5" fill="#7c3aed" fontFamily={F}>scores every response · async · ~120ms</text>
+        <text x="310" y="432" textAnchor="middle" fontSize="10" fill="#c4b5fd" fontFamily={F}>0ms user impact</text>
 
-        {/* ── ROLLBACK TRIGGERED banner (top, rollback phase) ── */}
-        {R && (
-          <g>
-            <rect x="568" y="200" width="210" height="92" rx="14" fill="#fef2f2" stroke="#f87171" strokeWidth="2"/>
-            {/* shield icon */}
-            <path d="M 622 222 L 631 218 L 640 222 L 640 232 C 640 238 631 242 631 242 C 631 242 622 238 622 232 Z" fill="#f87171"/>
-            <text x="662" y="228" fontSize="12" fill="#b91c1c" fontFamily={FONT} fontWeight="700">ROLLBACK</text>
-            <text x="662" y="243" fontSize="12" fill="#b91c1c" fontFamily={FONT} fontWeight="700">TRIGGERED</text>
-            <text x="673" y="262" textAnchor="middle" fontSize="11" fill="#ef4444" fontFamily={FONT}>auto-reverted in 412ms</text>
-            <text x="673" y="278" textAnchor="middle" fontSize="11" fill="#fca5a5" fontFamily={FONT}>100% traffic → baseline</text>
-          </g>
-        )}
-
-        {/* ── SHADOW MODE banner ── */}
-        {S && (
-          <g>
-            <rect x="568" y="200" width="210" height="92" rx="14" fill="#f5f3ff" stroke="#c4b5fd" strokeWidth="2">
-              <animate attributeName="opacity" values="1;0.7;1" dur="2.2s" repeatCount="indefinite"/>
-            </rect>
-            <text x="673" y="242" textAnchor="middle" fontSize="16" fill="#6d28d9" fontFamily={FONT} fontWeight="900">SHADOW MODE</text>
-            <text x="673" y="261" textAnchor="middle" fontSize="12" fill="#7c3aed" fontFamily={FONT} fontWeight="600">zero user impact</text>
-            <text x="673" y="278" textAnchor="middle" fontSize="11" fill="#a78bfa" fontFamily={FONT}>evaluating before exposing</text>
-          </g>
-        )}
-
-        {/* ── Phase status chip (top-left) ── */}
-        <rect x="20" y="16" width={R ? 206 : S ? 168 : 196} height="32" rx="16"
+        {/* ── Phase chip (top-left floating) ──── */}
+        <rect x="22" y="14" width={R ? 188 : S ? 152 : 178} height="28" rx="14"
           fill={R ? "#fef2f2" : S ? "#f5f3ff" : "#f0fdf4"}
-          stroke={R ? "#f87171" : S ? "#c4b5fd" : "#86efac"} strokeWidth="1.5"/>
-        <circle cx="40" cy="32" r="7"
+          stroke={R ? "#fca5a5" : S ? "#ddd6fe" : "#86efac"} strokeWidth="1"/>
+        <circle cx="38" cy="28" r="5.5"
           fill={R ? "#ef4444" : S ? "#7c3aed" : "#22c55e"}>
-          <animate attributeName="r" values="5.5;7;5.5" dur="1.4s" repeatCount="indefinite"/>
+          <animate attributeName="r" values="4.5;6;4.5" dur="1.6s" repeatCount="indefinite"/>
         </circle>
-        <text x="55" y="37" fontSize="13" fill={R ? "#b91c1c" : S ? "#6d28d9" : "#15803d"} fontFamily={FONT} fontWeight="700">
+        <text x="50" y="33" fontSize="11.5" fill={R?"#b91c1c":S?"#6d28d9":"#15803d"} fontFamily={F} fontWeight="700">
           {R ? "ROLLBACK TRIGGERED" : S ? "SHADOW TESTING" : "CANARY ROUTING LIVE"}
         </text>
 
-        {/* ── ANIMATED PARTICLES ── */}
-        {/* App → Gateway (violet) */}
-        {[0, 0.4, 0.75].map((o, i) => {
-          const t = (T + o) % 1; if (t > 0.5) return null;
-          const p = lerpPoly(pathApp, t / 0.5);
-          return <circle key={`a${i}`} cx={p.x} cy={p.y} r="6" fill="#818cf8" filter="url(#gv)" opacity={0.9}/>;
+        {/* ── Particles ────────────────────────── */}
+        {/* App → Gateway */}
+        {[0, 0.45, 0.8].map((o, i) => {
+          const t = (T + o) % 1; if (t > 0.96) return null;
+          const p = lp(pApp, t);
+          return <circle key={`a${i}`} cx={p.x} cy={p.y} r="5.5" fill="#818cf8" opacity="0.9"/>;
         })}
-        {/* Gateway → Baseline (blue, 5 dots = heavy traffic) */}
-        {dots([0, 0.18, 0.36, 0.54, 0.72], pathBL, 0, "#3b82f6", 6, "url(#gb)", R ? 0.3 : 0.9)}
-        {/* Gateway → Candidate (amber or red, 2 dots = light) */}
-        {!S && dots([0, 0.5], pathCand, 0, R ? "#f87171" : "#fbbf24", 5.5, "url(#gb)", 0.9)}
-        {/* Shadow dots (violet, lighter) */}
-        {S && dots([0, 0.55], pathCand, 0, "#a78bfa", 4.5, undefined, 0.65)}
-        {/* Gateway → Judge (violet, slow) */}
-        {dots([0, 0.6], pathJudge, 0, "#a78bfa", 5, "url(#gv)", 0.8)}
-        {/* Rollback path (red) */}
-        {R && dots([0, 0.45], pathRB, 0, "#ef4444", 6, "url(#gb)", 0.9)}
+        {/* → Baseline (5 dots, blue) */}
+        {mkDots([0,0.18,0.36,0.54,0.72], pBL, "#3b82f6", 5, R ? 0.25 : 0.9)}
+        {/* → Candidate (2 dots) */}
+        {!S && mkDots([0,0.52], pCand, R?"#f87171":"#6366f1", 5, 0.9)}
+        {/* → shadow dots (violet, faint) */}
+        {S && mkDots([0,0.55], pCand, "#a78bfa", 4, 0.6)}
+        {/* → Judge */}
+        {mkDots([0,0.6], pJudge, "#a78bfa", 4.5, 0.75)}
+        {/* Judge → rollback */}
+        {R && mkDots([0,0.48], pRB, "#ef4444", 5.5, 0.9)}
       </svg>
     </div>
   );
@@ -581,10 +527,10 @@ export default function LandingPage() {
       </header>
 
       {/* ══ HERO ═════════════════════════════════════════════════════════════ */}
-      <section className="relative w-full px-8 pt-16 pb-20 min-h-[680px] flex items-center overflow-hidden">
+      <section className="relative max-w-7xl mx-auto px-8 pt-16 pb-20 min-h-[620px] flex items-center overflow-hidden">
         <HeroTrafficFlow />
 
-        <div className="relative z-10 max-w-[520px] ml-8">
+        <div className="relative z-10 max-w-[480px]">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-100 text-xs text-gray-500 mb-6 border border-gray-200">
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
             AI-native progressive delivery · 7-day free trial
