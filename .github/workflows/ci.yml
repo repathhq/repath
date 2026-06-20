@@ -167,5 +167,7 @@ jobs:
         working-directory: evaluators
         run: |
           python -m venv /tmp/audit-venv
+          # Upgrade pip first so it doesn't flag itself, then install project + pip-audit
+          /tmp/audit-venv/bin/pip install --upgrade pip --quiet
           /tmp/audit-venv/bin/pip install pip-audit -e "." --quiet
-          /tmp/audit-venv/bin/pip-audit
+          /tmp/audit-venv/bin/pip-audit --skip-editable

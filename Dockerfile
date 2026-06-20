@@ -11,9 +11,9 @@
 
 # ── Rust build stages ──────────────────────────────────────────────────────────
 
-FROM rust:1.75-slim-bookworm AS chef
+FROM rust:1.88-slim-bookworm AS chef
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
-RUN cargo install cargo-chef --locked
+RUN cargo install cargo-chef
 WORKDIR /app
 
 FROM chef AS planner
