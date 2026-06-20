@@ -257,242 +257,255 @@ function Marquee() {
 /* ─── Animated Hero Traffic Flow ──────────────────────────────────────────── */
 function HeroTrafficFlow() {
   const [tick, setTick] = useState(0);
-  // Cycle through states: routing → rollback → shadow
   const [phase, setPhase] = useState<"routing"|"rollback"|"shadow">("routing");
   const phaseRef = useRef(0);
 
   useEffect(() => {
-    const id = setInterval(() => setTick(t => (t + 1) % 200), 40);
+    const id = setInterval(() => setTick(t => (t + 1) % 300), 35);
     return () => clearInterval(id);
   }, []);
-
   useEffect(() => {
     const id = setInterval(() => {
       phaseRef.current = (phaseRef.current + 1) % 3;
       setPhase(phaseRef.current === 0 ? "routing" : phaseRef.current === 1 ? "rollback" : "shadow");
-    }, 5000);
+    }, 5500);
     return () => clearInterval(id);
   }, []);
 
-  function lerp(a: number, b: number, t: number) { return a + (b - a) * t; }
-  function bezier(p0x: number, p0y: number, p1x: number, p1y: number, p2x: number, p2y: number, t: number) {
-    const x = (1-t)*(1-t)*p0x + 2*(1-t)*t*p1x + t*t*p2x;
-    const y = (1-t)*(1-t)*p0y + 2*(1-t)*t*p1y + t*t*p2y;
-    return {x, y};
+  const T = tick / 300;
+  const R = phase === "rollback";
+  const S = phase === "shadow";
+
+  // lerp point along a polyline defined by segments
+  function lerpPoly(pts: number[][], t: number) {
+    const n = pts.length - 1;
+    const seg = Math.floor(t * n);
+    const st = (t * n) - seg;
+    const a = pts[Math.min(seg, n - 1)];
+    const b = pts[Math.min(seg + 1, n)];
+    return { x: a[0] + (b[0] - a[0]) * st, y: a[1] + (b[1] - a[1]) * st };
   }
 
-  // SVG viewBox 860×520 — large and clear
-  // Nodes: App(80,260) Gateway(330,260) Baseline(660,130) Candidate(660,390) Judge(330,470) Rollback(660,260)
-  const T = tick / 200;
-  const isRollback = phase === "rollback";
-  const isShadow   = phase === "shadow";
+  // ── Layout (800 × 520 viewBox) ──
+  // YOUR APP:       x=30  y=210  w=160 h=90
+  // GATEWAY:        x=255 y=196  w=160 h=118  cx=335 cy=255
+  // BASELINE:       x=570 y=70   w=200 h=120
+  // CANDIDATE:      x=570 y=320  w=200 h=130
+  // LLM JUDGE:      x=255 y=400  w=160 h=100
+  // ROLLBACK BANNER:x=570 y=200  w=200 h=90
 
-  // Particle offsets for each path
-  const mainOffsets   = [0, 0.33, 0.66];
-  const blOffsets     = [0, 0.20, 0.40, 0.60, 0.80]; // 5 dots = 80% feel
-  const candOffsets   = [0, 0.5];                      // 2 dots = 20% feel
-  const evalOffsets   = [0, 0.5];
-  const rollbackOff   = [0, 0.4];
+  // Elbow paths (orthogonal, matching reference)
+  // App → Gateway: straight horizontal
+  const pathApp   = [[190,255],[253,255]] as number[][];
+  // Gateway → Baseline: right then up-right elbow
+  const pathBL    = [[415,230],[490,230],[490,130],[568,130]] as number[][];
+  // Gateway → Candidate: right then down-right elbow
+  const pathCand  = [[415,280],[490,280],[490,385],[568,385]] as number[][];
+  // Gateway → Judge: straight down
+  const pathJudge = [[335,315],[335,398]] as number[][];
+  // Judge → Rollback (red dashed): right then up
+  const pathRB    = [[415,445],[530,445],[530,250],[568,250]] as number[][];
 
-  // Quality score for animated display
   const baselineQ  = 0.91;
-  const candidateQ = isRollback ? 0.62 : isShadow ? 0.88 : 0.85;
-  const qColor     = isRollback ? "#ef4444" : candidateQ >= 0.85 ? "#15803d" : "#b45309";
+  const candidateQ = R ? 0.62 : S ? 0.88 : 0.85;
+
+  const FONT = "Inter,system-ui,sans-serif";
+
+  // Dot helpers
+  const dots = (offsets: number[], path: number[][], start: number, color: string, r: number, filter?: string, opacity = 1) =>
+    offsets.map((o, i) => {
+      const t = ((T + o) % 1);
+      if (t < start || t > 0.97) return null;
+      const nt = (t - start) / (1 - start);
+      const p = lerpPoly(path, nt);
+      return <circle key={i} cx={p.x} cy={p.y} r={r} fill={color} filter={filter} opacity={opacity} />;
+    });
 
   return (
-    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[62%] min-w-[600px] h-[640px] pointer-events-none select-none" aria-hidden>
-      <svg viewBox="0 0 860 520" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full drop-shadow-sm">
+    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[64%] min-w-[620px] h-[640px] pointer-events-none select-none" aria-hidden>
+      <svg viewBox="0 0 800 520" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
         <defs>
-          <filter id="glow-v"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-          <filter id="glow-b"><feGaussianBlur stdDeviation="2.5" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-          <filter id="shadow"><feDropShadow dx="0" dy="2" stdDeviation="4" floodColor="#000" floodOpacity="0.06"/></filter>
+          <filter id="cs"><feDropShadow dx="0" dy="3" stdDeviation="6" floodColor="#6366f1" floodOpacity="0.10"/></filter>
+          <filter id="csw"><feDropShadow dx="0" dy="2" stdDeviation="5" floodColor="#000" floodOpacity="0.07"/></filter>
+          <filter id="gv"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          <filter id="gb"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          <marker id="arr-bl" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#818cf8"/>
+          </marker>
+          <marker id="arr-rd" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#f87171"/>
+          </marker>
+          <marker id="arr-vi" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#a78bfa"/>
+          </marker>
+          <marker id="arr-am" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#fbbf24"/>
+          </marker>
         </defs>
 
-        {/* ─── Connection lines ─────────────────────────────────────────── */}
-        {/* App → Gateway */}
-        <line x1="140" y1="260" x2="298" y2="260" stroke="#d1d5db" strokeWidth="3.0" strokeDasharray="8 5"/>
+        {/* ── Background panel ── */}
+        <rect x="0" y="0" width="800" height="520" rx="24" fill="rgba(238,240,255,0.55)"/>
 
-        {/* Gateway → Baseline */}
-        <path d="M 362 245 Q 490 170 628 138" stroke={isRollback ? "#fca5a5" : "#bfdbfe"} strokeWidth="3.0" strokeDasharray="8 5" fill="none"/>
+        {/* ── Connector lines ── */}
+        {/* App → Gateway (violet solid) */}
+        <line x1="190" y1="255" x2="253" y2="255" stroke="#818cf8" strokeWidth="2.5" markerEnd="url(#arr-bl)"/>
 
-        {/* Gateway → Candidate */}
-        <path d="M 362 275 Q 490 350 628 382" stroke={isRollback ? "#fee2e2" : isShadow ? "#ddd6fe" : "#fde68a"} strokeWidth={isShadow ? "1.5" : "2.5"} strokeDasharray={isShadow ? "5 5" : "8 5"} fill="none" opacity={isShadow ? "0.7" : "1"}/>
+        {/* Gateway → Baseline (indigo, elbow) */}
+        <path d={`M 415 230 H 490 V 130 H 568`} stroke="#818cf8" strokeWidth="2.5" fill="none" markerEnd="url(#arr-bl)" opacity={R ? 0.3 : 1}/>
 
-        {/* Gateway → LLM Judge (down) */}
-        <line x1="330" y1="302" x2="330" y2="438" stroke="#ddd6fe" strokeWidth="2.4" strokeDasharray="6 4"/>
+        {/* Gateway → Candidate (amber normal / red dashed on rollback) */}
+        <path d={`M 415 280 H 490 V 385 H 568`}
+          stroke={R ? "#f87171" : S ? "#a78bfa" : "#fbbf24"}
+          strokeWidth={R ? "2.5" : "2.5"}
+          strokeDasharray={R ? "7 4" : S ? "6 4" : "none"}
+          fill="none" markerEnd={R ? "url(#arr-rd)" : S ? "url(#arr-vi)" : "url(#arr-am)"}/>
 
-        {/* LLM Judge → Rollback arrow (only on rollback phase) */}
-        {isRollback && (
-          <path d="M 382 463 Q 520 463 628 278" stroke="#ef4444" strokeWidth="3.0" strokeDasharray="7 4" fill="none" opacity="0.7"/>
+        {/* Gateway → Judge (violet dashed, down) */}
+        <line x1="335" y1="315" x2="335" y2="398" stroke="#a78bfa" strokeWidth="2" strokeDasharray="6 4" markerEnd="url(#arr-vi)"/>
+
+        {/* Judge → Rollback (red dashed, only rollback phase) */}
+        {R && (
+          <path d={`M 415 445 H 530 V 250 H 568`} stroke="#f87171" strokeWidth="2.5" strokeDasharray="7 4" fill="none" markerEnd="url(#arr-rd)"/>
         )}
 
-        {/* ─── NODES ───────────────────────────────────────────────────── */}
+        {/* ── 80% pill on baseline line ── */}
+        <rect x="465" y="115" width="52" height="26" rx="13" fill="#818cf8"/>
+        <text x="491" y="133" textAnchor="middle" fontSize="13" fill="white" fontFamily={FONT} fontWeight="700">80%</text>
 
-        {/* YOUR APP */}
-        <rect x="10" y="220" width="148" height="80" rx="14" fill="white" stroke="#e5e7eb" strokeWidth="2.4" filter="url(#shadow)"/>
-        <text x="84" y="252" textAnchor="middle" fontSize="16" fill="#374151" fontFamily="Inter,sans-serif" fontWeight="700" letterSpacing="0.06em">YOUR</text>
-        <text x="84" y="270" textAnchor="middle" fontSize="16" fill="#374151" fontFamily="Inter,sans-serif" fontWeight="700" letterSpacing="0.06em">APP</text>
-        <text x="84" y="286" textAnchor="middle" fontSize="12" fill="#9ca3af" fontFamily="Inter,sans-serif">any LLM client</text>
+        {/* ── 20% pill on candidate line ── */}
+        <rect x="465" y="372" width="52" height="26" rx="13" fill={R ? "#f87171" : S ? "#a78bfa" : "#fbbf24"}/>
+        <text x="491" y="390" textAnchor="middle" fontSize="13" fill="white" fontFamily={FONT} fontWeight="700">20%</text>
 
-        {/* REPATH GATEWAY — big bold center */}
-        <rect x="272" y="206" width="116" height="108" rx="20" fill="rgba(124,58,237,0.06)" stroke="rgba(124,58,237,0.25)" strokeWidth="3.0" filter="url(#shadow)"/>
-        <rect x="276" y="210" width="108" height="100" rx="17" fill="white" stroke="rgba(124,58,237,0.12)" strokeWidth="1.8"/>
-        {/* Pulsing ring */}
-        <circle cx="330" cy="260" r={52 + Math.sin(tick * 0.08) * 4} stroke="rgba(124,58,237,0.07)" strokeWidth="1.8" fill="none"/>
-        <text x="330" y="249" textAnchor="middle" fontSize="14" fill="#6d28d9" fontFamily="Inter,sans-serif" fontWeight="800" letterSpacing="0.07em">REPATH</text>
-        <text x="330" y="264" textAnchor="middle" fontSize="14" fill="#6d28d9" fontFamily="Inter,sans-serif" fontWeight="800" letterSpacing="0.07em">GATEWAY</text>
-        <text x="330" y="279" textAnchor="middle" fontSize="11" fill="#a78bfa" fontFamily="Inter,sans-serif" fontWeight="500">routes · scores</text>
-        <text x="330" y="293" textAnchor="middle" fontSize="11" fill="#c4b5fd" fontFamily="Inter,sans-serif">&lt;2ms overhead</text>
-
-        {/* BASELINE node */}
-        <rect x="618" y="86" width="188" height="106" rx="14" fill="white" stroke="#bfdbfe" strokeWidth="2.4" filter="url(#shadow)"/>
-        <rect x="618" y="86" width="188" height="106" rx="14" fill="rgba(219,234,254,0.3)" stroke="none"/>
-        <text x="712" y="116" textAnchor="middle" fontSize="15" fill="#1d4ed8" fontFamily="Inter,sans-serif" fontWeight="800" letterSpacing="0.06em">BASELINE</text>
-        <text x="712" y="133" textAnchor="middle" fontSize="14" fill="#3b82f6" fontFamily="Inter,sans-serif" fontWeight="600">80% of traffic</text>
-        <text x="712" y="148" textAnchor="middle" fontSize="12" fill="#93c5fd" fontFamily="Inter,sans-serif">current prompt · stable</text>
-        {/* Quality badge */}
-        <rect x="648" y="160" width="128" height="24" rx="6" fill="#eff6ff" stroke="#bfdbfe" strokeWidth="1.2"/>
-        <text x="712" y="176" textAnchor="middle" fontSize="12" fill="#1d4ed8" fontFamily="Inter,sans-serif" fontWeight="700">score: {baselineQ.toFixed(2)} ✓</text>
-
-        {/* CANDIDATE node */}
-        <rect x="618" y="338" width="188" height="106" rx="14" fill="white"
-          stroke={isRollback ? "#fca5a5" : isShadow ? "#ddd6fe" : "#fde68a"} strokeWidth="2.4" filter="url(#shadow)"/>
-        <rect x="618" y="338" width="188" height="106" rx="14"
-          fill={isRollback ? "rgba(254,226,226,0.4)" : isShadow ? "rgba(237,233,254,0.3)" : "rgba(254,243,199,0.3)"} stroke="none"/>
-        <text x="712" y="368" textAnchor="middle" fontSize="15"
-          fill={isRollback ? "#b91c1c" : isShadow ? "#6d28d9" : "#b45309"} fontFamily="Inter,sans-serif" fontWeight="800" letterSpacing="0.06em">
-          {isShadow ? "SHADOW" : "CANDIDATE"}
-        </text>
-        <text x="712" y="384" textAnchor="middle" fontSize="14"
-          fill={isRollback ? "#ef4444" : isShadow ? "#7c3aed" : "#d97706"} fontFamily="Inter,sans-serif" fontWeight="600">
-          {isShadow ? "parallel · no user impact" : "20% of traffic"}
-        </text>
-        <text x="712" y="398" textAnchor="middle" fontSize="12"
-          fill={isRollback ? "#fca5a5" : isShadow ? "#a78bfa" : "#fbbf24"} fontFamily="Inter,sans-serif">
-          {isShadow ? "shadow test · comparing" : "new prompt · testing"}
-        </text>
-        {/* Quality badge */}
-        <rect x="638" y="410" width="148" height="24" rx="6"
-          fill={isRollback ? "#fef2f2" : isShadow ? "#f5f3ff" : "#fffbeb"}
-          stroke={isRollback ? "#fca5a5" : isShadow ? "#ddd6fe" : "#fde68a"} strokeWidth="1.2"/>
-        <text x="712" y="426" textAnchor="middle" fontSize="12"
-          fill={qColor} fontFamily="Inter,sans-serif" fontWeight="700">
-          score: {candidateQ.toFixed(2)} {isRollback ? "⚠ ROLLING BACK" : isShadow ? "● COMPARING" : "→ ADVANCING"}
-        </text>
-
-        {/* LLM JUDGE node */}
-        <rect x="238" y="432" width="184" height="80" rx="14" fill="white" stroke="#ddd6fe" strokeWidth="2.4" filter="url(#shadow)"/>
-        <rect x="238" y="432" width="184" height="80" rx="14" fill="rgba(237,233,254,0.25)" stroke="none"/>
-        <text x="330" y="462" textAnchor="middle" fontSize="15" fill="#6d28d9" fontFamily="Inter,sans-serif" fontWeight="800" letterSpacing="0.05em">LLM JUDGE</text>
-        <text x="330" y="476" textAnchor="middle" fontSize="13" fill="#7c3aed" fontFamily="Inter,sans-serif" fontWeight="600">scores every response</text>
-        <text x="330" y="494" textAnchor="middle" fontSize="12" fill="#a78bfa" fontFamily="Inter,sans-serif">async · ~120ms · 0ms user impact</text>
-
-        {/* AUTO-ROLLBACK banner — only when rollback phase */}
-        {isRollback && (
-          <>
-            <rect x="618" y="222" width="188" height="64" rx="12" fill="#fef2f2" stroke="#f87171" strokeWidth="2.4"/>
-            <text x="712" y="249" textAnchor="middle" fontSize="14" fill="#b91c1c" fontFamily="Inter,sans-serif" fontWeight="800">AUTO-ROLLBACK</text>
-            <text x="712" y="264" textAnchor="middle" fontSize="12" fill="#ef4444" fontFamily="Inter,sans-serif" fontWeight="600">triggered in 412ms</text>
-            <text x="712" y="279" textAnchor="middle" fontSize="12" fill="#fca5a5" fontFamily="Inter,sans-serif">score below threshold: 0.70</text>
-          </>
+        {/* ── score < 0.70 threshold badge (rollback) ── */}
+        {R && (
+          <g>
+            <rect x="470" y="302" width="126" height="32" rx="8" fill="#fef2f2" stroke="#f87171" strokeWidth="1.5"/>
+            <text x="533" y="316" textAnchor="middle" fontSize="11" fill="#b91c1c" fontFamily={FONT} fontWeight="700">score &lt; 0.70</text>
+            <text x="533" y="329" textAnchor="middle" fontSize="10" fill="#ef4444" fontFamily={FONT}>threshold</text>
+          </g>
         )}
 
-        {/* SHADOW MODE label */}
-        {isShadow && (
-          <rect x="618" y="222" width="188" height="64" rx="12" fill="#f5f3ff" stroke="#c4b5fd" strokeWidth="2.4">
-            <animate attributeName="opacity" values="1;0.6;1" dur="2s" repeatCount="indefinite"/>
-          </rect>
-        )}
-        {isShadow && (
-          <>
-            <text x="712" y="249" textAnchor="middle" fontSize="14" fill="#6d28d9" fontFamily="Inter,sans-serif" fontWeight="800">SHADOW MODE</text>
-            <text x="712" y="264" textAnchor="middle" fontSize="12" fill="#7c3aed" fontFamily="Inter,sans-serif" fontWeight="600">zero user impact</text>
-            <text x="712" y="279" textAnchor="middle" fontSize="12" fill="#a78bfa" fontFamily="Inter,sans-serif">evaluating quietly</text>
-          </>
+        {/* ── YOUR APP node ── */}
+        <rect x="20" y="210" width="170" height="92" rx="16" fill="white" stroke="#e5e7eb" strokeWidth="1.5" filter="url(#csw)"/>
+        {/* grid icon */}
+        <rect x="48" y="229" width="8" height="8" rx="2" fill="#a78bfa"/>
+        <rect x="59" y="229" width="8" height="8" rx="2" fill="#a78bfa"/>
+        <rect x="48" y="240" width="8" height="8" rx="2" fill="#a78bfa"/>
+        <rect x="59" y="240" width="8" height="8" rx="2" fill="#a78bfa"/>
+        <text x="105" y="240" textAnchor="middle" fontSize="16" fill="#111827" fontFamily={FONT} fontWeight="800" letterSpacing="0.02em">YOUR APP</text>
+        <text x="105" y="259" textAnchor="middle" fontSize="12" fill="#9ca3af" fontFamily={FONT}>any LLM client</text>
+        <text x="105" y="278" textAnchor="middle" fontSize="11" fill="#d1d5db" fontFamily={FONT}>OpenAI · Anthropic · custom</text>
+
+        {/* ── REPATH GATEWAY node ── */}
+        <rect x="255" y="196" width="160" height="120" rx="18" fill="white" stroke="#c4b5fd" strokeWidth="2" filter="url(#cs)"/>
+        {/* Repath icon */}
+        <path d="M 316 218 C 316 218 326 212 335 218 C 344 224 354 218 354 218" stroke="#7c3aed" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
+        <circle cx="335" cy="225" r="4" fill="#7c3aed"/>
+        <text x="335" y="249" textAnchor="middle" fontSize="17" fill="#111827" fontFamily={FONT} fontWeight="900" letterSpacing="0.01em">REPATH</text>
+        <text x="335" y="266" textAnchor="middle" fontSize="17" fill="#111827" fontFamily={FONT} fontWeight="900">GATEWAY</text>
+        <text x="335" y="284" textAnchor="middle" fontSize="12" fill="#6b7280" fontFamily={FONT}>routes • scores</text>
+        <text x="335" y="299" textAnchor="middle" fontSize="11" fill="#7c3aed" fontFamily={FONT} fontWeight="600">&lt;2ms overhead</text>
+        {/* subtle pulse ring */}
+        <circle cx="335" cy="255" r={58 + Math.sin(tick * 0.07) * 3} stroke="rgba(124,58,237,0.06)" strokeWidth="1.5" fill="none"/>
+
+        {/* ── BASELINE node ── */}
+        <rect x="568" y="70" width="210" height="120" rx="16" fill="white" stroke="#bfdbfe" strokeWidth="2" filter="url(#csw)"/>
+        <text x="673" y="103" textAnchor="middle" fontSize="17" fill="#1d4ed8" fontFamily={FONT} fontWeight="900" letterSpacing="0.02em">BASELINE</text>
+        <text x="673" y="122" textAnchor="middle" fontSize="14" fill="#3b82f6" fontFamily={FONT} fontWeight="600">80% of traffic</text>
+        <text x="673" y="139" textAnchor="middle" fontSize="12" fill="#93c5fd" fontFamily={FONT}>current prompt • stable</text>
+        <rect x="613" y="150" width="120" height="28" rx="8" fill="#eff6ff" stroke="#bfdbfe" strokeWidth="1"/>
+        <text x="673" y="169" textAnchor="middle" fontSize="13" fill="#1d4ed8" fontFamily={FONT} fontWeight="700">score: 0.91 ✓</text>
+
+        {/* ── CANDIDATE node ── */}
+        <rect x="568" y="322" width="210" height="134" rx="16" fill="white"
+          stroke={R ? "#fca5a5" : S ? "#c4b5fd" : "#fde68a"} strokeWidth="2" filter="url(#csw)"/>
+        <text x="673" y="357" textAnchor="middle" fontSize="17"
+          fill={R ? "#b91c1c" : S ? "#6d28d9" : "#b45309"} fontFamily={FONT} fontWeight="900" letterSpacing="0.02em">
+          {S ? "SHADOW" : "CANDIDATE"}
+        </text>
+        <text x="673" y="376" textAnchor="middle" fontSize="14"
+          fill={R ? "#ef4444" : S ? "#7c3aed" : "#d97706"} fontFamily={FONT} fontWeight="600">
+          {S ? "parallel • no user impact" : "20% of traffic"}
+        </text>
+        <text x="673" y="392" textAnchor="middle" fontSize="12"
+          fill={R ? "#fca5a5" : S ? "#a78bfa" : "#fbbf24"} fontFamily={FONT}>
+          {S ? "shadow test • comparing" : "new prompt • testing"}
+        </text>
+        <rect x="605" y="403" width="136" height="28" rx="8"
+          fill={R ? "#fef2f2" : S ? "#f5f3ff" : "#fffbeb"}
+          stroke={R ? "#fca5a5" : S ? "#c4b5fd" : "#fde68a"} strokeWidth="1"/>
+        <text x="673" y="421" textAnchor="middle" fontSize="13"
+          fill={R ? "#b91c1c" : S ? "#6d28d9" : "#92400e"} fontFamily={FONT} fontWeight="800">
+          {R ? `score: ${candidateQ} ◄ ROLLING BACK` : S ? `score: ${candidateQ} ● COMPARING` : `score: ${candidateQ} → ADVANCING`}
+        </text>
+        <text x="673" y="439" textAnchor="middle" fontSize="11"
+          fill={R ? "#ef4444" : S ? "#a78bfa" : "#d97706"} fontFamily={FONT} fontWeight="600">
+          {R ? "auto-rollback triggered" : S ? "evaluating before expose" : "quality gate: passing"}
+        </text>
+
+        {/* ── LLM JUDGE node ── */}
+        <rect x="255" y="400" width="160" height="104" rx="16" fill="white" stroke="#ddd6fe" strokeWidth="2" filter="url(#csw)"/>
+        {/* sparkle icon */}
+        <path d="M 308 420 L 311 413 L 314 420 L 321 423 L 314 426 L 311 433 L 308 426 L 301 423 Z" fill="#7c3aed" opacity="0.8"/>
+        <text x="335" y="447" textAnchor="middle" fontSize="15" fill="#111827" fontFamily={FONT} fontWeight="800">LLM JUDGE</text>
+        <text x="335" y="464" textAnchor="middle" fontSize="13" fill="#374151" fontFamily={FONT} fontWeight="600">scores every response</text>
+        <text x="335" y="480" textAnchor="middle" fontSize="11" fill="#7c3aed" fontFamily={FONT}>async • ~120ms</text>
+        <text x="335" y="494" textAnchor="middle" fontSize="11" fill="#9ca3af" fontFamily={FONT}>0ms user impact</text>
+
+        {/* ── ROLLBACK TRIGGERED banner (top, rollback phase) ── */}
+        {R && (
+          <g>
+            <rect x="568" y="200" width="210" height="92" rx="14" fill="#fef2f2" stroke="#f87171" strokeWidth="2"/>
+            {/* shield icon */}
+            <path d="M 622 222 L 631 218 L 640 222 L 640 232 C 640 238 631 242 631 242 C 631 242 622 238 622 232 Z" fill="#f87171"/>
+            <text x="662" y="228" fontSize="12" fill="#b91c1c" fontFamily={FONT} fontWeight="700">ROLLBACK</text>
+            <text x="662" y="243" fontSize="12" fill="#b91c1c" fontFamily={FONT} fontWeight="700">TRIGGERED</text>
+            <text x="673" y="262" textAnchor="middle" fontSize="11" fill="#ef4444" fontFamily={FONT}>auto-reverted in 412ms</text>
+            <text x="673" y="278" textAnchor="middle" fontSize="11" fill="#fca5a5" fontFamily={FONT}>100% traffic → baseline</text>
+          </g>
         )}
 
-        {/* ─── Phase label (top-left of animation) ───────────────────── */}
-        <rect x="10" y="10" width={phase === "routing" ? 148 : phase === "rollback" ? 160 : 148} height="28" rx="8"
-          fill={isRollback ? "#fef2f2" : isShadow ? "#f5f3ff" : "#f0fdf4"}
-          stroke={isRollback ? "#fca5a5" : isShadow ? "#ddd6fe" : "#86efac"} strokeWidth="1.8"/>
-        <circle cx="26" cy="24" r="6.5"
-          fill={isRollback ? "#ef4444" : isShadow ? "#7c3aed" : "#16a34a"}>
-          <animate attributeName="r" values="5;6.5;5" dur="1.4s" repeatCount="indefinite"/>
+        {/* ── SHADOW MODE banner ── */}
+        {S && (
+          <g>
+            <rect x="568" y="200" width="210" height="92" rx="14" fill="#f5f3ff" stroke="#c4b5fd" strokeWidth="2">
+              <animate attributeName="opacity" values="1;0.7;1" dur="2.2s" repeatCount="indefinite"/>
+            </rect>
+            <text x="673" y="242" textAnchor="middle" fontSize="16" fill="#6d28d9" fontFamily={FONT} fontWeight="900">SHADOW MODE</text>
+            <text x="673" y="261" textAnchor="middle" fontSize="12" fill="#7c3aed" fontFamily={FONT} fontWeight="600">zero user impact</text>
+            <text x="673" y="278" textAnchor="middle" fontSize="11" fill="#a78bfa" fontFamily={FONT}>evaluating before exposing</text>
+          </g>
+        )}
+
+        {/* ── Phase status chip (top-left) ── */}
+        <rect x="20" y="16" width={R ? 206 : S ? 168 : 196} height="32" rx="16"
+          fill={R ? "#fef2f2" : S ? "#f5f3ff" : "#f0fdf4"}
+          stroke={R ? "#f87171" : S ? "#c4b5fd" : "#86efac"} strokeWidth="1.5"/>
+        <circle cx="40" cy="32" r="7"
+          fill={R ? "#ef4444" : S ? "#7c3aed" : "#22c55e"}>
+          <animate attributeName="r" values="5.5;7;5.5" dur="1.4s" repeatCount="indefinite"/>
         </circle>
-        <text x="38" y="29" fontSize="14" fill={isRollback ? "#b91c1c" : isShadow ? "#6d28d9" : "#15803d"} fontFamily="Inter,sans-serif" fontWeight="700">
-          {isRollback ? "● ROLLBACK TRIGGERED" : isShadow ? "● SHADOW TESTING" : "● CANARY ROUTING LIVE"}
+        <text x="55" y="37" fontSize="13" fill={R ? "#b91c1c" : S ? "#6d28d9" : "#15803d"} fontFamily={FONT} fontWeight="700">
+          {R ? "ROLLBACK TRIGGERED" : S ? "SHADOW TESTING" : "CANARY ROUTING LIVE"}
         </text>
 
-        {/* ─── ANIMATED PARTICLES ──────────────────────────────────────── */}
-
-        {/* Main path dots: App → Gateway */}
-        {mainOffsets.map((o, i) => {
-          const t = (T + o) % 1;
-          if (t > 0.45) return null;
-          const nt = t / 0.45;
-          return (
-            <circle key={`m${i}`} cx={lerp(140, 298, nt)} cy={260} r="7.2" fill="#7c3aed" filter="url(#glow-v)" opacity={0.9}/>
-          );
+        {/* ── ANIMATED PARTICLES ── */}
+        {/* App → Gateway (violet) */}
+        {[0, 0.4, 0.75].map((o, i) => {
+          const t = (T + o) % 1; if (t > 0.5) return null;
+          const p = lerpPoly(pathApp, t / 0.5);
+          return <circle key={`a${i}`} cx={p.x} cy={p.y} r="6" fill="#818cf8" filter="url(#gv)" opacity={0.9}/>;
         })}
-
-        {/* Baseline dots (blue, 80% = 5 dots) — always active */}
-        {blOffsets.map((o, i) => {
-          const t = ((T + o) % 1);
-          if (t < 0.35 || t > 0.95) return null;
-          const nt = (t - 0.35) / 0.6;
-          const p = bezier(362, 245, 490, 170, 628, 138, nt);
-          return <circle key={`bl${i}`} cx={p.x} cy={p.y} r="6.5" fill="#3b82f6" filter="url(#glow-b)" opacity={isRollback ? 0.4 : 0.9}/>;
-        })}
-
-        {/* Candidate dots (amber/red — 2 dots = 20%) */}
-        {!isShadow && candOffsets.map((o, i) => {
-          const t = ((T + o) % 1);
-          if (t < 0.35 || t > 0.95) return null;
-          const nt = (t - 0.35) / 0.6;
-          const p = bezier(362, 275, 490, 350, 628, 382, nt);
-          return <circle key={`c${i}`} cx={p.x} cy={p.y} r="6.5" fill={isRollback ? "#ef4444" : "#f59e0b"} filter="url(#glow-b)" opacity={0.9}/>;
-        })}
-
-        {/* Shadow dots (violet, dashed line, smaller) */}
-        {isShadow && candOffsets.map((o, i) => {
-          const t = ((T + o + 0.15) % 1);
-          if (t < 0.35 || t > 0.95) return null;
-          const nt = (t - 0.35) / 0.6;
-          const p = bezier(362, 275, 490, 350, 628, 382, nt);
-          return <circle key={`sh${i}`} cx={p.x} cy={p.y} r="5.2" fill="#7c3aed" opacity={0.6}/>;
-        })}
-
-        {/* LLM Judge eval dots (violet, going down) */}
-        {evalOffsets.map((o, i) => {
-          const t = ((T + o + 0.2) % 1);
-          if (t < 0.5 || t > 0.95) return null;
-          const nt = (t - 0.5) / 0.45;
-          return <circle key={`e${i}`} cx={330} cy={lerp(302, 438, nt)} r="5.9" fill="#a78bfa" opacity={0.8}/>;
-        })}
-
-        {/* Rollback dots: Judge → back to baseline (red) */}
-        {isRollback && rollbackOff.map((o, i) => {
-          const t = ((T + o + 0.1) % 1);
-          if (t < 0.3 || t > 0.9) return null;
-          const nt = (t - 0.3) / 0.6;
-          const p = bezier(382, 463, 520, 463, 628, 278, nt);
-          return <circle key={`rb${i}`} cx={p.x} cy={p.y} r="6.5" fill="#ef4444" filter="url(#glow-b)" opacity={0.9}/>;
-        })}
-
-        {/* ─── Score numbers floating alongside paths ─────────────────── */}
-        <text x="530" y="155" textAnchor="middle" fontSize="15" fill="#1d4ed8" fontFamily="Inter,sans-serif" fontWeight="700" opacity="0.8">0.91</text>
-        <text x="530" y="365" textAnchor="middle" fontSize="15" fill={isRollback ? "#ef4444" : "#b45309"} fontFamily="Inter,sans-serif" fontWeight="700" opacity="0.8">
-          {candidateQ.toFixed(2)}
-        </text>
-
-        {/* Threshold line on candidate path */}
-        {isRollback && (
-          <>
-            <line x1="490" y1="320" x2="580" y2="340" stroke="#ef4444" strokeWidth="1.8" strokeDasharray="4 3" opacity="0.6"/>
-            <rect x="490" y="300" width="90" height="18" rx="5" fill="#fef2f2" stroke="#fca5a5" strokeWidth="1.2"/>
-            <text x="535" y="313" textAnchor="middle" fontSize="12" fill="#b91c1c" fontFamily="Inter,sans-serif" fontWeight="700">threshold: 0.70</text>
-          </>
-        )}
+        {/* Gateway → Baseline (blue, 5 dots = heavy traffic) */}
+        {dots([0, 0.18, 0.36, 0.54, 0.72], pathBL, 0, "#3b82f6", 6, "url(#gb)", R ? 0.3 : 0.9)}
+        {/* Gateway → Candidate (amber or red, 2 dots = light) */}
+        {!S && dots([0, 0.5], pathCand, 0, R ? "#f87171" : "#fbbf24", 5.5, "url(#gb)", 0.9)}
+        {/* Shadow dots (violet, lighter) */}
+        {S && dots([0, 0.55], pathCand, 0, "#a78bfa", 4.5, undefined, 0.65)}
+        {/* Gateway → Judge (violet, slow) */}
+        {dots([0, 0.6], pathJudge, 0, "#a78bfa", 5, "url(#gv)", 0.8)}
+        {/* Rollback path (red) */}
+        {R && dots([0, 0.45], pathRB, 0, "#ef4444", 6, "url(#gb)", 0.9)}
       </svg>
     </div>
   );
