@@ -20,6 +20,13 @@ jobs:
           git config user.email "actions@github.com"
           git config user.name "GitHub Actions"
 
+          # Verify token can access the target repo before trying subtree
+          echo "Checking repo access..."
+          curl -sf -H "Authorization: token ${TOKEN}" \
+            "https://api.github.com/repos/${TARGET_REPO}" \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); print('Repo found:', d['full_name'])" \
+            || { echo "ERROR: Cannot access ${TARGET_REPO} — check PERSONAL_REPO_TOKEN has repo scope for avinasha18 account"; exit 1; }
+
           # Split dashboard/ subtree into a separate branch
           git subtree split --prefix=dashboard -b dashboard-deploy
 
@@ -27,3 +34,5 @@ jobs:
           git push --force \
             "https://x-access-token:${TOKEN}@github.com/${TARGET_REPO}.git" \
             dashboard-deploy:main
+
+          echo "✅ Dashboard synced to https://github.com/${TARGET_REPO}"
