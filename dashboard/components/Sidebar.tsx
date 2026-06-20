@@ -3,14 +3,15 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { GitBranch, CreditCard, Activity } from "lucide-react";
+import { GitBranch, CreditCard, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSystemHealth } from "@/lib/hooks";
 import ProviderHealth from "@/components/ProviderHealth";
 
 const nav = [
-  { href: "/rollouts", label: "Rollouts", icon: GitBranch },
-  { href: "/billing",  label: "Billing",  icon: CreditCard },
+  { href: "/rollouts",  label: "Rollouts", icon: GitBranch },
+  { href: "/billing",   label: "Billing",  icon: CreditCard },
+  { href: "/settings",  label: "Settings", icon: Settings },
 ];
 
 export default function Sidebar() {

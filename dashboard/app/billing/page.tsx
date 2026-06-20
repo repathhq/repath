@@ -218,7 +218,7 @@ export default function BillingPage() {
                 LLM evaluations this month
               </span>
               <span className="text-white font-medium">
-                {usage.evals_used.toLocaleString()} / {usage.eval_quota_monthly.toLocaleString()}
+                {(usage.evals_used ?? 0).toLocaleString()} / {(usage.eval_quota_monthly ?? 0).toLocaleString()}
               </span>
             </div>
             <div className="w-full h-2 rounded-full bg-white/[0.06] overflow-hidden">
@@ -232,7 +232,7 @@ export default function BillingPage() {
               />
             </div>
             <p className="text-[12px] text-zinc-500">
-              {usage.evals_remaining.toLocaleString()} evaluations remaining this month
+              {(usage.evals_remaining ?? 0).toLocaleString()} evaluations remaining this month
             </p>
           </div>
         </div>

@@ -528,30 +528,28 @@ export default function LandingPage() {
       </section>
 
       {/* ══ TAB FEATURES ══════════════════════════════════════════════════════ */}
-      <section id="features" className="border-t border-gray-100 py-24 bg-[#f8f9fb]">
+      <section id="features" className="border-t border-gray-100 py-20 bg-white">
         <div className="max-w-7xl mx-auto px-6">
 
-          {/* Tab bar — centered, icon + label */}
-          <div className="flex justify-center mb-14">
-            <div className="flex rounded-2xl bg-white border border-gray-200 shadow-sm p-1.5 gap-1">
-              {featureTabs.map((t) => {
-                const active = activeTab === t.id;
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => setActiveTab(t.id)}
-                    className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[14px] font-medium transition-all duration-200 ${
-                      active
-                        ? "bg-violet-600 text-white shadow-sm"
-                        : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"
-                    }`}
-                  >
-                    <t.icon className="w-4 h-4" strokeWidth={1.8} />
-                    {t.label}
-                  </button>
-                );
-              })}
-            </div>
+          {/* Tab bar — Together.ai style: 3 columns, underline active */}
+          <div className="grid grid-cols-3 border-b-2 border-gray-100 mb-14">
+            {featureTabs.map((t) => {
+              const active = activeTab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setActiveTab(t.id)}
+                  className={`flex items-center justify-center gap-2.5 py-4 text-[15px] font-semibold transition-all duration-200 border-b-2 -mb-px ${
+                    active
+                      ? "border-violet-600 text-gray-900"
+                      : "border-transparent text-gray-400 hover:text-gray-700"
+                  }`}
+                >
+                  <t.icon className={`w-4 h-4 ${active ? "text-violet-600" : "text-gray-400"}`} strokeWidth={1.8} />
+                  {t.label}
+                </button>
+              );
+            })}
           </div>
 
           {/* Panel — full-width dashboard card */}
@@ -564,14 +562,15 @@ export default function LandingPage() {
 
             {/* ── CANARY DEPLOYMENTS ── */}
             {activeTab === "canary" && (
-              <div className="grid lg:grid-cols-[340px_1fr] gap-8 items-start">
+              <div className="grid lg:grid-cols-[380px_1fr] gap-12 items-start">
                 {/* Left: description */}
                 <div>
-                  <div className="w-12 h-12 rounded-2xl bg-violet-100 flex items-center justify-center mb-5">
-                    <GitBranch className="w-6 h-6 text-violet-600" strokeWidth={1.8} />
+                  <div className="flex items-center gap-2.5 mb-5">
+                    <GitBranch className="w-5 h-5 text-violet-600" strokeWidth={2} />
+                    <span className="text-[13px] font-semibold text-violet-600 uppercase tracking-wide">Canary Deployments</span>
                   </div>
-                  <h3 className="text-[28px] font-bold text-gray-900 leading-tight mb-3">
-                    Canary Deployments<br /><span className="text-violet-600">without the risk</span>
+                  <h3 className="text-[32px] font-bold text-gray-900 leading-[1.15] tracking-tight mb-4">
+                    Ship prompt changes<br />without the risk.
                   </h3>
                   <p className="text-[15px] text-gray-500 leading-relaxed mb-6">
                     Route a small % of traffic to a new prompt version. Quality gates control every step — traffic only advances when scores consistently hold.
@@ -582,8 +581,8 @@ export default function LandingPage() {
                     { label: "Instant abort", desc: "Any step can halt immediately — traffic snaps back." },
                   ].map(item => (
                     <div key={item.label} className="flex items-start gap-3 mb-4">
-                      <div className="w-5 h-5 rounded-full bg-violet-100 flex items-center justify-center shrink-0 mt-0.5">
-                        <Check className="w-3 h-3 text-violet-600" strokeWidth={2.5} />
+                      <div className="w-4 h-4 rounded-full bg-violet-600 flex items-center justify-center shrink-0 mt-1">
+                        <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
                       </div>
                       <div>
                         <div className="text-[14px] font-semibold text-gray-900">{item.label}</div>
@@ -677,13 +676,14 @@ export default function LandingPage() {
 
             {/* ── LLM-AS-JUDGE ── */}
             {activeTab === "judge" && (
-              <div className="grid lg:grid-cols-[340px_1fr] gap-8 items-start">
+              <div className="grid lg:grid-cols-[380px_1fr] gap-12 items-start">
                 <div>
-                  <div className="w-12 h-12 rounded-2xl bg-purple-100 flex items-center justify-center mb-5">
-                    <BarChart2 className="w-6 h-6 text-purple-600" strokeWidth={1.8} />
+                  <div className="flex items-center gap-2.5 mb-5">
+                    <BarChart2 className="w-5 h-5 text-violet-600" strokeWidth={2} />
+                    <span className="text-[13px] font-semibold text-violet-600 uppercase tracking-wide">LLM-as-Judge</span>
                   </div>
-                  <h3 className="text-[28px] font-bold text-gray-900 leading-tight mb-3">
-                    LLM-as-Judge<br /><span className="text-purple-600">Evaluation</span>
+                  <h3 className="text-[32px] font-bold text-gray-900 leading-[1.15] tracking-tight mb-4">
+                    Score every response.<br />Catch silent regressions.
                   </h3>
                   <p className="text-[15px] text-gray-500 leading-relaxed mb-6">
                     An independent LLM judge scores every response against your custom rubric — async, ~120ms, zero latency added to your users.
@@ -694,8 +694,8 @@ export default function LandingPage() {
                     { label: "Per-dimension scores", desc: "Accuracy, safety, format, tone — individually weighted." },
                   ].map(item => (
                     <div key={item.label} className="flex items-start gap-3 mb-4">
-                      <div className="w-5 h-5 rounded-full bg-purple-100 flex items-center justify-center shrink-0 mt-0.5">
-                        <Check className="w-3 h-3 text-purple-600" strokeWidth={2.5} />
+                      <div className="w-4 h-4 rounded-full bg-violet-600 flex items-center justify-center shrink-0 mt-1">
+                        <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
                       </div>
                       <div>
                         <div className="text-[14px] font-semibold text-gray-900">{item.label}</div>
@@ -762,13 +762,14 @@ export default function LandingPage() {
 
             {/* ── AUTO-ROLLBACK ── */}
             {activeTab === "rollback" && (
-              <div className="grid lg:grid-cols-[340px_1fr] gap-8 items-start">
+              <div className="grid lg:grid-cols-[380px_1fr] gap-12 items-start">
                 <div>
-                  <div className="w-12 h-12 rounded-2xl bg-red-100 flex items-center justify-center mb-5">
-                    <RefreshCw className="w-6 h-6 text-red-500" strokeWidth={1.8} />
+                  <div className="flex items-center gap-2.5 mb-5">
+                    <RefreshCw className="w-5 h-5 text-violet-600" strokeWidth={2} />
+                    <span className="text-[13px] font-semibold text-violet-600 uppercase tracking-wide">Auto-Rollback</span>
                   </div>
-                  <h3 className="text-[28px] font-bold text-gray-900 leading-tight mb-3">
-                    Auto-Rollback<br /><span className="text-red-500">in &lt;500ms</span>
+                  <h3 className="text-[32px] font-bold text-gray-900 leading-[1.15] tracking-tight mb-4">
+                    Automatically revert<br />in under 500ms.
                   </h3>
                   <p className="text-[15px] text-gray-500 leading-relaxed mb-6">
                     Repath continuously monitors quality in real-time and automatically rolls back traffic before your users are affected.
@@ -779,8 +780,8 @@ export default function LandingPage() {
                     { label: "Full audit trail", desc: "Every decision logged with scores and timestamps." },
                   ].map(item => (
                     <div key={item.label} className="flex items-start gap-3 mb-4">
-                      <div className="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center shrink-0 mt-0.5">
-                        <Check className="w-3 h-3 text-red-500" strokeWidth={2.5} />
+                      <div className="w-4 h-4 rounded-full bg-violet-600 flex items-center justify-center shrink-0 mt-1">
+                        <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
                       </div>
                       <div>
                         <div className="text-[14px] font-semibold text-gray-900">{item.label}</div>
