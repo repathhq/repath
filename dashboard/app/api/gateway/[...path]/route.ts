@@ -8,7 +8,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 
-const GATEWAY = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+const GATEWAY = process.env.REPATH_GATEWAY_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 const TOKEN   = process.env.REPATH_API_TOKEN ?? "";
 
 async function proxy(req: NextRequest, path: string) {

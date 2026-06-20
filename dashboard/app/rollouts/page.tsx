@@ -123,7 +123,7 @@ export default function RolloutsPage() {
         </div>
       )}
 
-      {data && data.rollouts.length > 0 && (
+      {data && (data.rollouts?.length ?? 0) > 0 && (
         <p className="mt-5 text-center text-[11px] text-gray-400">
           {data.total} rollout{data.total !== 1 ? "s" : ""} total
         </p>
