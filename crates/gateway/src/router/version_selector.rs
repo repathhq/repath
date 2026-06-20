@@ -168,7 +168,7 @@ mod tests {
         let rollout_id = Uuid::new_v4();
         for i in 0..1000 {
             let s = sticky_sample(&format!("session_{}", i), rollout_id);
-            assert!(s >= 0.0 && s < 1.0, "sticky_sample out of range: {}", s);
+            assert!((0.0..1.0).contains(&s), "sticky_sample out of range: {}", s);
         }
     }
 }

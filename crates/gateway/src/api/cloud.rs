@@ -440,7 +440,7 @@ fn plan_quota(plan: &str) -> i32 {
     }
 }
 
-fn build_gateway_url(tenant_id: &str) -> String {
+fn build_gateway_url(_tenant_id: &str) -> String {
     let domain =
         std::env::var("REPATH_CLOUD_DOMAIN").unwrap_or_else(|_| "localhost:8080".to_string());
     format!("https://{}/v1", domain)

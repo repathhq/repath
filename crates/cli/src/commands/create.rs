@@ -13,7 +13,7 @@
 
 use anyhow::{Context, Result};
 use colored::Colorize;
-use repath_common::types::{RolloutConfig, RolloutPolicy, RolloutStrategy, StrategyType};
+use repath_common::types::{RolloutConfig, RolloutPolicy, RolloutStrategy};
 use sqlx::PgPool;
 use std::path::PathBuf;
 use uuid::Uuid;

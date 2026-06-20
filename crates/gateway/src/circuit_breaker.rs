@@ -94,17 +94,15 @@ impl BreakerState {
                     opened_at: Instant::now(),
                 };
             }
-            CircuitState::Closed => {
-                if self.consecutive_failures >= FAILURE_THRESHOLD {
-                    warn!(
-                        tenant_id,
-                        failures = self.consecutive_failures,
-                        "Circuit breaker → Open (threshold reached)"
-                    );
-                    self.state = CircuitState::Open {
-                        opened_at: Instant::now(),
-                    };
-                }
+            CircuitState::Closed if self.consecutive_failures >= FAILURE_THRESHOLD => {
+                warn!(
+                    tenant_id,
+                    failures = self.consecutive_failures,
+                    "Circuit breaker → Open (threshold reached)"
+                );
+                self.state = CircuitState::Open {
+                    opened_at: Instant::now(),
+                };
             }
             _ => {}
         }

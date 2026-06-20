@@ -29,6 +29,7 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Json, Response},
 };
+#[allow(deprecated)]
 use ring::constant_time;
 use serde_json::json;
 use tracing::warn;
@@ -68,6 +69,7 @@ pub async fn require_api_token(req: Request<Body>, next: Next) -> Response {
         .unwrap_or("");
 
     // Constant-time comparison — prevents timing attacks
+    #[allow(deprecated)]
     let matches = constant_time::verify_slices_are_equal(
         provided_token.as_bytes(),
         expected_token.as_bytes(),
@@ -94,6 +96,7 @@ pub async fn require_api_token(req: Request<Body>, next: Next) -> Response {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
 

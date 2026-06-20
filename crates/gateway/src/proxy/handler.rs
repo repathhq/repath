@@ -218,7 +218,7 @@ async fn proxy_inner(
         upstream_headers,
         body_bytes.clone(),
         &fallback_chain,
-        &upstream_path,
+        upstream_path,
         request_id,
     )
     .await?;
@@ -448,7 +448,7 @@ async fn build_streaming_response(
 
     // Convert the receiver into a Body stream
     let body_stream = tokio_stream::wrappers::ReceiverStream::new(byte_rx)
-        .map(|r| r.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string())));
+        .map(|r| r.map_err(|e| std::io::Error::other(e.to_string())));
 
     let body = Body::from_stream(body_stream);
 

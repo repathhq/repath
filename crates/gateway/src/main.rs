@@ -126,7 +126,7 @@ async fn main() -> Result<()> {
     })?;
 
     info!(
-        url = %config.database.url.split('@').last().unwrap_or("***"),
+        url = %config.database.url.split('@').next_back().unwrap_or("***"),
         max_connections = config.database.max_connections,
         "Database pool created"
     );

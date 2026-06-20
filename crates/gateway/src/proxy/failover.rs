@@ -58,15 +58,18 @@ impl ProviderEndpoint {
     }
 }
 
-/// Well-known provider configurations.
+/// Well-known provider configurations (used by tests and future tenant config).
+#[allow(dead_code)]
 pub fn openai_endpoint() -> ProviderEndpoint {
     ProviderEndpoint::new("https://api.openai.com/v1", "openai")
 }
 
+#[allow(dead_code)]
 pub fn anthropic_endpoint() -> ProviderEndpoint {
     ProviderEndpoint::new("https://api.anthropic.com/v1", "anthropic")
 }
 
+#[allow(dead_code)]
 pub fn gemini_endpoint() -> ProviderEndpoint {
     ProviderEndpoint::new(
         "https://generativelanguage.googleapis.com/v1beta/openai",
@@ -209,6 +212,7 @@ pub struct ProviderHealthSnapshot {
 
 /// Result of a single provider attempt.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum AttemptOutcome {
     /// Provider responded (even with 4xx — those are not retried).
     Success(reqwest::Response),
@@ -265,6 +269,7 @@ pub fn log_failover(primary: &str, fallback: &str, reason: &str, request_id: uui
 }
 
 /// Log provider recovery.
+#[allow(dead_code)]
 pub fn log_recovery(provider: &str) {
     info!(provider = provider, "Provider health recovered");
 }
