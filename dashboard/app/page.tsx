@@ -329,85 +329,85 @@ function HeroTrafficFlow() {
         {/* ─── NODES ───────────────────────────────────────────────────── */}
 
         {/* YOUR APP */}
-        <rect x="10" y="224" width="130" height="72" rx="14" fill="white" stroke="#e5e7eb" strokeWidth="2.4" filter="url(#shadow)"/>
-        <text x="75" y="252" textAnchor="middle" fontSize="16" fill="#374151" fontFamily="Inter,sans-serif" fontWeight="700" letterSpacing="0.06em">YOUR</text>
-        <text x="75" y="270" textAnchor="middle" fontSize="16" fill="#374151" fontFamily="Inter,sans-serif" fontWeight="700" letterSpacing="0.06em">APP</text>
-        <text x="75" y="286" textAnchor="middle" fontSize="12" fill="#9ca3af" fontFamily="Inter,sans-serif">any LLM client</text>
+        <rect x="10" y="220" width="148" height="80" rx="14" fill="white" stroke="#e5e7eb" strokeWidth="2.4" filter="url(#shadow)"/>
+        <text x="84" y="252" textAnchor="middle" fontSize="16" fill="#374151" fontFamily="Inter,sans-serif" fontWeight="700" letterSpacing="0.06em">YOUR</text>
+        <text x="84" y="270" textAnchor="middle" fontSize="16" fill="#374151" fontFamily="Inter,sans-serif" fontWeight="700" letterSpacing="0.06em">APP</text>
+        <text x="84" y="286" textAnchor="middle" fontSize="12" fill="#9ca3af" fontFamily="Inter,sans-serif">any LLM client</text>
 
         {/* REPATH GATEWAY — big bold center */}
-        <rect x="282" y="212" width="96" height="96" rx="20" fill="rgba(124,58,237,0.06)" stroke="rgba(124,58,237,0.25)" strokeWidth="3.0" filter="url(#shadow)"/>
-        <rect x="286" y="216" width="88" height="88" rx="17" fill="white" stroke="rgba(124,58,237,0.12)" strokeWidth="1.8"/>
+        <rect x="272" y="206" width="116" height="108" rx="20" fill="rgba(124,58,237,0.06)" stroke="rgba(124,58,237,0.25)" strokeWidth="3.0" filter="url(#shadow)"/>
+        <rect x="276" y="210" width="108" height="100" rx="17" fill="white" stroke="rgba(124,58,237,0.12)" strokeWidth="1.8"/>
         {/* Pulsing ring */}
         <circle cx="330" cy="260" r={52 + Math.sin(tick * 0.08) * 4} stroke="rgba(124,58,237,0.07)" strokeWidth="1.8" fill="none"/>
         <text x="330" y="249" textAnchor="middle" fontSize="14" fill="#6d28d9" fontFamily="Inter,sans-serif" fontWeight="800" letterSpacing="0.07em">REPATH</text>
         <text x="330" y="264" textAnchor="middle" fontSize="14" fill="#6d28d9" fontFamily="Inter,sans-serif" fontWeight="800" letterSpacing="0.07em">GATEWAY</text>
-        <text x="330" y="279" textAnchor="middle" fontSize="11" fill="#a78bfa" fontFamily="Inter,sans-serif" fontWeight="500">routes · scores · protects</text>
+        <text x="330" y="279" textAnchor="middle" fontSize="11" fill="#a78bfa" fontFamily="Inter,sans-serif" fontWeight="500">routes · scores</text>
         <text x="330" y="293" textAnchor="middle" fontSize="11" fill="#c4b5fd" fontFamily="Inter,sans-serif">&lt;2ms overhead</text>
 
         {/* BASELINE node */}
-        <rect x="628" y="96" width="158" height="84" rx="14" fill="white" stroke="#bfdbfe" strokeWidth="2.4" filter="url(#shadow)"/>
-        <rect x="628" y="96" width="158" height="84" rx="14" fill="rgba(219,234,254,0.3)" stroke="none"/>
-        <text x="707" y="122" textAnchor="middle" fontSize="15" fill="#1d4ed8" fontFamily="Inter,sans-serif" fontWeight="800" letterSpacing="0.06em">BASELINE</text>
-        <text x="707" y="139" textAnchor="middle" fontSize="14" fill="#3b82f6" fontFamily="Inter,sans-serif" fontWeight="600">80% of traffic</text>
-        <text x="707" y="154" textAnchor="middle" fontSize="12" fill="#93c5fd" fontFamily="Inter,sans-serif">current prompt · stable</text>
+        <rect x="618" y="86" width="188" height="106" rx="14" fill="white" stroke="#bfdbfe" strokeWidth="2.4" filter="url(#shadow)"/>
+        <rect x="618" y="86" width="188" height="106" rx="14" fill="rgba(219,234,254,0.3)" stroke="none"/>
+        <text x="712" y="116" textAnchor="middle" fontSize="15" fill="#1d4ed8" fontFamily="Inter,sans-serif" fontWeight="800" letterSpacing="0.06em">BASELINE</text>
+        <text x="712" y="133" textAnchor="middle" fontSize="14" fill="#3b82f6" fontFamily="Inter,sans-serif" fontWeight="600">80% of traffic</text>
+        <text x="712" y="148" textAnchor="middle" fontSize="12" fill="#93c5fd" fontFamily="Inter,sans-serif">current prompt · stable</text>
         {/* Quality badge */}
-        <rect x="668" y="162" width="78" height="20" rx="6" fill="#eff6ff" stroke="#bfdbfe" strokeWidth="1.2"/>
-        <text x="707" y="176" textAnchor="middle" fontSize="12" fill="#1d4ed8" fontFamily="Inter,sans-serif" fontWeight="700">score: {baselineQ.toFixed(2)} ✓</text>
+        <rect x="648" y="160" width="128" height="24" rx="6" fill="#eff6ff" stroke="#bfdbfe" strokeWidth="1.2"/>
+        <text x="712" y="176" textAnchor="middle" fontSize="12" fill="#1d4ed8" fontFamily="Inter,sans-serif" fontWeight="700">score: {baselineQ.toFixed(2)} ✓</text>
 
         {/* CANDIDATE node */}
-        <rect x="628" y="348" width="158" height="84" rx="14" fill="white"
+        <rect x="618" y="338" width="188" height="106" rx="14" fill="white"
           stroke={isRollback ? "#fca5a5" : isShadow ? "#ddd6fe" : "#fde68a"} strokeWidth="2.4" filter="url(#shadow)"/>
-        <rect x="628" y="348" width="158" height="84" rx="14"
+        <rect x="618" y="338" width="188" height="106" rx="14"
           fill={isRollback ? "rgba(254,226,226,0.4)" : isShadow ? "rgba(237,233,254,0.3)" : "rgba(254,243,199,0.3)"} stroke="none"/>
-        <text x="707" y="374" textAnchor="middle" fontSize="15"
+        <text x="712" y="368" textAnchor="middle" fontSize="15"
           fill={isRollback ? "#b91c1c" : isShadow ? "#6d28d9" : "#b45309"} fontFamily="Inter,sans-serif" fontWeight="800" letterSpacing="0.06em">
           {isShadow ? "SHADOW" : "CANDIDATE"}
         </text>
-        <text x="707" y="391" textAnchor="middle" fontSize="14"
+        <text x="712" y="384" textAnchor="middle" fontSize="14"
           fill={isRollback ? "#ef4444" : isShadow ? "#7c3aed" : "#d97706"} fontFamily="Inter,sans-serif" fontWeight="600">
           {isShadow ? "parallel · no user impact" : "20% of traffic"}
         </text>
-        <text x="707" y="406" textAnchor="middle" fontSize="12"
+        <text x="712" y="398" textAnchor="middle" fontSize="12"
           fill={isRollback ? "#fca5a5" : isShadow ? "#a78bfa" : "#fbbf24"} fontFamily="Inter,sans-serif">
           {isShadow ? "shadow test · comparing" : "new prompt · testing"}
         </text>
         {/* Quality badge */}
-        <rect x="655" y="414" width="104" height="20" rx="6"
+        <rect x="638" y="410" width="148" height="24" rx="6"
           fill={isRollback ? "#fef2f2" : isShadow ? "#f5f3ff" : "#fffbeb"}
           stroke={isRollback ? "#fca5a5" : isShadow ? "#ddd6fe" : "#fde68a"} strokeWidth="1.2"/>
-        <text x="707" y="428" textAnchor="middle" fontSize="12"
+        <text x="712" y="426" textAnchor="middle" fontSize="12"
           fill={qColor} fontFamily="Inter,sans-serif" fontWeight="700">
           score: {candidateQ.toFixed(2)} {isRollback ? "⚠ ROLLING BACK" : isShadow ? "● COMPARING" : "→ ADVANCING"}
         </text>
 
         {/* LLM JUDGE node */}
-        <rect x="248" y="438" width="164" height="68" rx="14" fill="white" stroke="#ddd6fe" strokeWidth="2.4" filter="url(#shadow)"/>
-        <rect x="248" y="438" width="164" height="68" rx="14" fill="rgba(237,233,254,0.25)" stroke="none"/>
+        <rect x="238" y="432" width="184" height="80" rx="14" fill="white" stroke="#ddd6fe" strokeWidth="2.4" filter="url(#shadow)"/>
+        <rect x="238" y="432" width="184" height="80" rx="14" fill="rgba(237,233,254,0.25)" stroke="none"/>
         <text x="330" y="462" textAnchor="middle" fontSize="15" fill="#6d28d9" fontFamily="Inter,sans-serif" fontWeight="800" letterSpacing="0.05em">LLM JUDGE</text>
-        <text x="330" y="479" textAnchor="middle" fontSize="13" fill="#7c3aed" fontFamily="Inter,sans-serif" fontWeight="600">scores every response</text>
-        <text x="330" y="494" textAnchor="middle" fontSize="12" fill="#a78bfa" fontFamily="Inter,sans-serif">async · ~120ms · zero latency</text>
+        <text x="330" y="476" textAnchor="middle" fontSize="13" fill="#7c3aed" fontFamily="Inter,sans-serif" fontWeight="600">scores every response</text>
+        <text x="330" y="494" textAnchor="middle" fontSize="12" fill="#a78bfa" fontFamily="Inter,sans-serif">async · ~120ms · 0ms user impact</text>
 
         {/* AUTO-ROLLBACK banner — only when rollback phase */}
         {isRollback && (
           <>
-            <rect x="628" y="228" width="158" height="56" rx="12" fill="#fef2f2" stroke="#f87171" strokeWidth="2.4"/>
-            <text x="707" y="251" textAnchor="middle" fontSize="14" fill="#b91c1c" fontFamily="Inter,sans-serif" fontWeight="800">AUTO-ROLLBACK</text>
-            <text x="707" y="266" textAnchor="middle" fontSize="12" fill="#ef4444" fontFamily="Inter,sans-serif" fontWeight="600">triggered in 412ms</text>
-            <text x="707" y="279" textAnchor="middle" fontSize="12" fill="#fca5a5" fontFamily="Inter,sans-serif">score below threshold: 0.70</text>
+            <rect x="618" y="222" width="188" height="64" rx="12" fill="#fef2f2" stroke="#f87171" strokeWidth="2.4"/>
+            <text x="712" y="249" textAnchor="middle" fontSize="14" fill="#b91c1c" fontFamily="Inter,sans-serif" fontWeight="800">AUTO-ROLLBACK</text>
+            <text x="712" y="264" textAnchor="middle" fontSize="12" fill="#ef4444" fontFamily="Inter,sans-serif" fontWeight="600">triggered in 412ms</text>
+            <text x="712" y="279" textAnchor="middle" fontSize="12" fill="#fca5a5" fontFamily="Inter,sans-serif">score below threshold: 0.70</text>
           </>
         )}
 
         {/* SHADOW MODE label */}
         {isShadow && (
-          <rect x="628" y="228" width="158" height="56" rx="12" fill="#f5f3ff" stroke="#c4b5fd" strokeWidth="2.4">
+          <rect x="618" y="222" width="188" height="64" rx="12" fill="#f5f3ff" stroke="#c4b5fd" strokeWidth="2.4">
             <animate attributeName="opacity" values="1;0.6;1" dur="2s" repeatCount="indefinite"/>
           </rect>
         )}
         {isShadow && (
           <>
-            <text x="707" y="251" textAnchor="middle" fontSize="14" fill="#6d28d9" fontFamily="Inter,sans-serif" fontWeight="800">SHADOW MODE</text>
-            <text x="707" y="266" textAnchor="middle" fontSize="12" fill="#7c3aed" fontFamily="Inter,sans-serif" fontWeight="600">zero user impact</text>
-            <text x="707" y="279" textAnchor="middle" fontSize="12" fill="#a78bfa" fontFamily="Inter,sans-serif">evaluating before expose</text>
+            <text x="712" y="249" textAnchor="middle" fontSize="14" fill="#6d28d9" fontFamily="Inter,sans-serif" fontWeight="800">SHADOW MODE</text>
+            <text x="712" y="264" textAnchor="middle" fontSize="12" fill="#7c3aed" fontFamily="Inter,sans-serif" fontWeight="600">zero user impact</text>
+            <text x="712" y="279" textAnchor="middle" fontSize="12" fill="#a78bfa" fontFamily="Inter,sans-serif">evaluating quietly</text>
           </>
         )}
 
@@ -1055,16 +1055,41 @@ export default function LandingPage() {
               </Link>
             </div>
             {[
-              { h: "PRODUCT",    links: ["Canary Deployments", "LLM-as-Judge", "Auto-Rollback", "Provider Failover", "Dashboard"] },
-              { h: "DEVELOPERS", links: ["Docs", "API Reference", "GitHub", "Status"] },
-              { h: "PRICING",    links: ["Pricing overview", "Starter", "Pro", "Enterprise"] },
-              { h: "COMPANY",    links: ["About", "Blog", "Careers", "Contact", "Support"] },
+              { h: "PRODUCT", links: [
+                { label: "Canary Deployments", href: "/#features" },
+                { label: "LLM-as-Judge", href: "/#features" },
+                { label: "Auto-Rollback", href: "/#features" },
+                { label: "Provider Failover", href: "/#features" },
+                { label: "Dashboard", href: "/rollouts" },
+              ]},
+              { h: "DEVELOPERS", links: [
+                { label: "Docs", href: "/docs" },
+                { label: "API Reference", href: "/docs#api" },
+                { label: "GitHub", href: "https://github.com/repathhq/repath" },
+                { label: "Status", href: "/status" },
+              ]},
+              { h: "PRICING", links: [
+                { label: "Pricing overview", href: "/pricing" },
+                { label: "Starter — $49/mo", href: "/signup?plan=starter" },
+                { label: "Pro — $149/mo", href: "/signup?plan=pro" },
+                { label: "Enterprise", href: "mailto:hello@tryrepath.com?subject=Enterprise" },
+              ]},
+              { h: "COMPANY", links: [
+                { label: "About", href: "/about" },
+                { label: "Careers", href: "/careers" },
+                { label: "Contact", href: "/contact" },
+                { label: "Privacy Policy", href: "/privacy" },
+                { label: "Terms of Service", href: "/terms" },
+              ]},
             ].map((col) => (
               <div key={col.h} className="flex flex-col gap-3">
                 <h4 className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">{col.h}</h4>
                 <ul className="flex flex-col gap-2">
                   {col.links.map((l) => (
-                    <li key={l}><a href="#" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">{l}</a></li>
+                    <li key={l.label}>
+                      <a href={l.href} target={l.href.startsWith("http") ? "_blank" : undefined} rel="noopener noreferrer"
+                        className="text-sm text-gray-600 hover:text-gray-900 transition-colors">{l.label}</a>
+                    </li>
                   ))}
                 </ul>
               </div>
@@ -1092,8 +1117,8 @@ export default function LandingPage() {
           <div className="max-w-7xl mx-auto px-6 py-5 flex flex-col sm:flex-row items-center justify-between gap-3">
             <p className="text-xs text-gray-400">© 2026 Repath</p>
             <div className="flex gap-5 text-xs text-gray-400">
-              {["Privacy Policy", "Terms of service", "Contact"].map((l) => (
-                <a key={l} href="#" className="hover:text-gray-700 transition-colors">{l}</a>
+              {[["Privacy Policy","/privacy"],["Terms of Service","/terms"],["Contact","/contact"],["Status","/status"]].map(([l,h]) => (
+                <a key={l} href={h} className="hover:text-gray-700 transition-colors">{l}</a>
               ))}
             </div>
           </div>
