@@ -3,7 +3,7 @@ context/
 
 # Rust
 /target
-Cargo.lock
+# Cargo.lock is intentionally committed for binary applications (reproducible builds)
 **/*.rs.bk
 
 # Environment
