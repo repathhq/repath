@@ -300,7 +300,7 @@ function HeroTrafficFlow() {
   const qColor     = isRollback ? "#ef4444" : candidateQ >= 0.85 ? "#15803d" : "#b45309";
 
   return (
-    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[52%] min-w-[480px] h-[520px] pointer-events-none select-none" aria-hidden>
+    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[62%] min-w-[600px] h-[640px] pointer-events-none select-none" aria-hidden>
       <svg viewBox="0 0 860 520" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full drop-shadow-sm">
         <defs>
           <filter id="glow-v"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
@@ -310,116 +310,116 @@ function HeroTrafficFlow() {
 
         {/* ─── Connection lines ─────────────────────────────────────────── */}
         {/* App → Gateway */}
-        <line x1="140" y1="260" x2="298" y2="260" stroke="#d1d5db" strokeWidth="2.5" strokeDasharray="8 5"/>
+        <line x1="140" y1="260" x2="298" y2="260" stroke="#d1d5db" strokeWidth="3.0" strokeDasharray="8 5"/>
 
         {/* Gateway → Baseline */}
-        <path d="M 362 245 Q 490 170 628 138" stroke={isRollback ? "#fca5a5" : "#bfdbfe"} strokeWidth="2.5" strokeDasharray="8 5" fill="none"/>
+        <path d="M 362 245 Q 490 170 628 138" stroke={isRollback ? "#fca5a5" : "#bfdbfe"} strokeWidth="3.0" strokeDasharray="8 5" fill="none"/>
 
         {/* Gateway → Candidate */}
         <path d="M 362 275 Q 490 350 628 382" stroke={isRollback ? "#fee2e2" : isShadow ? "#ddd6fe" : "#fde68a"} strokeWidth={isShadow ? "1.5" : "2.5"} strokeDasharray={isShadow ? "5 5" : "8 5"} fill="none" opacity={isShadow ? "0.7" : "1"}/>
 
         {/* Gateway → LLM Judge (down) */}
-        <line x1="330" y1="302" x2="330" y2="438" stroke="#ddd6fe" strokeWidth="2" strokeDasharray="6 4"/>
+        <line x1="330" y1="302" x2="330" y2="438" stroke="#ddd6fe" strokeWidth="2.4" strokeDasharray="6 4"/>
 
         {/* LLM Judge → Rollback arrow (only on rollback phase) */}
         {isRollback && (
-          <path d="M 382 463 Q 520 463 628 278" stroke="#ef4444" strokeWidth="2.5" strokeDasharray="7 4" fill="none" opacity="0.7"/>
+          <path d="M 382 463 Q 520 463 628 278" stroke="#ef4444" strokeWidth="3.0" strokeDasharray="7 4" fill="none" opacity="0.7"/>
         )}
 
         {/* ─── NODES ───────────────────────────────────────────────────── */}
 
         {/* YOUR APP */}
-        <rect x="10" y="224" width="130" height="72" rx="14" fill="white" stroke="#e5e7eb" strokeWidth="2" filter="url(#shadow)"/>
-        <text x="75" y="252" textAnchor="middle" fontSize="11.5" fill="#374151" fontFamily="Inter,sans-serif" fontWeight="700" letterSpacing="0.06em">YOUR</text>
-        <text x="75" y="270" textAnchor="middle" fontSize="11.5" fill="#374151" fontFamily="Inter,sans-serif" fontWeight="700" letterSpacing="0.06em">APP</text>
-        <text x="75" y="286" textAnchor="middle" fontSize="9" fill="#9ca3af" fontFamily="Inter,sans-serif">any LLM client</text>
+        <rect x="10" y="224" width="130" height="72" rx="14" fill="white" stroke="#e5e7eb" strokeWidth="2.4" filter="url(#shadow)"/>
+        <text x="75" y="252" textAnchor="middle" fontSize="16" fill="#374151" fontFamily="Inter,sans-serif" fontWeight="700" letterSpacing="0.06em">YOUR</text>
+        <text x="75" y="270" textAnchor="middle" fontSize="16" fill="#374151" fontFamily="Inter,sans-serif" fontWeight="700" letterSpacing="0.06em">APP</text>
+        <text x="75" y="286" textAnchor="middle" fontSize="12" fill="#9ca3af" fontFamily="Inter,sans-serif">any LLM client</text>
 
         {/* REPATH GATEWAY — big bold center */}
-        <rect x="282" y="212" width="96" height="96" rx="20" fill="rgba(124,58,237,0.06)" stroke="rgba(124,58,237,0.25)" strokeWidth="2.5" filter="url(#shadow)"/>
-        <rect x="286" y="216" width="88" height="88" rx="17" fill="white" stroke="rgba(124,58,237,0.12)" strokeWidth="1.5"/>
+        <rect x="282" y="212" width="96" height="96" rx="20" fill="rgba(124,58,237,0.06)" stroke="rgba(124,58,237,0.25)" strokeWidth="3.0" filter="url(#shadow)"/>
+        <rect x="286" y="216" width="88" height="88" rx="17" fill="white" stroke="rgba(124,58,237,0.12)" strokeWidth="1.8"/>
         {/* Pulsing ring */}
-        <circle cx="330" cy="260" r={52 + Math.sin(tick * 0.08) * 4} stroke="rgba(124,58,237,0.07)" strokeWidth="1.5" fill="none"/>
-        <text x="330" y="249" textAnchor="middle" fontSize="10" fill="#6d28d9" fontFamily="Inter,sans-serif" fontWeight="800" letterSpacing="0.07em">REPATH</text>
-        <text x="330" y="264" textAnchor="middle" fontSize="10" fill="#6d28d9" fontFamily="Inter,sans-serif" fontWeight="800" letterSpacing="0.07em">GATEWAY</text>
-        <text x="330" y="279" textAnchor="middle" fontSize="8" fill="#a78bfa" fontFamily="Inter,sans-serif" fontWeight="500">routes · scores · protects</text>
-        <text x="330" y="293" textAnchor="middle" fontSize="8" fill="#c4b5fd" fontFamily="Inter,sans-serif">&lt;2ms overhead</text>
+        <circle cx="330" cy="260" r={52 + Math.sin(tick * 0.08) * 4} stroke="rgba(124,58,237,0.07)" strokeWidth="1.8" fill="none"/>
+        <text x="330" y="249" textAnchor="middle" fontSize="14" fill="#6d28d9" fontFamily="Inter,sans-serif" fontWeight="800" letterSpacing="0.07em">REPATH</text>
+        <text x="330" y="264" textAnchor="middle" fontSize="14" fill="#6d28d9" fontFamily="Inter,sans-serif" fontWeight="800" letterSpacing="0.07em">GATEWAY</text>
+        <text x="330" y="279" textAnchor="middle" fontSize="11" fill="#a78bfa" fontFamily="Inter,sans-serif" fontWeight="500">routes · scores · protects</text>
+        <text x="330" y="293" textAnchor="middle" fontSize="11" fill="#c4b5fd" fontFamily="Inter,sans-serif">&lt;2ms overhead</text>
 
         {/* BASELINE node */}
-        <rect x="628" y="96" width="158" height="84" rx="14" fill="white" stroke="#bfdbfe" strokeWidth="2" filter="url(#shadow)"/>
+        <rect x="628" y="96" width="158" height="84" rx="14" fill="white" stroke="#bfdbfe" strokeWidth="2.4" filter="url(#shadow)"/>
         <rect x="628" y="96" width="158" height="84" rx="14" fill="rgba(219,234,254,0.3)" stroke="none"/>
-        <text x="707" y="122" textAnchor="middle" fontSize="11" fill="#1d4ed8" fontFamily="Inter,sans-serif" fontWeight="800" letterSpacing="0.06em">BASELINE</text>
-        <text x="707" y="139" textAnchor="middle" fontSize="10" fill="#3b82f6" fontFamily="Inter,sans-serif" fontWeight="600">80% of traffic</text>
-        <text x="707" y="154" textAnchor="middle" fontSize="9" fill="#93c5fd" fontFamily="Inter,sans-serif">current prompt · stable</text>
+        <text x="707" y="122" textAnchor="middle" fontSize="15" fill="#1d4ed8" fontFamily="Inter,sans-serif" fontWeight="800" letterSpacing="0.06em">BASELINE</text>
+        <text x="707" y="139" textAnchor="middle" fontSize="14" fill="#3b82f6" fontFamily="Inter,sans-serif" fontWeight="600">80% of traffic</text>
+        <text x="707" y="154" textAnchor="middle" fontSize="12" fill="#93c5fd" fontFamily="Inter,sans-serif">current prompt · stable</text>
         {/* Quality badge */}
-        <rect x="668" y="162" width="78" height="20" rx="6" fill="#eff6ff" stroke="#bfdbfe" strokeWidth="1"/>
-        <text x="707" y="176" textAnchor="middle" fontSize="9" fill="#1d4ed8" fontFamily="Inter,sans-serif" fontWeight="700">score: {baselineQ.toFixed(2)} ✓</text>
+        <rect x="668" y="162" width="78" height="20" rx="6" fill="#eff6ff" stroke="#bfdbfe" strokeWidth="1.2"/>
+        <text x="707" y="176" textAnchor="middle" fontSize="12" fill="#1d4ed8" fontFamily="Inter,sans-serif" fontWeight="700">score: {baselineQ.toFixed(2)} ✓</text>
 
         {/* CANDIDATE node */}
         <rect x="628" y="348" width="158" height="84" rx="14" fill="white"
-          stroke={isRollback ? "#fca5a5" : isShadow ? "#ddd6fe" : "#fde68a"} strokeWidth="2" filter="url(#shadow)"/>
+          stroke={isRollback ? "#fca5a5" : isShadow ? "#ddd6fe" : "#fde68a"} strokeWidth="2.4" filter="url(#shadow)"/>
         <rect x="628" y="348" width="158" height="84" rx="14"
           fill={isRollback ? "rgba(254,226,226,0.4)" : isShadow ? "rgba(237,233,254,0.3)" : "rgba(254,243,199,0.3)"} stroke="none"/>
-        <text x="707" y="374" textAnchor="middle" fontSize="11"
+        <text x="707" y="374" textAnchor="middle" fontSize="15"
           fill={isRollback ? "#b91c1c" : isShadow ? "#6d28d9" : "#b45309"} fontFamily="Inter,sans-serif" fontWeight="800" letterSpacing="0.06em">
           {isShadow ? "SHADOW" : "CANDIDATE"}
         </text>
-        <text x="707" y="391" textAnchor="middle" fontSize="10"
+        <text x="707" y="391" textAnchor="middle" fontSize="14"
           fill={isRollback ? "#ef4444" : isShadow ? "#7c3aed" : "#d97706"} fontFamily="Inter,sans-serif" fontWeight="600">
           {isShadow ? "parallel · no user impact" : "20% of traffic"}
         </text>
-        <text x="707" y="406" textAnchor="middle" fontSize="9"
+        <text x="707" y="406" textAnchor="middle" fontSize="12"
           fill={isRollback ? "#fca5a5" : isShadow ? "#a78bfa" : "#fbbf24"} fontFamily="Inter,sans-serif">
           {isShadow ? "shadow test · comparing" : "new prompt · testing"}
         </text>
         {/* Quality badge */}
         <rect x="655" y="414" width="104" height="20" rx="6"
           fill={isRollback ? "#fef2f2" : isShadow ? "#f5f3ff" : "#fffbeb"}
-          stroke={isRollback ? "#fca5a5" : isShadow ? "#ddd6fe" : "#fde68a"} strokeWidth="1"/>
-        <text x="707" y="428" textAnchor="middle" fontSize="9"
+          stroke={isRollback ? "#fca5a5" : isShadow ? "#ddd6fe" : "#fde68a"} strokeWidth="1.2"/>
+        <text x="707" y="428" textAnchor="middle" fontSize="12"
           fill={qColor} fontFamily="Inter,sans-serif" fontWeight="700">
           score: {candidateQ.toFixed(2)} {isRollback ? "⚠ ROLLING BACK" : isShadow ? "● COMPARING" : "→ ADVANCING"}
         </text>
 
         {/* LLM JUDGE node */}
-        <rect x="248" y="438" width="164" height="68" rx="14" fill="white" stroke="#ddd6fe" strokeWidth="2" filter="url(#shadow)"/>
+        <rect x="248" y="438" width="164" height="68" rx="14" fill="white" stroke="#ddd6fe" strokeWidth="2.4" filter="url(#shadow)"/>
         <rect x="248" y="438" width="164" height="68" rx="14" fill="rgba(237,233,254,0.25)" stroke="none"/>
-        <text x="330" y="462" textAnchor="middle" fontSize="11" fill="#6d28d9" fontFamily="Inter,sans-serif" fontWeight="800" letterSpacing="0.05em">LLM JUDGE</text>
-        <text x="330" y="479" textAnchor="middle" fontSize="9.5" fill="#7c3aed" fontFamily="Inter,sans-serif" fontWeight="600">scores every response</text>
-        <text x="330" y="494" textAnchor="middle" fontSize="9" fill="#a78bfa" fontFamily="Inter,sans-serif">async · ~120ms · zero latency</text>
+        <text x="330" y="462" textAnchor="middle" fontSize="15" fill="#6d28d9" fontFamily="Inter,sans-serif" fontWeight="800" letterSpacing="0.05em">LLM JUDGE</text>
+        <text x="330" y="479" textAnchor="middle" fontSize="13" fill="#7c3aed" fontFamily="Inter,sans-serif" fontWeight="600">scores every response</text>
+        <text x="330" y="494" textAnchor="middle" fontSize="12" fill="#a78bfa" fontFamily="Inter,sans-serif">async · ~120ms · zero latency</text>
 
         {/* AUTO-ROLLBACK banner — only when rollback phase */}
         {isRollback && (
           <>
-            <rect x="628" y="228" width="158" height="56" rx="12" fill="#fef2f2" stroke="#f87171" strokeWidth="2"/>
-            <text x="707" y="251" textAnchor="middle" fontSize="10" fill="#b91c1c" fontFamily="Inter,sans-serif" fontWeight="800">AUTO-ROLLBACK</text>
-            <text x="707" y="266" textAnchor="middle" fontSize="9" fill="#ef4444" fontFamily="Inter,sans-serif" fontWeight="600">triggered in 412ms</text>
-            <text x="707" y="279" textAnchor="middle" fontSize="8.5" fill="#fca5a5" fontFamily="Inter,sans-serif">score below threshold: 0.70</text>
+            <rect x="628" y="228" width="158" height="56" rx="12" fill="#fef2f2" stroke="#f87171" strokeWidth="2.4"/>
+            <text x="707" y="251" textAnchor="middle" fontSize="14" fill="#b91c1c" fontFamily="Inter,sans-serif" fontWeight="800">AUTO-ROLLBACK</text>
+            <text x="707" y="266" textAnchor="middle" fontSize="12" fill="#ef4444" fontFamily="Inter,sans-serif" fontWeight="600">triggered in 412ms</text>
+            <text x="707" y="279" textAnchor="middle" fontSize="12" fill="#fca5a5" fontFamily="Inter,sans-serif">score below threshold: 0.70</text>
           </>
         )}
 
         {/* SHADOW MODE label */}
         {isShadow && (
-          <rect x="628" y="228" width="158" height="56" rx="12" fill="#f5f3ff" stroke="#c4b5fd" strokeWidth="2">
+          <rect x="628" y="228" width="158" height="56" rx="12" fill="#f5f3ff" stroke="#c4b5fd" strokeWidth="2.4">
             <animate attributeName="opacity" values="1;0.6;1" dur="2s" repeatCount="indefinite"/>
           </rect>
         )}
         {isShadow && (
           <>
-            <text x="707" y="251" textAnchor="middle" fontSize="10" fill="#6d28d9" fontFamily="Inter,sans-serif" fontWeight="800">SHADOW MODE</text>
-            <text x="707" y="266" textAnchor="middle" fontSize="9" fill="#7c3aed" fontFamily="Inter,sans-serif" fontWeight="600">zero user impact</text>
-            <text x="707" y="279" textAnchor="middle" fontSize="8.5" fill="#a78bfa" fontFamily="Inter,sans-serif">evaluating before expose</text>
+            <text x="707" y="251" textAnchor="middle" fontSize="14" fill="#6d28d9" fontFamily="Inter,sans-serif" fontWeight="800">SHADOW MODE</text>
+            <text x="707" y="266" textAnchor="middle" fontSize="12" fill="#7c3aed" fontFamily="Inter,sans-serif" fontWeight="600">zero user impact</text>
+            <text x="707" y="279" textAnchor="middle" fontSize="12" fill="#a78bfa" fontFamily="Inter,sans-serif">evaluating before expose</text>
           </>
         )}
 
         {/* ─── Phase label (top-left of animation) ───────────────────── */}
         <rect x="10" y="10" width={phase === "routing" ? 148 : phase === "rollback" ? 160 : 148} height="28" rx="8"
           fill={isRollback ? "#fef2f2" : isShadow ? "#f5f3ff" : "#f0fdf4"}
-          stroke={isRollback ? "#fca5a5" : isShadow ? "#ddd6fe" : "#86efac"} strokeWidth="1.5"/>
-        <circle cx="26" cy="24" r="5"
+          stroke={isRollback ? "#fca5a5" : isShadow ? "#ddd6fe" : "#86efac"} strokeWidth="1.8"/>
+        <circle cx="26" cy="24" r="6.5"
           fill={isRollback ? "#ef4444" : isShadow ? "#7c3aed" : "#16a34a"}>
           <animate attributeName="r" values="5;6.5;5" dur="1.4s" repeatCount="indefinite"/>
         </circle>
-        <text x="38" y="29" fontSize="10" fill={isRollback ? "#b91c1c" : isShadow ? "#6d28d9" : "#15803d"} fontFamily="Inter,sans-serif" fontWeight="700">
+        <text x="38" y="29" fontSize="14" fill={isRollback ? "#b91c1c" : isShadow ? "#6d28d9" : "#15803d"} fontFamily="Inter,sans-serif" fontWeight="700">
           {isRollback ? "● ROLLBACK TRIGGERED" : isShadow ? "● SHADOW TESTING" : "● CANARY ROUTING LIVE"}
         </text>
 
@@ -431,7 +431,7 @@ function HeroTrafficFlow() {
           if (t > 0.45) return null;
           const nt = t / 0.45;
           return (
-            <circle key={`m${i}`} cx={lerp(140, 298, nt)} cy={260} r="5.5" fill="#7c3aed" filter="url(#glow-v)" opacity={0.9}/>
+            <circle key={`m${i}`} cx={lerp(140, 298, nt)} cy={260} r="7.2" fill="#7c3aed" filter="url(#glow-v)" opacity={0.9}/>
           );
         })}
 
@@ -441,7 +441,7 @@ function HeroTrafficFlow() {
           if (t < 0.35 || t > 0.95) return null;
           const nt = (t - 0.35) / 0.6;
           const p = bezier(362, 245, 490, 170, 628, 138, nt);
-          return <circle key={`bl${i}`} cx={p.x} cy={p.y} r="5" fill="#3b82f6" filter="url(#glow-b)" opacity={isRollback ? 0.4 : 0.9}/>;
+          return <circle key={`bl${i}`} cx={p.x} cy={p.y} r="6.5" fill="#3b82f6" filter="url(#glow-b)" opacity={isRollback ? 0.4 : 0.9}/>;
         })}
 
         {/* Candidate dots (amber/red — 2 dots = 20%) */}
@@ -450,7 +450,7 @@ function HeroTrafficFlow() {
           if (t < 0.35 || t > 0.95) return null;
           const nt = (t - 0.35) / 0.6;
           const p = bezier(362, 275, 490, 350, 628, 382, nt);
-          return <circle key={`c${i}`} cx={p.x} cy={p.y} r="5" fill={isRollback ? "#ef4444" : "#f59e0b"} filter="url(#glow-b)" opacity={0.9}/>;
+          return <circle key={`c${i}`} cx={p.x} cy={p.y} r="6.5" fill={isRollback ? "#ef4444" : "#f59e0b"} filter="url(#glow-b)" opacity={0.9}/>;
         })}
 
         {/* Shadow dots (violet, dashed line, smaller) */}
@@ -459,7 +459,7 @@ function HeroTrafficFlow() {
           if (t < 0.35 || t > 0.95) return null;
           const nt = (t - 0.35) / 0.6;
           const p = bezier(362, 275, 490, 350, 628, 382, nt);
-          return <circle key={`sh${i}`} cx={p.x} cy={p.y} r="4" fill="#7c3aed" opacity={0.6}/>;
+          return <circle key={`sh${i}`} cx={p.x} cy={p.y} r="5.2" fill="#7c3aed" opacity={0.6}/>;
         })}
 
         {/* LLM Judge eval dots (violet, going down) */}
@@ -467,7 +467,7 @@ function HeroTrafficFlow() {
           const t = ((T + o + 0.2) % 1);
           if (t < 0.5 || t > 0.95) return null;
           const nt = (t - 0.5) / 0.45;
-          return <circle key={`e${i}`} cx={330} cy={lerp(302, 438, nt)} r="4.5" fill="#a78bfa" opacity={0.8}/>;
+          return <circle key={`e${i}`} cx={330} cy={lerp(302, 438, nt)} r="5.9" fill="#a78bfa" opacity={0.8}/>;
         })}
 
         {/* Rollback dots: Judge → back to baseline (red) */}
@@ -476,21 +476,21 @@ function HeroTrafficFlow() {
           if (t < 0.3 || t > 0.9) return null;
           const nt = (t - 0.3) / 0.6;
           const p = bezier(382, 463, 520, 463, 628, 278, nt);
-          return <circle key={`rb${i}`} cx={p.x} cy={p.y} r="5" fill="#ef4444" filter="url(#glow-b)" opacity={0.9}/>;
+          return <circle key={`rb${i}`} cx={p.x} cy={p.y} r="6.5" fill="#ef4444" filter="url(#glow-b)" opacity={0.9}/>;
         })}
 
         {/* ─── Score numbers floating alongside paths ─────────────────── */}
-        <text x="530" y="155" textAnchor="middle" fontSize="11" fill="#1d4ed8" fontFamily="Inter,sans-serif" fontWeight="700" opacity="0.8">0.91</text>
-        <text x="530" y="365" textAnchor="middle" fontSize="11" fill={isRollback ? "#ef4444" : "#b45309"} fontFamily="Inter,sans-serif" fontWeight="700" opacity="0.8">
+        <text x="530" y="155" textAnchor="middle" fontSize="15" fill="#1d4ed8" fontFamily="Inter,sans-serif" fontWeight="700" opacity="0.8">0.91</text>
+        <text x="530" y="365" textAnchor="middle" fontSize="15" fill={isRollback ? "#ef4444" : "#b45309"} fontFamily="Inter,sans-serif" fontWeight="700" opacity="0.8">
           {candidateQ.toFixed(2)}
         </text>
 
         {/* Threshold line on candidate path */}
         {isRollback && (
           <>
-            <line x1="490" y1="320" x2="580" y2="340" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4 3" opacity="0.6"/>
-            <rect x="490" y="300" width="90" height="18" rx="5" fill="#fef2f2" stroke="#fca5a5" strokeWidth="1"/>
-            <text x="535" y="313" textAnchor="middle" fontSize="9" fill="#b91c1c" fontFamily="Inter,sans-serif" fontWeight="700">threshold: 0.70</text>
+            <line x1="490" y1="320" x2="580" y2="340" stroke="#ef4444" strokeWidth="1.8" strokeDasharray="4 3" opacity="0.6"/>
+            <rect x="490" y="300" width="90" height="18" rx="5" fill="#fef2f2" stroke="#fca5a5" strokeWidth="1.2"/>
+            <text x="535" y="313" textAnchor="middle" fontSize="12" fill="#b91c1c" fontFamily="Inter,sans-serif" fontWeight="700">threshold: 0.70</text>
           </>
         )}
       </svg>
@@ -568,10 +568,10 @@ export default function LandingPage() {
       </header>
 
       {/* ══ HERO ═════════════════════════════════════════════════════════════ */}
-      <section className="relative max-w-7xl mx-auto px-6 pt-16 pb-20 min-h-[640px] flex items-center overflow-hidden">
+      <section className="relative w-full px-8 pt-16 pb-20 min-h-[680px] flex items-center overflow-hidden">
         <HeroTrafficFlow />
 
-        <div className="relative z-10 max-w-[560px]">
+        <div className="relative z-10 max-w-[520px] ml-8">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-100 text-xs text-gray-500 mb-6 border border-gray-200">
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
             AI-native progressive delivery · 7-day free trial
