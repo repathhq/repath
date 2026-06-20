@@ -2,12 +2,12 @@ import { cn } from "@/lib/utils";
 import type { RolloutSummary } from "@/lib/api";
 
 const styles: Record<RolloutSummary["state"], string> = {
-  canary:      "bg-[--color-candidate]/15 text-[--color-candidate] border-[--color-candidate]/30",
-  shadow:      "bg-[--color-baseline]/15 text-[--color-baseline] border-[--color-baseline]/30",
-  promoted:    "bg-[--color-success]/15 text-[--color-success] border-[--color-success]/30",
-  rolled_back: "bg-[--color-danger]/15 text-[--color-danger] border-[--color-danger]/30",
-  created:     "bg-[--color-border]/50 text-[--color-text-secondary] border-[--color-border]",
-  paused:      "bg-[--color-border]/50 text-[--color-text-secondary] border-[--color-border]",
+  canary:      "bg-amber-50 text-amber-700 border-amber-200",
+  shadow:      "bg-blue-50 text-blue-700 border-blue-200",
+  promoted:    "bg-emerald-50 text-emerald-700 border-emerald-200",
+  rolled_back: "bg-red-50 text-red-700 border-red-200",
+  created:     "bg-gray-100 text-gray-600 border-gray-200",
+  paused:      "bg-gray-100 text-gray-500 border-gray-200",
 };
 
 const labels: Record<RolloutSummary["state"], string> = {
@@ -19,21 +19,13 @@ const labels: Record<RolloutSummary["state"], string> = {
   paused:      "Paused",
 };
 
-export default function StateBadge({
-  state,
-  className,
-}: {
-  state: RolloutSummary["state"];
-  className?: string;
-}) {
+export default function StateBadge({ state, className }: { state: RolloutSummary["state"]; className?: string }) {
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold border",
-        styles[state] ?? styles.created,
-        className
-      )}
-    >
+    <span className={cn(
+      "inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold border tracking-wide",
+      styles[state] ?? styles.created,
+      className
+    )}>
       {labels[state] ?? state}
     </span>
   );

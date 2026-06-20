@@ -254,30 +254,130 @@ function Marquee() {
   );
 }
 
-/* ─── Hero geometry (Together.ai-inspired) ─────────────────────────────────── */
-function HeroGeometry() {
+/* ─── Animated Hero Traffic Flow ──────────────────────────────────────────── */
+function HeroTrafficFlow() {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 50);
+    return () => clearInterval(id);
+  }, []);
+
+  // Paths (SVG coordinate space 700×440)
+  // Main: App(60,220) → Gateway(280,220)
+  // Baseline: Gateway(280,220) → Baseline(560,120)
+  // Candidate: Gateway(280,220) → Candidate(560,320)
+  // Evaluator: Gateway(280,220) → down → Eval(280,380)
+
+  const TOTAL_FRAMES = 120;
+  const mainPath  = { x1: 60, y1: 220, x2: 280, y2: 220 };
+  const blPath    = { x1: 280, y1: 220, x2: 560, y2: 120 };
+  const candPath  = { x1: 280, y1: 220, x2: 560, y2: 320 };
+  const evalPath  = { x1: 280, y1: 220, x2: 280, y2: 370 };
+
+  // Generate particles: main (3), baseline (6), candidate (1), eval (1)
+  const mainDots  = [0, 40, 80].map(o => ((tick + o) % TOTAL_FRAMES) / TOTAL_FRAMES);
+  const blDots    = [0, 20, 40, 60, 80, 100].map(o => ((tick + o) % TOTAL_FRAMES) / TOTAL_FRAMES);
+  const candDots  = [0, 60].map(o => ((tick + o) % TOTAL_FRAMES) / TOTAL_FRAMES);
+  const evalDots  = [30].map(o => ((tick + o) % TOTAL_FRAMES) / TOTAL_FRAMES);
+
+  function lerp(a: number, b: number, t: number) { return a + (b - a) * t; }
+
+  function dotPos(path: {x1:number;y1:number;x2:number;y2:number}, t: number) {
+    const clamped = Math.max(0, Math.min(1, t));
+    return { x: lerp(path.x1, path.x2, clamped), y: lerp(path.y1, path.y2, clamped) };
+  }
+
   return (
-    <div className="absolute right-0 top-0 w-[560px] h-[560px] pointer-events-none select-none" aria-hidden>
-      <svg viewBox="0 0 560 560" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-        <circle cx="310" cy="240" r="210" stroke="rgba(124,58,237,0.10)" strokeWidth="1" />
-        <circle cx="310" cy="240" r="170" stroke="rgba(124,58,237,0.07)" strokeWidth="0.8" />
-        <ellipse cx="280" cy="230" rx="160" ry="95" fill="rgba(59,130,246,0.12)" stroke="rgba(59,130,246,0.35)" strokeWidth="1" transform="rotate(-22 280 230)" />
-        <ellipse cx="270" cy="210" rx="100" ry="56" fill="rgba(99,102,241,0.08)" stroke="rgba(99,102,241,0.20)" strokeWidth="0.8" transform="rotate(-22 270 210)" />
-        <ellipse cx="340" cy="270" rx="130" ry="72" fill="rgba(124,58,237,0.10)" stroke="rgba(124,58,237,0.30)" strokeWidth="1" transform="rotate(14 340 270)" />
-        <path d="M 410 100 L 490 160 L 460 310 L 380 240 Z" fill="rgba(249,115,22,0.18)" stroke="rgba(249,115,22,0.45)" strokeWidth="1" />
-        <path d="M 420 115 L 480 168 L 455 290 L 392 228 Z" fill="rgba(251,146,60,0.10)" stroke="rgba(251,146,60,0.25)" strokeWidth="0.6" />
-        <circle cx="190" cy="310" r="18" fill="rgba(124,58,237,0.15)" stroke="rgba(124,58,237,0.35)" strokeWidth="0.8" />
-        <circle cx="460" cy="120" r="12" fill="rgba(249,115,22,0.25)" stroke="rgba(249,115,22,0.4)" strokeWidth="0.8" />
-        <circle cx="350" cy="390" r="8"  fill="rgba(59,130,246,0.20)" stroke="rgba(59,130,246,0.4)"  strokeWidth="0.8" />
-        <line x1="210" y1="195" x2="150" y2="170" stroke="rgba(0,0,0,0.20)" strokeWidth="0.8" />
-        <rect x="20" y="158" width="128" height="22" rx="4" fill="white" stroke="rgba(0,0,0,0.10)" />
-        <text x="84" y="173" textAnchor="middle" fontSize="9" fill="#374151" fontFamily="Inter,sans-serif" fontWeight="500">● TRAFFIC SPLITTING</text>
-        <line x1="335" y1="180" x2="370" y2="128" stroke="rgba(0,0,0,0.20)" strokeWidth="0.8" />
-        <rect x="370" y="118" width="120" height="22" rx="4" fill="white" stroke="rgba(0,0,0,0.10)" />
-        <text x="430" y="133" textAnchor="middle" fontSize="9" fill="#374151" fontFamily="Inter,sans-serif" fontWeight="500">● QUALITY SCORING</text>
-        <line x1="400" y1="295" x2="440" y2="330" stroke="rgba(0,0,0,0.20)" strokeWidth="0.8" />
-        <rect x="440" y="320" width="108" height="22" rx="4" fill="white" stroke="rgba(0,0,0,0.10)" />
-        <text x="494" y="335" textAnchor="middle" fontSize="9" fill="#374151" fontFamily="Inter,sans-serif" fontWeight="500">● AUTO-ROLLBACK</text>
+    <div className="absolute right-[-20px] top-1/2 -translate-y-1/2 w-[640px] h-[440px] pointer-events-none select-none" aria-hidden>
+      <svg viewBox="0 0 700 440" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+        {/* ── Connection lines ── */}
+        {/* Main line */}
+        <line x1="90" y1="220" x2="268" y2="220" stroke="#e5e7eb" strokeWidth="2" strokeDasharray="6 4"/>
+        {/* Baseline line */}
+        <path d="M 292 212 Q 400 160 548 128" stroke="#dbeafe" strokeWidth="2" strokeDasharray="6 4" fill="none"/>
+        {/* Candidate line */}
+        <path d="M 292 228 Q 400 280 548 312" stroke="#fef3c7" strokeWidth="2" strokeDasharray="6 4" fill="none"/>
+        {/* Eval line */}
+        <line x1="280" y1="248" x2="280" y2="362" stroke="#ede9fe" strokeWidth="1.5" strokeDasharray="4 3"/>
+
+        {/* ── Nodes ── */}
+        {/* Your App */}
+        <rect x="10" y="194" width="80" height="52" rx="12" fill="white" stroke="#e5e7eb" strokeWidth="1.5"/>
+        <text x="50" y="216" textAnchor="middle" fontSize="9" fill="#9ca3af" fontFamily="Inter,sans-serif" fontWeight="600" letterSpacing="0.05em">YOUR</text>
+        <text x="50" y="231" textAnchor="middle" fontSize="9" fill="#9ca3af" fontFamily="Inter,sans-serif" fontWeight="600" letterSpacing="0.05em">APP</text>
+
+        {/* Gateway — glowing center */}
+        <rect x="196" y="186" width="96" height="68" rx="16" fill="white" stroke="#ede9fe" strokeWidth="2"/>
+        <rect x="192" y="182" width="104" height="76" rx="18" fill="rgba(124,58,237,0.04)" stroke="rgba(124,58,237,0.15)" strokeWidth="1.5"/>
+        <text x="244" y="215" textAnchor="middle" fontSize="8.5" fill="#6d28d9" fontFamily="Inter,sans-serif" fontWeight="700" letterSpacing="0.05em">REPATH</text>
+        <text x="244" y="229" textAnchor="middle" fontSize="8.5" fill="#6d28d9" fontFamily="Inter,sans-serif" fontWeight="700" letterSpacing="0.05em">GATEWAY</text>
+        <text x="244" y="244" textAnchor="middle" fontSize="7" fill="#a78bfa" fontFamily="Inter,sans-serif">routes + scores</text>
+
+        {/* Baseline node */}
+        <rect x="548" y="96" width="104" height="56" rx="12" fill="white" stroke="#dbeafe" strokeWidth="1.5"/>
+        <text x="600" y="119" textAnchor="middle" fontSize="8" fill="#1d4ed8" fontFamily="Inter,sans-serif" fontWeight="700" letterSpacing="0.04em">BASELINE</text>
+        <text x="600" y="133" textAnchor="middle" fontSize="7.5" fill="#93c5fd" fontFamily="Inter,sans-serif">80% traffic</text>
+        <text x="600" y="145" textAnchor="middle" fontSize="7" fill="#bfdbfe" fontFamily="Inter,sans-serif">current prompt</text>
+
+        {/* Candidate node */}
+        <rect x="548" y="296" width="104" height="56" rx="12" fill="white" stroke="#fef3c7" strokeWidth="1.5"/>
+        <text x="600" y="319" textAnchor="middle" fontSize="8" fill="#b45309" fontFamily="Inter,sans-serif" fontWeight="700" letterSpacing="0.04em">CANDIDATE</text>
+        <text x="600" y="333" textAnchor="middle" fontSize="7.5" fill="#fcd34d" fontFamily="Inter,sans-serif">20% traffic</text>
+        <text x="600" y="345" textAnchor="middle" fontSize="7" fill="#fde68a" fontFamily="Inter,sans-serif">new prompt</text>
+
+        {/* LLM Judge node */}
+        <rect x="220" y="362" width="120" height="44" rx="12" fill="white" stroke="#ede9fe" strokeWidth="1.5"/>
+        <text x="280" y="381" textAnchor="middle" fontSize="8" fill="#6d28d9" fontFamily="Inter,sans-serif" fontWeight="700" letterSpacing="0.04em">LLM JUDGE</text>
+        <text x="280" y="397" textAnchor="middle" fontSize="7" fill="#a78bfa" fontFamily="Inter,sans-serif">auto-rollback trigger</text>
+
+        {/* ── Animated dots ── */}
+        {/* Main path dots (grey/neutral → going into gateway) */}
+        {mainDots.filter(t => t < 1).map((t, i) => {
+          const p = dotPos(mainPath, t);
+          return <circle key={`m${i}`} cx={p.x} cy={p.y} r="4" fill="#7c3aed" opacity={0.8}/>;
+        })}
+
+        {/* Baseline dots (blue) */}
+        {blDots.filter(t => t < 1).map((t, i) => {
+          // Only show after half of main path (after gateway)
+          if (t < 0.3) return null;
+          const remapped = (t - 0.3) / 0.7;
+          // Quadratic bezier approx
+          const bx = lerp(lerp(292, 400, remapped), lerp(400, 548, remapped), remapped);
+          const by = lerp(lerp(212, 160, remapped), lerp(160, 128, remapped), remapped);
+          return <circle key={`bl${i}`} cx={bx} cy={by} r="3.5" fill="#3b82f6" opacity={0.85}/>;
+        })}
+
+        {/* Candidate dots (amber) */}
+        {candDots.filter(t => t < 1).map((t, i) => {
+          if (t < 0.3) return null;
+          const remapped = (t - 0.3) / 0.7;
+          const cx2 = lerp(lerp(292, 400, remapped), lerp(400, 548, remapped), remapped);
+          const cy2 = lerp(lerp(228, 280, remapped), lerp(280, 312, remapped), remapped);
+          return <circle key={`c${i}`} cx={cx2} cy={cy2} r="3.5" fill="#f59e0b" opacity={0.85}/>;
+        })}
+
+        {/* Eval dots (violet, going down to judge) */}
+        {evalDots.filter(t => t < 1).map((t, i) => {
+          if (t < 0.4) return null;
+          const remapped = (t - 0.4) / 0.6;
+          const p = dotPos(evalPath, remapped);
+          return <circle key={`e${i}`} cx={p.x} cy={p.y} r="3" fill="#a78bfa" opacity={0.7}/>;
+        })}
+
+        {/* ── Pulse rings on gateway ── */}
+        <circle cx="244" cy="220" r="56" stroke="rgba(124,58,237,0.08)" strokeWidth="1"
+          style={{ animation: "ping 2s ease-in-out infinite" }}/>
+        <style>{`@keyframes ping { 0%,100%{r:56;opacity:0.08} 50%{r:64;opacity:0.04} }`}</style>
+
+        {/* ── Labels floating off nodes ── */}
+        <line x1="600" y1="96" x2="640" y2="70" stroke="#e5e7eb" strokeWidth="0.8"/>
+        <rect x="640" y="58" width="52" height="18" rx="4" fill="white" stroke="#e5e7eb"/>
+        <text x="666" y="71" textAnchor="middle" fontSize="8" fill="#6b7280" fontFamily="Inter,sans-serif" fontWeight="500">80% split</text>
+
+        <line x1="600" y1="352" x2="640" y2="374" stroke="#e5e7eb" strokeWidth="0.8"/>
+        <rect x="640" y="366" width="52" height="18" rx="4" fill="white" stroke="#e5e7eb"/>
+        <text x="666" y="379" textAnchor="middle" fontSize="8" fill="#6b7280" fontFamily="Inter,sans-serif" fontWeight="500">20% split</text>
       </svg>
     </div>
   );
@@ -354,7 +454,7 @@ export default function LandingPage() {
 
       {/* ══ HERO ═════════════════════════════════════════════════════════════ */}
       <section className="relative max-w-7xl mx-auto px-6 pt-20 pb-28 min-h-[580px] flex items-center overflow-hidden">
-        <HeroGeometry />
+        <HeroTrafficFlow />
 
         <div className="relative z-10 max-w-[560px]">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-100 text-xs text-gray-500 mb-6 border border-gray-200">

@@ -52,9 +52,9 @@ export default function RolloutDetailPage({
   if (rollout.loading) {
     return (
       <div className="p-6 space-y-4 max-w-[1100px] mx-auto">
-        <div className="h-8 w-48 rounded-md bg-[--color-surface] animate-pulse" />
-        <div className="h-28 rounded-lg bg-[--color-surface] animate-pulse" />
-        <div className="h-52 rounded-lg bg-[--color-surface] animate-pulse" />
+        <div className="h-8 w-48 rounded-md bg-white animate-pulse" />
+        <div className="h-28 rounded-lg bg-white animate-pulse" />
+        <div className="h-52 rounded-lg bg-white animate-pulse" />
       </div>
     );
   }
@@ -62,11 +62,11 @@ export default function RolloutDetailPage({
   if (rollout.error || !r) {
     return (
       <div className="flex flex-col items-center justify-center h-96 gap-4">
-        <AlertTriangle className="h-8 w-8 text-[--color-text-muted]" strokeWidth={1.5} />
-        <p className="text-[13px] text-[--color-text-secondary]">
+        <AlertTriangle className="h-8 w-8 text-gray-400" strokeWidth={1.5} />
+        <p className="text-[13px] text-gray-500">
           {rollout.error?.message ?? "Rollout not found"}
         </p>
-        <Link href="/rollouts" className="text-[13px] text-[--color-accent] hover:underline">
+        <Link href="/rollouts" className="text-[13px] text-violet-600 hover:underline">
           ← Back to rollouts
         </Link>
       </div>
@@ -79,20 +79,20 @@ export default function RolloutDetailPage({
   return (
     <div className="p-6 max-w-[1100px] mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between border-b border-[--color-border] pb-6">
+      <div className="flex items-start justify-between border-b border-gray-200 pb-6">
         <div className="flex items-center gap-4">
           <button
             onClick={() => window.history.back()}
-            className="text-[--color-text-muted] hover:text-[--color-text-secondary] transition-colors p-1"
+            className="text-gray-400 hover:text-gray-500 transition-colors p-1"
           >
             <ArrowLeft className="h-5 w-5" strokeWidth={1.8} />
           </button>
           <div>
             <div className="flex items-center gap-3 mb-1">
-              <h1 className="text-[24px] font-semibold text-[--color-text]">{r.name}</h1>
+              <h1 className="text-[24px] font-semibold text-gray-900">{r.name}</h1>
               <StateBadge state={r.state} />
             </div>
-            <div className="text-[11px] text-[--color-text-muted] font-mono">ID: {r.id}</div>
+            <div className="text-[11px] text-gray-400 font-mono">ID: {r.id}</div>
           </div>
         </div>
 
@@ -102,7 +102,7 @@ export default function RolloutDetailPage({
               <button
                 onClick={() => handleAction("promote")}
                 disabled={actionLoading !== null}
-                className="flex items-center gap-1.5 rounded-md border border-[--color-success]/30 bg-[--color-success]/[0.08] px-3 py-1.5 text-[12px] font-medium text-[--color-success] hover:bg-[--color-success]/[0.15] transition-all duration-150 disabled:opacity-40"
+                className="flex items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-[12px] font-medium text-emerald-700 hover:bg-emerald-100 transition-all duration-150 disabled:opacity-40"
               >
                 <CheckCircle className="h-3.5 w-3.5" strokeWidth={1.8} />
                 {actionLoading === "promote" ? "Promoting…" : "Promote"}
@@ -110,7 +110,7 @@ export default function RolloutDetailPage({
               <button
                 onClick={() => handleAction("rollback")}
                 disabled={actionLoading !== null}
-                className="flex items-center gap-1.5 rounded-md border border-[--color-danger]/30 bg-[--color-danger]/[0.08] px-3 py-1.5 text-[12px] font-medium text-[--color-danger] hover:bg-[--color-danger]/[0.15] transition-all duration-150 disabled:opacity-40"
+                className="flex items-center gap-1.5 rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-[12px] font-medium text-red-700 hover:bg-red-100 transition-all duration-150 disabled:opacity-40"
               >
                 <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.8} />
                 {actionLoading === "rollback" ? "Rolling back…" : "Rollback"}
@@ -119,7 +119,7 @@ export default function RolloutDetailPage({
           )}
           <button
             onClick={() => { rollout.refresh(); metrics.refresh(); decisions.refresh(); }}
-            className="flex items-center gap-1.5 rounded-md border border-[--color-border] bg-[--color-surface] px-3 py-1.5 text-[12px] text-[--color-text-secondary] hover:text-[--color-text] transition-all duration-150"
+            className="flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-[12px] text-gray-500 hover:text-gray-900 transition-all duration-150"
           >
             <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.8} /> Refresh
           </button>
@@ -127,16 +127,16 @@ export default function RolloutDetailPage({
       </div>
 
       {actionError && (
-        <p className="text-[12px] text-[--color-danger]">{actionError}</p>
+        <p className="text-[12px] text-red-700">{actionError}</p>
       )}
 
       {/* Rollback alert */}
       {r.state === "rolled_back" && (
-        <div className="flex items-center gap-3 rounded-lg border border-[--color-danger]/30 bg-[--color-danger]/[0.06] px-4 py-3">
-          <AlertTriangle className="h-4 w-4 text-[--color-danger] shrink-0" strokeWidth={1.8} />
+        <div className="flex items-center gap-3 rounded-lg border border-red-300 bg-red-50 px-4 py-3">
+          <AlertTriangle className="h-4 w-4 text-red-700 shrink-0" strokeWidth={1.8} />
           <div>
-            <p className="text-[13px] font-semibold text-[--color-danger]">Rolled back to baseline</p>
-            <p className="text-[12px] text-[--color-text-secondary] mt-0.5">
+            <p className="text-[13px] font-semibold text-red-700">Rolled back to baseline</p>
+            <p className="text-[12px] text-gray-500 mt-0.5">
               Candidate traffic stopped. Check decision history for details.
             </p>
           </div>
@@ -148,11 +148,11 @@ export default function RolloutDetailPage({
         {/* Left column */}
         <div className="space-y-6">
           {/* Traffic Split */}
-          <section className="rounded-lg border border-[--color-border] bg-[--color-surface] p-5">
+          <section className="rounded-lg border border-gray-200 bg-white p-5">
             <div className="flex items-center gap-2 mb-4">
-              <h2 className="text-[14px] font-semibold text-[--color-text]">Traffic</h2>
+              <h2 className="text-[14px] font-semibold text-gray-900">Traffic</h2>
               {(r.state === "canary" || r.state === "shadow") && (
-                <span className="flex items-center gap-1.5 text-[11px] text-[--color-success]">
+                <span className="flex items-center gap-1.5 text-[11px] text-emerald-700">
                   <span className="h-1.5 w-1.5 rounded-full bg-[--color-success] animate-pulse" />
                   Live
                 </span>
@@ -162,8 +162,8 @@ export default function RolloutDetailPage({
           </section>
 
           {/* Quality Graph */}
-          <section className="rounded-lg border border-[--color-border] bg-[--color-surface] p-5">
-            <h2 className="text-[14px] font-semibold text-[--color-text] mb-4">Response Quality</h2>
+          <section className="rounded-lg border border-gray-200 bg-white p-5">
+            <h2 className="text-[14px] font-semibold text-gray-900 mb-4">Response Quality</h2>
             <QualityGraph
               metrics={metrics.data?.metrics ?? []}
               rollbackThreshold={rollbackThreshold}
@@ -172,8 +172,8 @@ export default function RolloutDetailPage({
           </section>
 
           {/* Metrics grid */}
-          <section className="rounded-lg border border-[--color-border] bg-[--color-surface] p-5">
-            <h2 className="text-[14px] font-semibold text-[--color-text] mb-4">Metrics</h2>
+          <section className="rounded-lg border border-gray-200 bg-white p-5">
+            <h2 className="text-[14px] font-semibold text-gray-900 mb-4">Metrics</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <MetricCard
                 label="Quality Score"
@@ -205,42 +205,42 @@ export default function RolloutDetailPage({
         {/* Right column */}
         <div className="space-y-6">
           {/* Steps */}
-          <section className="rounded-lg border border-[--color-border] bg-[--color-surface] p-5">
-            <h2 className="text-[14px] font-semibold text-[--color-text] mb-4">Steps</h2>
+          <section className="rounded-lg border border-gray-200 bg-white p-5">
+            <h2 className="text-[14px] font-semibold text-gray-900 mb-4">Steps</h2>
             {steps.data ? (
               <StepTimeline steps={steps.data.steps} />
             ) : (
-              <div className="h-24 animate-pulse rounded-md bg-[--color-surface-2]" />
+              <div className="h-24 animate-pulse rounded-md bg-gray-50" />
             )}
           </section>
 
           {/* Decisions */}
-          <section className="rounded-lg border border-[--color-border] bg-[--color-surface] p-5">
-            <h2 className="text-[14px] font-semibold text-[--color-text] mb-3">Decisions</h2>
+          <section className="rounded-lg border border-gray-200 bg-white p-5">
+            <h2 className="text-[14px] font-semibold text-gray-900 mb-3">Decisions</h2>
             {decisions.data ? (
               <DecisionFeed decisions={decisions.data.decisions.slice(0, 8)} />
             ) : (
-              <div className="h-24 animate-pulse rounded-md bg-[--color-surface-2]" />
+              <div className="h-24 animate-pulse rounded-md bg-gray-50" />
             )}
           </section>
 
           {/* Versions */}
-          <section className="rounded-lg border border-[--color-border] bg-[--color-surface] p-5">
-            <h2 className="text-[14px] font-semibold text-[--color-text] mb-3">Versions</h2>
+          <section className="rounded-lg border border-gray-200 bg-white p-5">
+            <h2 className="text-[14px] font-semibold text-gray-900 mb-3">Versions</h2>
             <div className="space-y-3">
               {[
-                { role: "Baseline", model: r.baseline_model, prompt: r.baseline_prompt, color: "text-[--color-baseline]" },
-                { role: "Candidate", model: r.candidate_model, prompt: r.candidate_prompt, color: "text-[--color-candidate]" },
+                { role: "Baseline", model: r.baseline_model, prompt: r.baseline_prompt, color: "text-blue-700" },
+                { role: "Candidate", model: r.candidate_model, prompt: r.candidate_prompt, color: "text-amber-700" },
               ].map((v) => (
-                <div key={v.role} className="rounded-md bg-[--color-surface-2] p-3">
+                <div key={v.role} className="rounded-md bg-gray-50 p-3">
                   <div className="flex items-center gap-2 mb-1">
                     <span className={cn("text-[11px] font-semibold uppercase tracking-wide", v.color)}>
                       {v.role}
                     </span>
                   </div>
-                  <p className="text-[13px] font-semibold text-[--color-text]">{v.model}</p>
+                  <p className="text-[13px] font-semibold text-gray-900">{v.model}</p>
                   {v.prompt && (
-                    <p className="mt-1 text-[11px] text-[--color-text-muted] font-mono leading-relaxed line-clamp-3">
+                    <p className="mt-1 text-[11px] text-gray-400 font-mono leading-relaxed line-clamp-3">
                       {v.prompt}
                     </p>
                   )}

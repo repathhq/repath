@@ -2,32 +2,32 @@
 
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes fadeIn {
   from { opacity: 0; }
-  to { opacity: 1; }
+  to   { opacity: 1; }
 }
 
 @theme inline {
   --font-sans: var(--font-inter);
   --font-mono: var(--font-jetbrains);
 
-  --color-bg: #0a0a0b;
-  --color-surface: #111113;
-  --color-surface-2: #161618;
-  --color-border: #1f1f23;
-  --color-border-hover: #27272a;
-  --color-text: #f8f8f8;
-  --color-text-secondary: #a1a1aa;
-  --color-text-muted: #4a4a58;
-  --color-accent: #7c3aed;
-  --color-accent-hover: #6d28d9;
-  --color-baseline: #0ea5e9;
-  --color-candidate: #d97706;
-  --color-success: #16a34a;
-  --color-danger: #dc2626;
+  /* Light theme — matches landing page exactly */
+  --color-bg:            #ffffff;
+  --color-surface:       #f9fafb;
+  --color-surface-2:     #f3f4f6;
+  --color-border:        #e5e7eb;
+  --color-border-hover:  #d1d5db;
+  --color-text:          #0f172a;
+  --color-text-secondary:#6b7280;
+  --color-text-muted:    #9ca3af;
+  --color-accent:        #7c3aed;
+  --color-accent-hover:  #6d28d9;
+  --color-baseline:      #1d4ed8;
+  --color-candidate:     #b45309;
+  --color-success:       #15803d;
+  --color-danger:        #b91c1c;
 }
 
 body {
@@ -38,29 +38,19 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--color-border-hover); }
+::-webkit-scrollbar            { width: 6px; height: 6px; }
+::-webkit-scrollbar-track      { background: transparent; }
+::-webkit-scrollbar-thumb      { background: var(--color-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover{ background: var(--color-border-hover); }
 
 .recharts-default-tooltip {
-  background: var(--color-surface) !important;
+  background: var(--color-bg)      !important;
   border: 1px solid var(--color-border) !important;
-  border-radius: 6px !important;
+  border-radius: 8px               !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
 }
 
-::selection {
-  background: rgba(124, 58, 237, 0.3);
-}
+::selection { background: rgba(124,58,237,0.15); }
 
-.animate-fade-in-up {
-  animation: fadeInUp 0.6s ease-out;
-}
-
-.animate-fade-in {
-  animation: fadeIn 0.6s ease-out;
-}
-
-.glow-violet {
-  box-shadow: 0 0 20px rgba(124, 58, 237, 0.4);
-}
+.animate-fade-in-up { animation: fadeInUp 0.6s ease-out; }
+.animate-fade-in    { animation: fadeIn   0.6s ease-out; }
