@@ -72,15 +72,39 @@ export default function BillingPage() {
       });
     }
     new window.Razorpay({
-      key: order.keyId, amount: order.amount, currency: order.currency,
+      key: order.keyId,
+      amount: order.amount,
+      currency: order.currency,
       name: "Repath",
       description: `${order.plan.charAt(0).toUpperCase() + order.plan.slice(1)} Plan`,
       order_id: order.orderId,
       prefill: { email: order.email, name: order.name },
       theme: { color: "#7c3aed" },
-      handler: () => {
-        setSuccess(`Payment successful! Your ${order.plan} plan is now active.`);
-        setTimeout(() => window.location.reload(), 2000);
+      modal: { ondismiss: () => setUpgrading(null) },
+      handler: async (response: {
+        razorpay_payment_id: string;
+        razorpay_order_id: string;
+        razorpay_signature: string;
+      }) => {
+        // Verify signature server-side before activating plan
+        const verify = await fetch("/api/billing/razorpay/verify-payment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            razorpay_payment_id:  response.razorpay_payment_id,
+            razorpay_order_id:    response.razorpay_order_id,
+            razorpay_signature:   response.razorpay_signature,
+            plan:                 order.plan,
+            tenant_id:            order.tenantId,
+          }),
+        });
+        if (verify.ok) {
+          setSuccess(`Payment verified! Your ${order.plan} plan is now active.`);
+          setTimeout(() => window.location.reload(), 2000);
+        } else {
+          setError("Payment received but verification failed. Contact support@tryrepath.com with your payment ID: " + response.razorpay_payment_id);
+        }
+        setUpgrading(null);
       },
     }).open();
   };
