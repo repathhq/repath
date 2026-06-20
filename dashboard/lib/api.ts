@@ -6,20 +6,18 @@
  * or SWR's error handling.
  */
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-const TOKEN = process.env.NEXT_PUBLIC_API_TOKEN ?? "";
+// All API calls go through the Next.js proxy at /api/gateway/*
+// This keeps REPATH_API_TOKEN server-side — it never reaches the browser.
+const PROXY = "/api/gateway";
 
 async function fetchApi<T>(path: string): Promise<T> {
-  const headers: HeadersInit = { "Content-Type": "application/json" };
-  if (TOKEN) headers["Authorization"] = `Bearer ${TOKEN}`;
-
-  const res = await fetch(`${BASE}/api/v1${path}`, {
-    headers,
-    next: { revalidate: 0 },
+  const res = await fetch(`${PROXY}${path}`, {
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body?.error?.message ?? `API error ${res.status}`);
+    throw new Error((body as { error?: { message?: string } })?.error?.message ?? `API error ${res.status}`);
   }
   return res.json();
 }
@@ -97,12 +95,13 @@ export interface SystemHealth {
 // ── API calls ──────────────────────────────────────────────────────────────
 
 async function postApi(path: string): Promise<{ message: string }> {
-  const headers: HeadersInit = { "Content-Type": "application/json" };
-  if (TOKEN) headers["Authorization"] = `Bearer ${TOKEN}`;
-  const res = await fetch(`${BASE}/api/v1${path}`, { method: "POST", headers });
+  const res = await fetch(`${PROXY}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body?.error?.message ?? `API error ${res.status}`);
+    throw new Error((body as { error?: { message?: string } })?.error?.message ?? `API error ${res.status}`);
   }
   return res.json();
 }

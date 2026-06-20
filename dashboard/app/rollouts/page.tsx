@@ -37,11 +37,18 @@ export default function RolloutsPage() {
 
       {/* Error state */}
       {error && (
-        <div className="mb-5 flex items-center gap-3 rounded-lg border border-[--color-danger]/30 bg-[--color-danger]/[0.06] px-4 py-3">
-          <AlertCircle className="h-4 w-4 shrink-0 text-[--color-danger]" strokeWidth={1.8} />
-          <div className="text-[13px]">
-            <span className="font-semibold text-[--color-danger]">Cannot reach gateway</span>
-            <span className="ml-1.5 text-[--color-text-secondary]">{error.message}</span>
+        <div className="mb-5 rounded-xl border border-[--color-danger]/20 bg-[--color-danger]/[0.04] px-5 py-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-4 w-4 shrink-0 text-[--color-danger] mt-0.5" strokeWidth={1.8} />
+            <div>
+              <p className="text-[13px] font-semibold text-[--color-danger]">Cannot reach gateway</p>
+              <p className="text-[12px] text-[--color-text-secondary] mt-0.5">
+                Make sure <code className="font-mono bg-[--color-surface-2] px-1 rounded">NEXT_PUBLIC_API_URL</code> and <code className="font-mono bg-[--color-surface-2] px-1 rounded">REPATH_API_TOKEN</code> are set in your environment.
+              </p>
+              {error.message && (
+                <p className="text-[11px] text-[--color-text-muted] mt-1 font-mono">{error.message}</p>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -53,12 +60,15 @@ export default function RolloutsPage() {
             <GitBranch className="h-5 w-5 text-[--color-text-muted]" strokeWidth={1.8} />
           </div>
           <h2 className="mb-2 text-[15px] font-semibold text-[--color-text]">No rollouts yet</h2>
-          <p className="mb-4 max-w-[320px] text-[13px] text-[--color-text-secondary]">
-            Create your first rollout to progressively deploy AI model changes with automatic quality gates.
+          <p className="mb-6 max-w-[360px] text-[13px] text-[--color-text-secondary]">
+            Point your app at the Repath gateway, then create a rollout to progressively deploy AI changes with automatic quality gates.
           </p>
-          <code className="rounded-md bg-[--color-surface-2] border border-[--color-border] px-4 py-2 text-[12px] font-mono text-[--color-text-secondary]">
-            repath rollout create -f rollout.yaml
-          </code>
+          <a
+            href="/onboarding"
+            className="inline-flex items-center gap-2 rounded-lg bg-[--color-accent] hover:bg-[--color-accent-hover] text-white px-5 py-2.5 text-[13px] font-medium transition-all"
+          >
+            View setup guide
+          </a>
         </div>
       )}
 

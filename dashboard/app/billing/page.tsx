@@ -40,8 +40,15 @@ export default function BillingPage() {
 
   useEffect(() => {
     fetch("/api/billing/usage")
-      .then(r => r.json())
-      .then(d => { setUsage(d); setLoading(false); })
+      .then(r => {
+        if (r.status === 401) {
+          // Not logged in — redirect to login
+          window.location.href = "/login";
+          return null;
+        }
+        return r.json();
+      })
+      .then(d => { if (d) setUsage(d); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
 
