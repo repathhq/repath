@@ -295,7 +295,8 @@ function HeroTrafficFlow() {
   const pBL    = [[392,222],[500,222],[500,110],[528,110]] as number[][];
   const pCand  = [[392,278],[500,278],[500,360],[528,360]] as number[][];
   const pJudge = [[305,316],[305,368]] as number[][];
-  const pRB    = [[392,420],[520,420],[520,278],[528,278]] as number[][];
+  // Rollback: Judge → back left to Gateway (not to baseline)
+  const pRB    = [[304,368],[304,310],[392,310]] as number[][];
 
   const cQ = R ? 0.62 : S ? 0.88 : 0.85;
 
@@ -335,8 +336,8 @@ function HeroTrafficFlow() {
         {/* Gateway → Judge (dashed down) */}
         <line x1="305" y1="316" x2="305" y2="368" stroke="#c4b5fd" strokeWidth="1.5" strokeDasharray="5 4" markerEnd="url(#ap)"/>
 
-        {/* Judge → Rollback return (only R) — goes right, then up into candidate zone */}
-        {R && <path d="M 392 420 H 520 V 278 H 528" stroke="#f87171" strokeWidth="2" strokeDasharray="6 4" fill="none" markerEnd="url(#ar)"/>}
+        {/* Rollback: Judge → back to Gateway (shows traffic returning to stable) */}
+        {R && <path d="M 304 368 V 310 H 392" stroke="#ef4444" strokeWidth="2" strokeDasharray="6 4" fill="none" markerEnd="url(#ar)"/>}
 
         {/* ══ % PILLS (fixed, on elbow midpoints — never overlap nodes) ══ */}
         {/* 80% pill: on baseline elbow at x=500, y=165 */}
@@ -347,12 +348,11 @@ function HeroTrafficFlow() {
         <rect x="478" y="305" width="44" height="20" rx="10" fill={R ? "#f87171" : S ? "#a78bfa" : "#818cf8"}/>
         <text x="500" y="319" textAnchor="middle" fontSize="11" fill="white" fontFamily={F} fontWeight="700">20%</text>
 
-        {/* Threshold badge: FIXED at top-right of diagram, never overlaps */}
+        {/* Threshold badge — sits right on the candidate elbow line, just left of 20% pill */}
         {R && (
           <g>
-            <rect x="600" y="196" width="140" height="34" rx="8" fill="#fef2f2" stroke="#fca5a5" strokeWidth="1.2"/>
-            <text x="670" y="213" textAnchor="middle" fontSize="12" fill="#b91c1c" fontFamily={F} fontWeight="700">score &lt; 0.70</text>
-            <text x="670" y="225" textAnchor="middle" fontSize="10.5" fill="#ef4444" fontFamily={F}>rollback threshold</text>
+            <rect x="406" y="330" width="120" height="30" rx="8" fill="#fef2f2" stroke="#fca5a5" strokeWidth="1.2"/>
+            <text x="466" y="347" textAnchor="middle" fontSize="11" fill="#b91c1c" fontFamily={F} fontWeight="700">score &lt; 0.70 threshold</text>
           </g>
         )}
 
