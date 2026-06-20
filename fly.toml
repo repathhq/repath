@@ -1,15 +1,11 @@
 # Repath Gateway — Fly.io deployment config
-# Free tier: 3 shared-cpu-1x VMs, 256MB RAM, 160GB bandwidth/month
-#
-# Deploy: fly deploy
-# Secrets: fly secrets set REPATH_API_TOKEN=... OPENAI_API_KEY=... etc.
+# Free tier: shared-cpu-1x, 256MB RAM, 160GB bandwidth/month
 
 app = "repath-gateway"
 primary_region = "sin"   # Singapore — closest to India + SEA
 
 [build]
-  dockerfile = "Dockerfile"
-  target = "gateway"
+  dockerfile = "Dockerfile.gateway"
 
 [env]
   REPATH_SERVER_PORT = "8080"
@@ -18,6 +14,7 @@ primary_region = "sin"   # Singapore — closest to India + SEA
   REPATH_CLOUD_MODE = "true"
   REPATH_CLOUD_DOMAIN = "repath-gateway.fly.dev"
 
+# HTTP service
 [[services]]
   protocol = "tcp"
   internal_port = 8080
@@ -39,15 +36,10 @@ primary_region = "sin"   # Singapore — closest to India + SEA
     hard_limit = 1000
     soft_limit = 800
 
-  [[services.tcp_checks]]
-    interval = "15s"
-    timeout = "2s"
-    grace_period = "5s"
-
   [[services.http_checks]]
     interval = "30s"
-    timeout = "5s"
-    grace_period = "10s"
+    timeout = "10s"
+    grace_period = "20s"
     method = "get"
     path = "/health"
     protocol = "http"
@@ -55,7 +47,3 @@ primary_region = "sin"   # Singapore — closest to India + SEA
 [[vm]]
   size = "shared-cpu-1x"
   memory = "256mb"
-
-[metrics]
-  port = 9090
-  path = "/metrics"

@@ -1,0 +1,33 @@
+# Rust build artifacts
+target/
+doc/
+
+# Node / dashboard
+dashboard/node_modules/
+dashboard/.next/
+dashboard/repath-landing/
+dashboard/repath-landing/**
+
+# Python
+evaluators/**/__pycache__/
+evaluators/**/*.pyc
+evaluators/.venv/
+evaluators/venv/
+
+# Git + IDE
+.git/
+.gitignore
+.github/
+.vscode/
+.idea/
+
+# Environment files (never in Docker image)
+.env
+.env.local
+.env.*
+
+# Misc
+*.log
+tmp/
+temp/
+scripts/

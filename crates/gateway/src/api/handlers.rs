@@ -431,6 +431,17 @@ pub async fn get_rollout_decisions(
     }
 }
 
+/// GET /api/v1/system/providers
+/// Returns health status for every provider URL seen in the last 60 seconds.
+/// Used by the dashboard to show provider reliability and incident history.
+pub async fn provider_health(State(state): State<AppState>) -> impl IntoResponse {
+    let snapshot = state.provider_health.snapshot();
+    Json(json!({
+        "providers": snapshot,
+        "window_seconds": 60,
+    }))
+}
+
 pub async fn system_health(State(state): State<AppState>) -> impl IntoResponse {
     let db_ok = sqlx::query("SELECT 1")
         .execute(&state.db_pool)

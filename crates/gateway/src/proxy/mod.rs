@@ -7,6 +7,7 @@
 //! - Request/response transformation
 
 pub mod client;
+pub mod failover;
 pub mod handler;
 pub mod provider;
 pub mod streaming;

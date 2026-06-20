@@ -3,9 +3,10 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, GitBranch, CreditCard } from "lucide-react";
+import { GitBranch, CreditCard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSystemHealth } from "@/lib/hooks";
+import ProviderHealth from "@/components/ProviderHealth";
 
 const nav = [
   { href: "/rollouts", label: "Rollouts", icon: GitBranch, exact: false },
@@ -45,6 +46,9 @@ export default function Sidebar() {
           );
         })}
       </nav>
+
+      {/* Provider Health */}
+      <ProviderHealth />
 
       {/* System Status */}
       <div className="px-4 py-4 border-t border-[--color-border]">

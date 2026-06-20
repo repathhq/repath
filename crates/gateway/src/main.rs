@@ -89,6 +89,8 @@ pub struct AppState {
     pub rollout_cache: Arc<arc_swap::ArcSwap<router::RolloutCache>>,
     /// Per-tenant circuit breaker — ensures Repath is never a bottleneck.
     pub circuit_breaker: circuit_breaker::CircuitBreakerRegistry,
+    /// Rolling error rate per provider URL — feeds provider health dashboard.
+    pub provider_health: proxy::failover::ProviderHealthRegistry,
 }
 
 #[tokio::main]
@@ -202,6 +204,7 @@ async fn main() -> Result<()> {
         record_tx,
         rollout_cache,
         circuit_breaker: circuit_breaker::CircuitBreakerRegistry::new(),
+        provider_health: proxy::failover::ProviderHealthRegistry::new(),
     };
 
     // Create Axum server
@@ -344,3 +347,8 @@ mod tests {
         print_banner();
     }
 }
+// force rebuild Fri Jun 19 22:12:31 IST 2026
+// rebuild 1781887636
+// rebuild 1781887842
+// rebuild 1781888160
+// rebuild 1781928954

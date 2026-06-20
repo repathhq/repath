@@ -57,6 +57,7 @@ pub fn api_router() -> Router<AppState> {
         .route("/rollouts/:id/promote",           post(handlers::promote_rollout))
         .route("/rollouts/:id/rollback",          post(handlers::rollback_rollout))
         .route("/system/health",                  get(handlers::system_health))
+        .route("/system/providers",               get(handlers::provider_health))
         .layer(middleware::from_fn(require_api_token));
 
     Router::new()

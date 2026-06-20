@@ -24,7 +24,11 @@
 //! `X-Repath-Request-Id` and `X-Repath-Version` for observability.
 
 use crate::{
-    proxy::{provider::Provider, streaming},
+    proxy::{
+        failover::{build_fallback_chain, log_failover, should_failover, ProviderEndpoint},
+        provider::Provider,
+        streaming,
+    },
     recorder::RecordRequest,
     router::{select_version, ActiveRollout, VersionAssignment},
     AppState,
@@ -202,24 +206,34 @@ async fn proxy_inner(
         upstream_headers, &detected_provider, None,
     );
 
-    // ── Forward to upstream ───────────────────────────────────────────────
+    // ── Forward to upstream with retry + failover ─────────────────────────
     let start = Instant::now();
 
-    let upstream_response = state.http_client
-        .request(method, &upstream_url)
-        .headers(upstream_headers)
-        .body(body_bytes.clone())
-        .send()
-        .await
-        .map_err(|e| Error::Provider {
-            provider: detected_provider.clone().to_str().to_string(),
-            message: e.to_string(),
-            status_code: None,
-            source: Some(e.into()),
-        })?;
+    // Build fallback chain: empty for now (future: load from tenant config).
+    // OpenRouter is auto-added as last-resort if OPENROUTER_API_KEY is set.
+    let fallback_chain = build_fallback_chain(&version.provider_url, &[]);
+
+    let (upstream_response, actual_provider_url) = send_with_failover(
+        &state,
+        &method,
+        &upstream_url,
+        &version.provider_url,
+        upstream_headers,
+        body_bytes.clone(),
+        &fallback_chain,
+        &upstream_path,
+        request_id,
+    ).await?;
 
     let upstream_status = upstream_response.status();
     let upstream_headers_response = upstream_response.headers().clone();
+
+    // Record provider health
+    if upstream_status.is_server_error() || upstream_status.as_u16() == 429 {
+        state.provider_health.record_error(&actual_provider_url);
+    } else {
+        state.provider_health.record_success(&actual_provider_url);
+    }
 
     // ── Build client response ─────────────────────────────────────────────
     let mut response_builder = Response::builder()
@@ -500,6 +514,165 @@ fn extract_non_streaming_metadata(body: &Bytes) -> (Option<u32>, Option<u32>, St
 }
 
 // ── Utility helpers ────────────────────────────────────────────────────────
+
+/// Send request to primary provider, retry once, then try each fallback in order.
+///
+/// Returns (response, actual_provider_url_used).
+///
+/// Retry logic:
+/// - Network error or 5xx/429 → wait 300ms → retry same provider once
+/// - If retry also fails → try each fallback in order
+/// - If all fallbacks fail → return last error
+///
+/// This is intentionally simple: no exponential backoff, no jitter.
+/// The 300ms pause on retry is enough to ride out brief blips.
+/// We don't want complex retry logic on the hot path — latency matters.
+#[allow(clippy::too_many_arguments)]
+async fn send_with_failover(
+    state: &AppState,
+    method: &axum::http::Method,
+    primary_url: &str,
+    primary_provider_base: &str,
+    headers: HeaderMap,
+    body: bytes::Bytes,
+    fallback_chain: &[ProviderEndpoint],
+    upstream_path: &str,
+    request_id: uuid::Uuid,
+) -> Result<(reqwest::Response, String)> {
+    // Build the list of (url_to_try, provider_base_for_health, display_name, api_key_override)
+    let mut attempts: Vec<(String, String, String, Option<String>)> = Vec::new();
+
+    // Primary: already-resolved URL
+    attempts.push((
+        primary_url.to_string(),
+        primary_provider_base.to_string(),
+        Provider::from_url(primary_provider_base).to_str().to_string(),
+        None,
+    ));
+
+    // Fallbacks
+    for fb in fallback_chain {
+        let fb_url = format!("{}{}", fb.url.trim_end_matches('/'), upstream_path);
+        attempts.push((fb_url, fb.url.clone(), fb.name.clone(), fb.api_key.clone()));
+    }
+
+    let mut last_error: Option<String> = None;
+
+    for (attempt_idx, (url, provider_base, provider_name, api_key_override)) in attempts.iter().enumerate() {
+        // Build headers for this specific attempt
+        // If fallback has its own API key, inject it as Authorization header
+        let mut attempt_headers = headers.clone();
+        if let Some(key) = api_key_override {
+            if let Ok(v) = axum::http::HeaderValue::from_str(&format!("Bearer {}", key)) {
+                attempt_headers.insert(axum::http::header::AUTHORIZATION, v);
+            }
+        }
+
+        // Apply provider-specific normalization (Anthropic header translation, etc.)
+        let detected = Provider::from_url(provider_base);
+        let normalized_headers = crate::proxy::provider::normalize_headers(
+            attempt_headers, &detected, None,
+        );
+        let normalized_body = if attempt_idx > 0 {
+            // Re-translate body for the fallback's provider format
+            crate::proxy::provider::translate_request_body(&body, &detected)
+        } else {
+            body.clone()
+        };
+
+        // Attempt 1: send
+        let send_result = state.http_client
+            .request(method.clone(), url.as_str())
+            .headers(normalized_headers.clone())
+            .body(normalized_body.clone())
+            .send()
+            .await;
+
+        match send_result {
+            Ok(resp) => {
+                let status = resp.status().as_u16();
+
+                if !should_failover(status) {
+                    // Success or non-retryable error (4xx) — return as-is
+                    return Ok((resp, provider_base.clone()));
+                }
+
+                // 5xx or 429 — retry once on same provider
+                last_error = Some(format!("{} returned {}", provider_name, status));
+                state.provider_health.record_error(provider_base);
+
+                // Consume the error body so the connection is freed
+                let _ = resp.bytes().await;
+
+                if attempt_idx == 0 {
+                    // Single retry on primary before trying fallbacks
+                    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+
+                    let retry_result = state.http_client
+                        .request(method.clone(), url.as_str())
+                        .headers(normalized_headers)
+                        .body(normalized_body)
+                        .send()
+                        .await;
+
+                    match retry_result {
+                        Ok(retry_resp) => {
+                            let retry_status = retry_resp.status().as_u16();
+                            if !should_failover(retry_status) {
+                                state.provider_health.record_success(provider_base);
+                                return Ok((retry_resp, provider_base.clone()));
+                            }
+                            // Retry also failed — move to fallback
+                            last_error = Some(format!("{} returned {} on retry", provider_name, retry_status));
+                            let _ = retry_resp.bytes().await;
+                        }
+                        Err(e) => {
+                            last_error = Some(format!("{} retry failed: {}", provider_name, e));
+                        }
+                    }
+
+                    // Log the failover if we have a fallback to try
+                    if !fallback_chain.is_empty() {
+                        let next_name = &fallback_chain[0].name;
+                        log_failover(
+                            provider_base,
+                            next_name,
+                            last_error.as_deref().unwrap_or("5xx error"),
+                            request_id,
+                        );
+                    }
+                }
+                // Continue to next fallback
+            }
+            Err(e) => {
+                // Network error — connection refused, timeout, DNS failure, etc.
+                last_error = Some(format!("{} unreachable: {}", provider_name, e));
+                state.provider_health.record_error(provider_base);
+
+                if attempt_idx == 0 && !fallback_chain.is_empty() {
+                    log_failover(
+                        provider_base,
+                        &fallback_chain[0].name,
+                        &last_error.clone().unwrap_or_default(),
+                        request_id,
+                    );
+                }
+                // Continue to next fallback
+            }
+        }
+    }
+
+    // All providers failed
+    Err(repath_common::Error::Provider {
+        provider: "all".to_string(),
+        message: format!(
+            "All providers failed. Last error: {}",
+            last_error.unwrap_or_else(|| "unknown".to_string())
+        ),
+        status_code: Some(503),
+        source: None,
+    })
+}
 
 fn extract_session_id(headers: &HeaderMap) -> Option<String> {
     headers

@@ -1,0 +1,32 @@
+name: Sync Dashboard to Personal Repo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "dashboard/**"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push dashboard/ to personal repo
+        env:
+          TOKEN: ${{ secrets.PERSONAL_REPO_TOKEN }}
+          # Change this to your personal GitHub username/repo
+          TARGET_REPO: tejassriavinasha/repath-dashboard
+        run: |
+          git config user.email "actions@github.com"
+          git config user.name "GitHub Actions"
+
+          # Split dashboard/ subtree into a separate branch
+          git subtree split --prefix=dashboard -b dashboard-deploy
+
+          # Force push to personal repo main branch
+          git push --force \
+            "https://x-access-token:${TOKEN}@github.com/${TARGET_REPO}.git" \
+            dashboard-deploy:main

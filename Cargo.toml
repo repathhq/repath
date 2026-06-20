@@ -10,7 +10,7 @@ resolver = "2"
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.88"
 authors = ["Repath Team"]
 license = "BSL-1.1"
 repository = "https://github.com/repath/repath"
@@ -35,10 +35,10 @@ serde_yaml = "0.9"
 toml = "0.8"
 
 # Database
-sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "uuid", "chrono", "json"] }
+sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "postgres", "uuid", "chrono", "json"] }
 
 # Redis
-redis = { version = "0.27", features = ["tokio-comp", "streams", "connection-manager"] }
+redis = { version = "0.27", features = ["tokio-rustls-comp", "streams", "connection-manager"] }
 
 # Observability
 tracing = "0.1"

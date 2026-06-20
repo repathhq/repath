@@ -61,5 +61,6 @@ export async function POST(req: NextRequest) {
     email: session.email,
     name: session.name,
     plan,
+    testMode: keyId.startsWith("rzp_test_"),
   });
 }

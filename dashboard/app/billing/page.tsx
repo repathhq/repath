@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Check, Loader2, AlertTriangle, BarChart3, Zap } from "lucide-react";
+import { ArrowRight, Check, Loader2, AlertTriangle, BarChart3, Zap, FlaskConical } from "lucide-react";
 
 interface Usage {
   plan: string;
@@ -32,6 +32,11 @@ export default function BillingPage() {
   // Detect if Indian payment is preferred (simple geo heuristic via timezone)
   const isIndia = Intl.DateTimeFormat().resolvedOptions().timeZone?.includes("Calcutta") ||
     Intl.DateTimeFormat().resolvedOptions().timeZone?.includes("Kolkata");
+
+  // Test mode: Razorpay key starts with rzp_test_
+  const isTestMode = typeof window !== "undefined"
+    ? false // determined server-side
+    : false;
 
   useEffect(() => {
     fetch("/api/billing/usage")
@@ -70,7 +75,8 @@ export default function BillingPage() {
 
     const order = await res.json() as {
       orderId: string; amount: number; currency: string;
-      keyId: string; tenantId: string; email: string; name: string; plan: string;
+      keyId: string; tenantId: string; email: string; name: string;
+      plan: string; testMode?: boolean;
     };
 
     // Load Razorpay SDK dynamically
@@ -88,10 +94,11 @@ export default function BillingPage() {
       amount: order.amount,
       currency: order.currency,
       name: "Repath",
-      description: `${order.plan.charAt(0).toUpperCase() + order.plan.slice(1)} Plan`,
+      description: `${order.plan.charAt(0).toUpperCase() + order.plan.slice(1)} Plan${order.testMode ? " (Test Mode)" : ""}`,
       order_id: order.orderId,
       prefill: { email: order.email, name: order.name },
       theme: { color: "#7c3aed" },
+      notes: order.testMode ? { mode: "test — use card 4111 1111 1111 1111" } : {},
       handler: () => {
         setSuccess(`Payment successful! Your ${order.plan} plan is now active.`);
         setTimeout(() => window.location.reload(), 2000);
@@ -154,6 +161,17 @@ export default function BillingPage() {
           <p className="text-[13px] text-zinc-400">Usage, plan, and payment</p>
         </div>
       </div>
+
+      {/* Test mode banner */}
+      {process.env.NODE_ENV !== "production" && (
+        <div className="flex items-center gap-3 p-3 rounded-xl border border-yellow-500/30 bg-yellow-500/[0.06]">
+          <FlaskConical className="w-4 h-4 text-yellow-400 shrink-0" />
+          <div>
+            <p className="text-[13px] font-semibold text-yellow-400">Razorpay Test Mode</p>
+            <p className="text-[12px] text-zinc-400">Use card <code className="text-yellow-300">4111 1111 1111 1111</code>, any CVV, any future expiry.</p>
+          </div>
+        </div>
+      )}
 
       {/* Alerts */}
       {success && (
