@@ -1,574 +1,886 @@
 "use client";
 
-import Link from "next/link";
-import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
+import { motion, useInView } from "motion/react";
 import {
-  ArrowRight, Check, Shield, Zap, Eye, GitBranch,
-  ChevronRight, TrendingUp, AlertTriangle, RotateCcw,
-  Activity
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, ReferenceLine,
+} from "recharts";
+import {
+  ArrowRight, ChevronRight, Check, GitBranch, Menu, X,
+  RefreshCw, Zap, Shield, BarChart2, Lock, Cloud, ChevronLeft,
 } from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
 
-// ── Animated traffic flow ─────────────────────────────────────────────────────
+/* ─── Palette ────────────────────────────────────────────────────────────── */
+const C = {
+  blue:   { bg: "#DBEAFE", label: "#1D4ED8", text: "#0F172A" },
+  violet: { bg: "#EDE9FE", label: "#6D28D9", text: "#0F172A" },
+  amber:  { bg: "#FEF3C7", label: "#B45309", text: "#0F172A" },
+  dark:   "#09090B",
+};
 
-function TrafficFlow() {
-  const [tick, setTick] = useState(0);
+/* ─── Data ────────────────────────────────────────────────────────────────── */
+const qualityData = [
+  { t: "T+0",  v1: 0.92, v2: null },
+  { t: "T+1",  v1: 0.89, v2: null },
+  { t: "T+2",  v1: 0.91, v2: 0.92 },
+  { t: "T+3",  v1: 0.93, v2: 0.88 },
+  { t: "T+4",  v1: 0.91, v2: 0.85 },
+  { t: "T+5",  v1: 0.92, v2: 0.72 },
+  { t: "T+6",  v1: 0.91, v2: 0.65 },
+  { t: "T+7",  v1: 0.93, v2: null },
+];
+
+const capabilities = [
+  "Canary Deployments",
+  "LLM-as-Judge",
+  "Auto-Rollback",
+  "Provider Failover",
+  "Quality Gates",
+  "Audit Trail",
+  "Provider Health",
+  "One-line Integration",
+];
+
+const researchCards = [
+  { tag: "CANARY",   title: "5% → 25% → 50% → 100%",               sub: "Configurable quality gates at every step. Traffic only advances when scores hold.", author: "Repath Labs" },
+  { tag: "SCORING",  title: "Async LLM judge — zero latency overhead", sub: "Every response evaluated against your rubric. Results arrive in ~120ms, never blocking your users.", author: "Repath Research", highlight: true },
+  { tag: "ROLLBACK", title: "Auto-revert in under 500ms",              sub: "Score drops below threshold? 100% traffic back to stable instantly. No on-call needed.", author: "Repath Infra" },
+  { tag: "FAILOVER", title: "Silent provider switching",               sub: "OpenAI down? We retry then silently failover to Anthropic or OpenRouter. Your app keeps running.", author: "Repath Platform" },
+];
+
+const featureTabs = [
+  {
+    id: "canary",
+    label: "Canary Deployments",
+    icon: GitBranch,
+    headline: "Canary Deployments",
+    primary: "5% → 25% → 50% → 100% with configurable quality gates at each step. Point your app at Repath instead of OpenAI directly. We route a small % to your new prompt — users see nothing different.",
+    sub: [
+      { label: "Traffic splitting", desc: "Any % down to 0.1% granularity. No SDK rewrites." },
+      { label: "Quality-gated advance", desc: "Traffic only increases when scores consistently hold." },
+      { label: "Instant abort", desc: "Any step can halt immediately — traffic snaps back." },
+    ],
+    panel: (
+      <div className="h-full flex flex-col gap-3 p-6 font-mono text-xs">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-emerald-600 font-semibold text-[11px] tracking-wide">ROLLOUT: new-support-prompt</span>
+        </div>
+        <div className="text-[11px] text-gray-500 mb-2">Quality gate: score ≥ 0.85 to advance</div>
+        {[
+          { pct: "5%",   status: "passed", color: "text-emerald-600" },
+          { pct: "25%",  status: "passed", color: "text-emerald-600" },
+          { pct: "50%",  status: "live",   color: "text-blue-600" },
+          { pct: "100%", status: "pending",color: "text-gray-400" },
+        ].map((step) => (
+          <div key={step.pct} className="flex items-center gap-3">
+            <div className={`w-12 text-right font-semibold ${step.color === "text-gray-400" ? "text-gray-400" : "text-gray-800"}`}>{step.pct}</div>
+            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div className={`h-full rounded-full transition-all ${step.status === "passed" ? "bg-emerald-400 w-full" : step.status === "live" ? "bg-blue-400 w-1/2" : "w-0"}`} />
+            </div>
+            <span className={`text-[11px] font-medium ${step.color}`}>
+              {step.status === "passed" ? "✓ passed" : step.status === "live" ? "● live" : "pending"}
+            </span>
+          </div>
+        ))}
+      </div>
+    ),
+  },
+  {
+    id: "judge",
+    label: "LLM-as-Judge",
+    icon: BarChart2,
+    headline: "LLM-as-Judge Evaluation",
+    primary: "An independent LLM judge scores every response against your custom rubric — accuracy, tone, safety, format. Results stream back in ~120ms, fully async. No latency added to your users.",
+    sub: [
+      { label: "Plain-English criteria", desc: "Define what \"good\" means in natural language." },
+      { label: "8 judge models", desc: "GPT-4o, Claude 3.5, Gemini 1.5 Pro and more." },
+      { label: "Per-dimension scores", desc: "Accuracy, safety, format, tone — individually weighted." },
+    ],
+    panel: (
+      <div className="h-full p-6 flex flex-col gap-4">
+        <div className="text-xs text-gray-500 font-mono mb-1">EVAL RESULT — response #48291</div>
+        {[
+          { dim: "Accuracy",  score: 0.91, color: "#7C3AED" },
+          { dim: "Safety",    score: 0.98, color: "#10B981" },
+          { dim: "Format",    score: 0.84, color: "#F97316" },
+          { dim: "Tone",      score: 0.79, color: "#EC4899" },
+        ].map((r) => (
+          <div key={r.dim} className="flex flex-col gap-1">
+            <div className="flex justify-between text-xs">
+              <span className="text-gray-600 font-medium">{r.dim}</span>
+              <span className="font-semibold text-gray-900 font-mono">{r.score.toFixed(2)}</span>
+            </div>
+            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-full rounded-full" style={{ width: `${r.score * 100}%`, background: r.color }} />
+            </div>
+          </div>
+        ))}
+        <div className="mt-2 pt-3 border-t border-gray-100 flex items-center justify-between text-xs">
+          <span className="text-gray-500">Composite</span>
+          <span className="font-bold text-gray-900 font-mono">0.88 — PASS</span>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: "rollback",
+    label: "Auto-Rollback",
+    icon: RefreshCw,
+    headline: "Auto-Rollback in <500ms",
+    primary: "Score drops below your threshold? Repath halts the canary and restores 100% of traffic to the stable version automatically — in under 500ms. No manual intervention, no on-call alerts at 3am.",
+    sub: [
+      { label: "Sub-500ms revert", desc: "Detected and reverted before users see a second bad response." },
+      { label: "4-response detection", desc: "Mean lag before a quality drop triggers rollback." },
+      { label: "Full audit trail", desc: "Every decision logged with scores and timestamps." },
+    ],
+    panel: (
+      <div className="h-full p-6 flex flex-col gap-3">
+        <div className="text-xs font-mono text-gray-500 mb-1">ROLLBACK EVENT — 2026-06-20 03:47 UTC</div>
+        <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-xs text-red-700 flex items-start gap-2">
+          <RefreshCw className="w-3.5 h-3.5 mt-0.5 shrink-0 text-red-500" />
+          <span>Quality score dropped to <strong>0.61</strong> (threshold: 0.85) — auto-rollback triggered</span>
+        </div>
+        <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-xs text-emerald-700 flex items-start gap-2">
+          <Check className="w-3.5 h-3.5 mt-0.5 shrink-0 text-emerald-500" />
+          <span>100% traffic restored to <strong>v1-stable</strong> in <strong>412ms</strong></span>
+        </div>
+        <div className="text-xs text-gray-500 font-mono mt-auto pt-3 border-t border-gray-100">
+          Detection lag: 4 responses · 0 users impacted beyond threshold
+        </div>
+      </div>
+    ),
+  },
+];
+
+const features = [
+  { icon: GitBranch, title: "Canary deployments",         body: "5% → 25% → 50% → 100% with configurable quality gates at each step." },
+  { icon: BarChart2,  title: "LLM-as-judge evaluation",   body: "Define criteria in plain English. Scores every response asynchronously — never slows your app." },
+  { icon: RefreshCw,  title: "Auto-rollback in <500ms",   body: "Score drops below threshold? Back to baseline instantly. No manual intervention." },
+  { icon: Zap,        title: "Provider failover",          body: "OpenAI down? We retry, then silently switch to Anthropic or OpenRouter. Your app keeps running." },
+  { icon: Cloud,      title: "Provider health tracking",  body: "Live error rates per provider. Know about outages before your users do." },
+  { icon: Lock,       title: "Full audit trail",           body: "Every advance and rollback logged with exact scores. Complete visibility into every decision." },
+];
+
+const pricingPlans = [
+  {
+    name: "Starter",
+    usd: "$49",
+    inr: "₹4,099",
+    period: "/month",
+    features: [
+      "10,000 evals/mo",
+      "3 active rollouts",
+      "OpenAI + Anthropic + Gemini",
+      "Auto-rollback",
+      "7-day data retention",
+      "Email alerts",
+      "Dashboard + API",
+    ],
+    cta: "Start free trial",
+    style: "outline",
+  },
+  {
+    name: "Pro",
+    usd: "$149",
+    inr: "₹12,499",
+    period: "/month",
+    badge: "MOST POPULAR",
+    features: [
+      "100,000 evals/mo",
+      "Unlimited rollouts",
+      "All providers + OpenRouter fallback",
+      "Auto-rollback",
+      "90-day data retention",
+      "Slack + webhook alerts",
+      "Custom eval criteria",
+      "Priority support",
+    ],
+    cta: "Start free trial",
+    style: "primary",
+  },
+  {
+    name: "Enterprise",
+    usd: "Custom",
+    inr: "",
+    period: "",
+    features: [
+      "Unlimited evals",
+      "Dedicated infrastructure",
+      "SSO / SAML",
+      "Team RBAC",
+      "1-year data retention",
+      "On-call support",
+      "Custom SLA",
+    ],
+    cta: "Contact us",
+    style: "outline",
+  },
+];
+
+/* ─── Helpers ──────────────────────────────────────────────────────────────── */
+function AnimatedNumber({ value, prefix = "", suffix = "" }: { value: number; prefix?: string; suffix?: string }) {
+  const [n, setN] = useState(0);
+  const ref = useRef<HTMLSpanElement>(null);
+  const inView = useInView(ref, { once: true });
   useEffect(() => {
-    const t = setInterval(() => setTick(p => p + 1), 60);
-    return () => clearInterval(t);
-  }, []);
+    if (!inView) return;
+    const start = performance.now();
+    const dur = 1200;
+    const tick = (now: number) => {
+      const p = Math.min((now - start) / dur, 1);
+      const ease = 1 - Math.pow(1 - p, 3);
+      setN(Math.round(ease * value));
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }, [inView, value]);
+  return <span ref={ref}>{prefix}{n}{suffix}</span>;
+}
 
-  // Animate dots along SVG paths
-  const dots = Array.from({ length: 8 }, (_, i) => ({
-    id: i,
-    progress: ((tick * 0.8 + i * 45) % 360) / 360,
-    isCanary: i % 5 === 0, // 1 in 5 = ~20% canary
-  }));
-
+function Marquee() {
   return (
-    <div className="relative w-full h-[260px] select-none">
-      <svg className="absolute inset-0 w-full h-full" viewBox="0 0 700 260" preserveAspectRatio="xMidYMid meet">
-        {/* Glow defs */}
-        <defs>
-          <filter id="glow-purple">
-            <feGaussianBlur stdDeviation="3" result="blur" />
-            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
-          <filter id="glow-blue">
-            <feGaussianBlur stdDeviation="2" result="blur" />
-            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
-        </defs>
+    <div className="overflow-hidden relative">
+      <div className="flex gap-12 items-center w-max" style={{ animation: "scroll-x 28s linear infinite" }}>
+        {[...capabilities, ...capabilities].map((name, i) => (
+          <span key={i} className="text-sm font-medium text-gray-400 tracking-widest uppercase whitespace-nowrap hover:text-gray-600 transition-colors">{name}</span>
+        ))}
+      </div>
+      <style>{`@keyframes scroll-x { from { transform: translateX(0) } to { transform: translateX(-50%) } }`}</style>
+    </div>
+  );
+}
 
-        {/* Lines: App → Gateway */}
-        <path d="M 90 130 C 160 130, 200 130, 290 130" stroke="rgba(124,58,237,0.25)" strokeWidth="1.5" fill="none" strokeDasharray="5 3"/>
-        {/* Gateway → Baseline */}
-        <path d="M 370 130 C 430 130, 470 80, 560 80"  stroke="rgba(14,165,233,0.25)"  strokeWidth="1.5" fill="none" strokeDasharray="5 3"/>
-        {/* Gateway → Candidate */}
-        <path d="M 370 130 C 430 130, 470 180, 560 180" stroke="rgba(217,119,6,0.25)"   strokeWidth="1.5" fill="none" strokeDasharray="5 3"/>
-
-        {/* Animated traffic dots */}
-        {dots.map(dot => {
-          const isInbound = dot.progress < 0.38;
-          const isBaseline = !dot.isCanary && dot.progress >= 0.38;
-          const isCanarySeg = dot.isCanary && dot.progress >= 0.38;
-
-          let cx = 0, cy = 0;
-          if (isInbound) {
-            const t = dot.progress / 0.38;
-            cx = 90 + t * 200; cy = 130;
-          } else if (isBaseline) {
-            const t = (dot.progress - 0.38) / 0.62;
-            cx = 370 + t * 190;
-            cy = 130 + (t * -50);
-          } else {
-            const t = (dot.progress - 0.38) / 0.62;
-            cx = 370 + t * 190;
-            cy = 130 + (t * 50);
-          }
-
-          return (
-            <circle
-              key={dot.id}
-              cx={cx} cy={cy} r={dot.isCanary ? 3.5 : 4}
-              fill={isInbound ? "#7c3aed" : isBaseline ? "#0ea5e9" : "#d97706"}
-              opacity={0.9}
-              filter={`url(#glow-${isInbound ? "purple" : "blue"})`}
-            />
-          );
-        })}
-
-        {/* Node: Your App */}
-        <rect x="10" y="105" width="75" height="50" rx="10" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.1)" strokeWidth="1"/>
-        <text x="47" y="128" textAnchor="middle" fill="#a1a1aa" fontSize="9" fontFamily="monospace">YOUR</text>
-        <text x="47" y="142" textAnchor="middle" fill="#a1a1aa" fontSize="9" fontFamily="monospace">APP</text>
-
-        {/* Node: Repath Gateway (center, glowing) */}
-        <rect x="290" y="98" width="80" height="64" rx="12" fill="rgba(124,58,237,0.12)" stroke="rgba(124,58,237,0.4)" strokeWidth="1.5"/>
-        <rect x="290" y="98" width="80" height="64" rx="12" fill="none" stroke="rgba(124,58,237,0.15)" strokeWidth="8"/>
-        <text x="330" y="122" textAnchor="middle" fill="#a78bfa" fontSize="8" fontFamily="monospace" fontWeight="bold">REPATH</text>
-        <text x="330" y="136" textAnchor="middle" fill="#a78bfa" fontSize="8" fontFamily="monospace" fontWeight="bold">GATEWAY</text>
-        <text x="330" y="152" textAnchor="middle" fill="rgba(124,58,237,0.6)" fontSize="7" fontFamily="monospace">routes + scores</text>
-
-        {/* Node: Baseline */}
-        <rect x="562" y="55" width="78" height="50" rx="10" fill="rgba(14,165,233,0.08)" stroke="rgba(14,165,233,0.3)" strokeWidth="1"/>
-        <text x="601" y="77" textAnchor="middle" fill="#38bdf8" fontSize="9" fontFamily="monospace" fontWeight="bold">BASELINE</text>
-        <text x="601" y="91" textAnchor="middle" fill="rgba(14,165,233,0.5)" fontSize="8" fontFamily="monospace">~80% traffic</text>
-
-        {/* Node: Candidate */}
-        <rect x="562" y="155" width="78" height="50" rx="10" fill="rgba(217,119,6,0.08)" stroke="rgba(217,119,6,0.3)" strokeWidth="1"/>
-        <text x="601" y="177" textAnchor="middle" fill="#fbbf24" fontSize="9" fontFamily="monospace" fontWeight="bold">CANDIDATE</text>
-        <text x="601" y="191" textAnchor="middle" fill="rgba(217,119,6,0.5)" fontSize="8" fontFamily="monospace">~20% traffic</text>
-
-        {/* Labels */}
-        <text x="185" y="120" textAnchor="middle" fill="rgba(124,58,237,0.6)" fontSize="8" fontFamily="monospace">all requests</text>
-        <text x="460" y="70"  textAnchor="middle" fill="rgba(14,165,233,0.6)"  fontSize="8" fontFamily="monospace">current prompt</text>
-        <text x="460" y="205" textAnchor="middle" fill="rgba(217,119,6,0.6)"   fontSize="8" fontFamily="monospace">new prompt (canary)</text>
-
-        {/* Evaluator arrow from gateway down */}
-        <path d="M 330 162 L 330 220" stroke="rgba(167,139,250,0.2)" strokeWidth="1" strokeDasharray="4 3"/>
-        <rect x="270" y="220" width="120" height="30" rx="8" fill="rgba(124,58,237,0.06)" stroke="rgba(124,58,237,0.2)" strokeWidth="1"/>
-        <text x="330" y="239" textAnchor="middle" fill="rgba(167,139,250,0.7)" fontSize="8" fontFamily="monospace">LLM Judge → auto-rollback</text>
+/* ─── Hero geometry (Together.ai-inspired) ─────────────────────────────────── */
+function HeroGeometry() {
+  return (
+    <div className="absolute right-0 top-0 w-[560px] h-[560px] pointer-events-none select-none" aria-hidden>
+      <svg viewBox="0 0 560 560" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+        <circle cx="310" cy="240" r="210" stroke="rgba(124,58,237,0.10)" strokeWidth="1" />
+        <circle cx="310" cy="240" r="170" stroke="rgba(124,58,237,0.07)" strokeWidth="0.8" />
+        <ellipse cx="280" cy="230" rx="160" ry="95" fill="rgba(59,130,246,0.12)" stroke="rgba(59,130,246,0.35)" strokeWidth="1" transform="rotate(-22 280 230)" />
+        <ellipse cx="270" cy="210" rx="100" ry="56" fill="rgba(99,102,241,0.08)" stroke="rgba(99,102,241,0.20)" strokeWidth="0.8" transform="rotate(-22 270 210)" />
+        <ellipse cx="340" cy="270" rx="130" ry="72" fill="rgba(124,58,237,0.10)" stroke="rgba(124,58,237,0.30)" strokeWidth="1" transform="rotate(14 340 270)" />
+        <path d="M 410 100 L 490 160 L 460 310 L 380 240 Z" fill="rgba(249,115,22,0.18)" stroke="rgba(249,115,22,0.45)" strokeWidth="1" />
+        <path d="M 420 115 L 480 168 L 455 290 L 392 228 Z" fill="rgba(251,146,60,0.10)" stroke="rgba(251,146,60,0.25)" strokeWidth="0.6" />
+        <circle cx="190" cy="310" r="18" fill="rgba(124,58,237,0.15)" stroke="rgba(124,58,237,0.35)" strokeWidth="0.8" />
+        <circle cx="460" cy="120" r="12" fill="rgba(249,115,22,0.25)" stroke="rgba(249,115,22,0.4)" strokeWidth="0.8" />
+        <circle cx="350" cy="390" r="8"  fill="rgba(59,130,246,0.20)" stroke="rgba(59,130,246,0.4)"  strokeWidth="0.8" />
+        <line x1="210" y1="195" x2="150" y2="170" stroke="rgba(0,0,0,0.20)" strokeWidth="0.8" />
+        <rect x="20" y="158" width="128" height="22" rx="4" fill="white" stroke="rgba(0,0,0,0.10)" />
+        <text x="84" y="173" textAnchor="middle" fontSize="9" fill="#374151" fontFamily="Inter,sans-serif" fontWeight="500">● TRAFFIC SPLITTING</text>
+        <line x1="335" y1="180" x2="370" y2="128" stroke="rgba(0,0,0,0.20)" strokeWidth="0.8" />
+        <rect x="370" y="118" width="120" height="22" rx="4" fill="white" stroke="rgba(0,0,0,0.10)" />
+        <text x="430" y="133" textAnchor="middle" fontSize="9" fill="#374151" fontFamily="Inter,sans-serif" fontWeight="500">● QUALITY SCORING</text>
+        <line x1="400" y1="295" x2="440" y2="330" stroke="rgba(0,0,0,0.20)" strokeWidth="0.8" />
+        <rect x="440" y="320" width="108" height="22" rx="4" fill="white" stroke="rgba(0,0,0,0.10)" />
+        <text x="494" y="335" textAnchor="middle" fontSize="9" fill="#374151" fontFamily="Inter,sans-serif" fontWeight="500">● AUTO-ROLLBACK</text>
       </svg>
     </div>
   );
 }
 
-// ── Animated quality score bars ───────────────────────────────────────────────
-
-function QualityBars() {
-  const scores = [0.92, 0.89, 0.91, 0.93, 0.88, 0.85, 0.72, 0.65];
+function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: { dataKey: string; value: number; color: string; name: string }[]; label?: string }) {
+  if (!active || !payload?.length) return null;
   return (
-    <div className="relative h-[100px] flex items-end gap-1.5 px-2">
-      {scores.map((score, idx) => {
-        const bad = score < 0.70;
-        const warn = score >= 0.70 && score < 0.80;
-        return (
-          <div key={idx} className="flex-1 flex flex-col items-center gap-1">
-            <span className={`text-[9px] font-mono ${bad ? "text-red-400" : warn ? "text-yellow-400" : "text-emerald-400"}`}>
-              {score.toFixed(2)}
-            </span>
-            <div
-              className={`w-full rounded-t transition-all ${bad ? "bg-red-500" : warn ? "bg-yellow-500" : "bg-emerald-500"}`}
-              style={{ height: `${score * 65}px` }}
-            />
-          </div>
-        );
-      })}
-      {/* Threshold line */}
-      <div className="absolute left-2 right-2 border-t border-dashed border-red-500/40" style={{ bottom: "46px" }}>
-        <span className="absolute right-0 -top-4 text-[9px] text-red-400/70">rollback threshold</span>
-      </div>
-      {/* Rollback badge */}
-      <div className="absolute bottom-0 right-2 flex items-center gap-1 px-2 py-1 rounded bg-red-500/10 border border-red-500/20">
-        <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
-        <span className="text-[9px] text-red-400 font-medium">Auto-rollback triggered</span>
-      </div>
-    </div>
-  );
-}
-
-// ── Rollout progress bar ──────────────────────────────────────────────────────
-
-function RolloutProgress() {
-  const steps = [
-    { label: "5%",   status: "done"    },
-    { label: "25%",  status: "done"    },
-    { label: "50%",  status: "active"  },
-    { label: "100%", status: "pending" },
-  ];
-  return (
-    <div className="relative flex items-center justify-between px-4 py-3">
-      <div className="absolute left-10 right-10 top-1/2 -translate-y-1/2 h-[2px] bg-white/[0.06]">
-        <div className="h-full w-[55%] bg-gradient-to-r from-emerald-500 to-violet-500 rounded-full">
-          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-violet-400 animate-ping" />
-        </div>
-      </div>
-      {steps.map((s, i) => (
-        <div key={i} className="relative flex flex-col items-center gap-2 z-10">
-          <div className={`w-9 h-9 rounded-full flex items-center justify-center text-[11px] font-bold border-2 ${
-            s.status === "done"    ? "bg-emerald-500/20 border-emerald-500 text-emerald-400" :
-            s.status === "active"  ? "bg-violet-500/20 border-violet-400 text-violet-300 animate-pulse" :
-            "bg-zinc-900 border-zinc-700 text-zinc-600"
-          }`}>{s.label}</div>
-          <span className={`text-[10px] font-medium ${
-            s.status === "done" ? "text-emerald-400" :
-            s.status === "active" ? "text-violet-400" : "text-zinc-600"
-          }`}>{s.status === "done" ? "✓ passed" : s.status === "active" ? "live" : "pending"}</span>
+    <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-xs">
+      <div className="text-gray-500 mb-1">{label}</div>
+      {payload.map((p) => p.value != null && (
+        <div key={p.dataKey} className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full" style={{ background: p.color }} />
+          <span className="text-gray-700">{p.name === "v1" ? "v1 stable" : "v2 canary"}: <strong>{p.value.toFixed(2)}</strong></span>
         </div>
       ))}
     </div>
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
-
+/* ─── Page ─────────────────────────────────────────────────────────────────── */
 export default function LandingPage() {
-  const [navScrolled, setNavScrolled] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("canary");
+  const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    const onScroll = () => setNavScrolled(window.scrollY > 20);
-    window.addEventListener("scroll", onScroll);
-    return () => window.removeEventListener("scroll", onScroll);
+    const fn = () => setScrolled(window.scrollY > 8);
+    window.addEventListener("scroll", fn, { passive: true });
+    return () => window.removeEventListener("scroll", fn);
   }, []);
 
-  const plans = [
-    {
-      name: "Starter",
-      price: "$49",
-      inr: "₹4,099",
-      period: "/month",
-      evals: "10,000 evals/mo",
-      highlight: false,
-      features: [
-        "3 active rollouts",
-        "OpenAI + Anthropic + Gemini",
-        "Auto-rollback",
-        "7-day data retention",
-        "Email alerts",
-        "Dashboard + API",
-      ],
-      cta: "Start free trial",
-      href: "/signup?plan=starter",
-    },
-    {
-      name: "Pro",
-      price: "$149",
-      inr: "₹12,499",
-      period: "/month",
-      evals: "100,000 evals/mo",
-      highlight: true,
-      features: [
-        "Unlimited rollouts",
-        "All providers + OpenRouter fallback",
-        "Auto-rollback",
-        "90-day data retention",
-        "Slack + webhook alerts",
-        "Custom eval criteria",
-        "Priority support",
-      ],
-      cta: "Start free trial",
-      href: "/signup?plan=pro",
-    },
-    {
-      name: "Enterprise",
-      price: "Custom",
-      inr: "Custom",
-      period: "",
-      evals: "Unlimited evals",
-      highlight: false,
-      features: [
-        "Dedicated infrastructure",
-        "SSO / SAML",
-        "Team RBAC",
-        "1-year data retention",
-        "On-call support",
-        "Custom SLA",
-      ],
-      cta: "Contact us",
-      href: "mailto:hello@tryrepath.com?subject=Enterprise",
-    },
-  ];
+  const tab = featureTabs.find((t) => t.id === activeTab)!;
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-white">
+    <div className="min-h-screen bg-white text-[#0A0A0B] overflow-x-hidden" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
 
-      {/* ── Nav ─────────────────────────────────────────────────── */}
-      <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${navScrolled ? "bg-[#09090b]/95 border-b border-white/[0.06] backdrop-blur-md" : ""}`}>
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5">
-            <Image src="/logo-icon.png" alt="Repath" width={30} height={30} className="rounded-lg" />
-            <span className="text-[19px] font-bold tracking-tight">Repath</span>
+      {/* ══ NAV ══════════════════════════════════════════════════════════════ */}
+      <header className={`sticky top-0 z-50 bg-white transition-shadow duration-200 ${scrolled ? "shadow-[0_1px_0_0_rgba(0,0,0,0.08)]" : ""}`}>
+        <nav className="max-w-7xl mx-auto px-6 h-[68px] flex items-center justify-between gap-6">
+          <Link href="/" className="flex items-center gap-2.5 shrink-0">
+            <Image src="/logo-icon.png" alt="Repath" width={28} height={28} className="rounded-lg" />
+            <span className="font-semibold text-[15px] tracking-tight">Repath</span>
           </Link>
-          <div className="hidden md:flex items-center gap-8">
-            {[["#features","Features"],["#how","How It Works"],["#pricing","Pricing"]].map(([href, label]) => (
-              <a key={href} href={href} className="text-[14px] text-zinc-400 hover:text-white transition-colors">{label}</a>
+
+          <div className="hidden md:flex items-center gap-0.5">
+            {[["#features","Features"],["#how-it-works","How It Works"],["#pricing","Pricing"]].map(([href, label]) => (
+              <a key={href} href={href} className="px-3.5 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors rounded-lg hover:bg-gray-50">{label}</a>
             ))}
           </div>
-          <div className="flex items-center gap-3">
-            <Link href="/login" className="text-[14px] text-zinc-400 hover:text-white transition-colors hidden sm:block">Sign in</Link>
-            <Link href="/signup" className="inline-flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white px-5 py-2.5 rounded-lg text-[14px] font-semibold transition-all shadow-lg shadow-violet-600/20 hover:shadow-violet-500/30">
+
+          <div className="hidden md:flex items-center gap-3">
+            <Link href="/login" className="text-sm text-gray-600 hover:text-gray-900 transition-colors px-3 py-2">Sign in</Link>
+            <Link href="/signup" className="px-4 py-2 text-sm font-medium bg-[#0A0A0B] text-white rounded-lg hover:bg-gray-800 transition-colors">Start free trial</Link>
+          </div>
+
+          <button className="md:hidden text-gray-600 hover:text-gray-900" onClick={() => setMobileOpen(!mobileOpen)}>
+            {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </nav>
+
+        {mobileOpen && (
+          <div className="md:hidden border-t border-gray-100 bg-white px-6 py-4 flex flex-col gap-1">
+            {[["#features","Features"],["#how-it-works","How It Works"],["#pricing","Pricing"]].map(([href, label]) => (
+              <a key={href} href={href} className="py-2.5 text-sm text-gray-600 hover:text-gray-900" onClick={() => setMobileOpen(false)}>{label}</a>
+            ))}
+            <div className="flex gap-3 pt-3 border-t border-gray-100 mt-2">
+              <Link href="/login" className="text-sm text-gray-600 py-2">Sign in</Link>
+              <Link href="/signup" className="px-4 py-2 text-sm font-medium bg-[#0A0A0B] text-white rounded-lg">Start free trial</Link>
+            </div>
+          </div>
+        )}
+      </header>
+
+      {/* ══ HERO ═════════════════════════════════════════════════════════════ */}
+      <section className="relative max-w-7xl mx-auto px-6 pt-20 pb-28 min-h-[580px] flex items-center overflow-hidden">
+        <HeroGeometry />
+
+        <div className="relative z-10 max-w-[560px]">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-100 text-xs text-gray-500 mb-6 border border-gray-200">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+            AI-native progressive delivery · 7-day free trial
+          </div>
+
+          <motion.h1
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+            className="text-5xl md:text-6xl font-bold tracking-tight leading-[1.06] mb-5"
+          >
+            Ship AI changes<br />
+            <span className="text-gray-400">without the risk.</span>
+          </motion.h1>
+
+          <motion.p
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+            className="text-lg text-gray-500 leading-relaxed mb-8 max-w-[480px]"
+          >
+            Canary deployments for LLM prompts and models. Repath splits traffic, scores every response with an AI judge, and rolls back automatically before your users notice.
+          </motion.p>
+
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.18, duration: 0.6 }}
+            className="flex flex-wrap gap-3 mb-8"
+          >
+            <Link href="/signup" className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#0A0A0B] text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors">
               Start free trial <ArrowRight className="w-4 h-4" />
             </Link>
-          </div>
-        </div>
-      </nav>
-
-      {/* ── Hero ────────────────────────────────────────────────── */}
-      <section className="relative pt-32 pb-20 overflow-hidden">
-        {/* Background */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[900px] h-[500px] bg-violet-600/[0.06] rounded-full blur-[140px]" />
-          <div className="absolute top-1/3 left-[15%] w-[400px] h-[400px] bg-blue-600/[0.04] rounded-full blur-[120px]" />
-          <div className="absolute top-1/3 right-[15%] w-[400px] h-[400px] bg-amber-600/[0.03] rounded-full blur-[120px]" />
-          {/* Dot grid */}
-          <div className="absolute inset-0" style={{
-            backgroundImage: "radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px)",
-            backgroundSize: "32px 32px"
-          }}/>
-        </div>
-
-        <div className="relative max-w-5xl mx-auto px-6 text-center">
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-violet-600/10 border border-violet-500/20 mb-8">
-            <span className="w-2 h-2 rounded-full bg-violet-400 animate-pulse" />
-            <span className="text-[13px] font-medium text-violet-300">AI-native progressive delivery · 7-day free trial</span>
-          </div>
-
-          {/* H1 */}
-          <h1 className="text-[52px] md:text-[72px] lg:text-[82px] font-bold leading-[1.0] tracking-tight mb-7">
-            Ship AI changes
-            <br />
-            <span className="bg-gradient-to-r from-violet-400 via-violet-300 to-indigo-400 bg-clip-text text-transparent">
-              without the risk.
-            </span>
-          </h1>
-
-          <p className="text-[18px] md:text-[21px] text-zinc-400 max-w-3xl mx-auto mb-10 leading-relaxed">
-            Canary deployments for LLM prompts and models. Repath splits traffic, scores every response with an AI judge, and <span className="text-white font-medium">rolls back automatically</span> before your users notice.
-          </p>
-
-          {/* CTAs */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
-            <Link href="/signup" className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-500 text-white px-9 py-4 rounded-xl text-[16px] font-bold transition-all shadow-2xl shadow-violet-600/30 hover:shadow-violet-500/40 hover:-translate-y-0.5">
-              Start free trial
-              <ArrowRight className="w-5 h-5" />
-            </Link>
-            <Link href="#pricing" className="inline-flex items-center gap-2 bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] text-white px-9 py-4 rounded-xl text-[16px] font-medium transition-all hover:-translate-y-0.5">
+            <a href="#pricing" className="inline-flex items-center gap-2 px-5 py-2.5 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
               See pricing
-            </Link>
-          </div>
+            </a>
+          </motion.div>
 
-          {/* Social proof strip */}
-          <div className="flex flex-wrap items-center justify-center gap-6 text-[13px] text-zinc-500 mb-16">
-            {[
-              "No credit card to start",
-              "7-day free trial",
-              "Cancel anytime",
-              "UPI & cards accepted",
-            ].map((t, i) => (
-              <span key={i} className="flex items-center gap-1.5">
-                <Check className="w-3.5 h-3.5 text-violet-400" />{t}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3, duration: 0.5 }}
+            className="flex flex-wrap gap-x-5 gap-y-2"
+          >
+            {["No credit card to start", "7-day free trial", "Cancel anytime", "UPI & cards accepted"].map((t) => (
+              <span key={t} className="flex items-center gap-1.5 text-xs text-gray-400">
+                <Check className="w-3.5 h-3.5 text-gray-400" /> {t}
               </span>
             ))}
-          </div>
+          </motion.div>
+        </div>
+      </section>
 
-          {/* Traffic Flow Animation */}
-          <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] backdrop-blur p-6 md:p-8 max-w-3xl mx-auto">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="flex gap-1.5">
-                <div className="w-3 h-3 rounded-full bg-[#ff5f57]" />
-                <div className="w-3 h-3 rounded-full bg-[#febc2e]" />
-                <div className="w-3 h-3 rounded-full bg-[#28c840]" />
-              </div>
-              <span className="text-[11px] text-zinc-500 font-mono ml-2">live traffic routing</span>
-              <span className="ml-auto flex items-center gap-1 text-[11px] text-emerald-400">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                live
-              </span>
-            </div>
-            <TrafficFlow />
+      {/* ══ CAPABILITIES MARQUEE ══════════════════════════════════════════════ */}
+      <section className="border-t border-gray-100 py-8">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="flex items-center gap-6 overflow-hidden">
+            <span className="text-xs text-gray-400 uppercase tracking-widest whitespace-nowrap shrink-0">What we do</span>
+            <div className="flex-1 overflow-hidden"><Marquee /></div>
           </div>
         </div>
       </section>
 
-      {/* ── Problem ─────────────────────────────────────────────── */}
-      <section className="py-24 border-t border-white/[0.05]">
+      {/* ══ PLATFORM STATS ════════════════════════════════════════════════════ */}
+      <section className="max-w-7xl mx-auto px-6 py-24">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+          className="text-center mb-14"
+        >
+          <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-3">The Repath Platform</h2>
+          <p className="text-gray-500 text-lg max-w-xl mx-auto">Catch regressions, evaluate quality, and revert automatically — all before your users notice.</p>
+        </motion.div>
+
+        <div className="grid md:grid-cols-3 gap-6">
+          {[
+            { palette: C.blue,   arrow: "↑", tag: "FASTER DETECTION", value: 4,   suffix: " responses", desc: "Mean responses before a quality drop is flagged and rollback triggered.",         link: null },
+            { palette: C.violet, arrow: "↓", tag: "LATENCY ADDED",     value: 0,   suffix: "ms",         desc: "Eval runs async — never touches your critical path. Your users never feel it.", link: "How it works" },
+            { palette: C.amber,  arrow: "<", tag: "ROLLBACK SPEED",    value: 500, suffix: "ms",         desc: "Time from detection to full traffic restore on the stable version.",             link: null },
+          ].map((s, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: i * 0.1, duration: 0.5 }}
+              className="rounded-2xl p-8 flex flex-col gap-4"
+              style={{ background: s.palette.bg }}
+            >
+              <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold tracking-widest uppercase" style={{ color: s.palette.label }}>
+                <span>{s.arrow}</span><span>{s.tag}</span>
+              </div>
+              <div className="text-6xl md:text-7xl font-bold tracking-tight" style={{ color: s.palette.text }}>
+                {s.arrow === "<" ? (
+                  <span>&lt;<AnimatedNumber value={s.value} suffix={s.suffix} /></span>
+                ) : (
+                  <AnimatedNumber value={s.value} suffix={s.suffix} />
+                )}
+              </div>
+              <p className="text-sm leading-relaxed" style={{ color: s.palette.label }}>{s.desc}</p>
+              {s.link && (
+                <a href="#how-it-works" className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wider" style={{ color: s.palette.label }}>
+                  {s.link} <ChevronRight className="w-3 h-3" />
+                </a>
+              )}
+            </motion.div>
+          ))}
+        </div>
+      </section>
+
+      {/* ══ TAB FEATURES ══════════════════════════════════════════════════════ */}
+      <section id="features" className="border-t border-gray-100 py-24">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="text-center mb-16">
-            <h2 className="text-[38px] md:text-[50px] font-bold mb-4">
-              AI models break <span className="text-red-400">silently.</span>
-            </h2>
-            <p className="text-[17px] text-zinc-400 max-w-2xl mx-auto">
-              Zero HTTP errors. Zero exceptions. Just worse outputs your users silently abandon — and you don't know for days.
-            </p>
+          <div className="grid grid-cols-3 border-b border-gray-200 mb-12">
+            {featureTabs.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setActiveTab(t.id)}
+                className={`py-4 text-sm font-medium text-center transition-all border-b-2 -mb-px ${
+                  activeTab === t.id
+                    ? "border-[#0A0A0B] text-[#0A0A0B]"
+                    : "border-transparent text-gray-400 hover:text-gray-600"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-            {[
-              { icon: Activity,      title: "Provider updates break you",       body: "OpenAI pushes model updates silently. Your prompt that scored 0.93 yesterday scores 0.61 today." },
-              { icon: AlertTriangle, title: "Weeks before you find out",         body: "Without quality scoring, regressions hide until users complain. By then, churn has already happened." },
-              { icon: TrendingUp,    title: "Feature flags don't work for AI", body: "Flags control deployment, not quality. They can't answer: 'is the new version actually better?'" },
-            ].map(({ icon: Icon, title, body }, i) => (
-              <div key={i} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-7 hover:border-red-500/20 transition-all">
-                <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center mb-4">
-                  <Icon className="w-5 h-5 text-red-400" strokeWidth={1.5} />
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="grid md:grid-cols-2 gap-12 items-start"
+          >
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center">
+                  <tab.icon className="w-4 h-4 text-violet-600" />
                 </div>
-                <h3 className="text-[16px] font-semibold mb-2">{title}</h3>
-                <p className="text-[14px] text-zinc-400 leading-relaxed">{body}</p>
+                <h3 className="text-lg font-semibold">{tab.headline}</h3>
               </div>
-            ))}
-          </div>
-
-          {/* Quality drop visualization */}
-          <div className="max-w-xl mx-auto rounded-xl border border-white/[0.06] bg-white/[0.02] p-6">
-            <p className="text-[13px] text-zinc-400 text-center mb-4">Quality score over time — Repath catches the drop instantly</p>
-            <QualityBars />
-          </div>
-        </div>
-      </section>
-
-      {/* ── How it works ────────────────────────────────────────── */}
-      <section id="how" className="py-24 border-t border-white/[0.05] bg-white/[0.01]">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="text-center mb-16">
-            <h2 className="text-[38px] md:text-[50px] font-bold mb-4">How it works</h2>
-            <p className="text-[17px] text-zinc-400 max-w-xl mx-auto">Three steps. Automatic. No code changes beyond one line.</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-14">
-            {[
-              { n: "01", icon: GitBranch,  color: "blue",   title: "Split traffic",     body: "Point your app at Repath instead of OpenAI directly. We route a small % to your new prompt or model — users see nothing different." },
-              { n: "02", icon: Eye,        color: "violet", title: "Score every response", body: "An LLM judge evaluates every response against your quality criteria. Async — never adds latency." },
-              { n: "03", icon: RotateCcw,  color: "green",  title: "Auto-advance or rollback", body: "Quality holding? Traffic advances to 100%. Quality drops? Rollback in under 500ms, before your users notice." },
-            ].map(({ n, icon: Icon, color, title, body }) => (
-              <div key={n} className={`rounded-2xl border p-8 hover:bg-white/[0.03] transition-all ${
-                color === "blue"   ? "border-blue-500/20 hover:border-blue-500/30" :
-                color === "violet" ? "border-violet-500/20 hover:border-violet-500/30" :
-                "border-emerald-500/20 hover:border-emerald-500/30"
-              } bg-white/[0.02]`}>
-                <div className="flex items-center gap-4 mb-5">
-                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${
-                    color === "blue" ? "bg-blue-500/10" : color === "violet" ? "bg-violet-500/10" : "bg-emerald-500/10"
-                  }`}>
-                    <Icon className={`w-5 h-5 ${
-                      color === "blue" ? "text-blue-400" : color === "violet" ? "text-violet-400" : "text-emerald-400"
-                    }`} strokeWidth={1.5} />
+              <p className="text-gray-500 leading-relaxed mb-6">{tab.primary}</p>
+              <div className="flex flex-col gap-4 mb-8">
+                {tab.sub.map((item) => (
+                  <div key={item.label} className="flex items-start gap-3">
+                    <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center shrink-0 mt-0.5">
+                      <div className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">{item.label}</div>
+                      <div className="text-sm text-gray-500">{item.desc}</div>
+                    </div>
                   </div>
-                  <span className={`text-[36px] font-bold opacity-20 ${
-                    color === "blue" ? "text-blue-400" : color === "violet" ? "text-violet-400" : "text-emerald-400"
-                  }`}>{n}</span>
-                </div>
-                <h3 className="text-[18px] font-semibold mb-3">{title}</h3>
-                <p className="text-[14px] text-zinc-400 leading-relaxed">{body}</p>
+                ))}
               </div>
-            ))}
-          </div>
+              <Link href="/signup" className="inline-flex items-center gap-1.5 text-sm font-semibold bg-[#0A0A0B] text-white px-5 py-2.5 rounded-lg hover:bg-gray-800 transition-colors">
+                START FREE TRIAL
+              </Link>
+            </div>
 
-          {/* Rollout progress widget */}
-          <div className="max-w-2xl mx-auto rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
-            <div className="px-6 py-4 border-b border-white/[0.06]">
-              <p className="text-[13px] font-semibold text-white">Rollout: new-support-prompt</p>
-              <p className="text-[11px] text-zinc-500 mt-0.5">Quality gate: score ≥ 0.85 to advance</p>
+            <div className="rounded-2xl border border-gray-200 bg-gray-50 overflow-hidden" style={{ minHeight: 260 }}>
+              {tab.panel}
             </div>
-            <div className="p-6">
-              <RolloutProgress />
-            </div>
-          </div>
+          </motion.div>
         </div>
       </section>
 
-      {/* ── Features ─────────────────────────────────────────────── */}
-      <section id="features" className="py-24 border-t border-white/[0.05]">
+      {/* ══ PROBLEM (dark) ════════════════════════════════════════════════════ */}
+      <section className="py-24" style={{ background: C.dark }}>
         <div className="max-w-7xl mx-auto px-6">
-          <div className="text-center mb-16">
-            <h2 className="text-[38px] md:text-[50px] font-bold mb-4">Everything you need</h2>
-            <p className="text-[17px] text-zinc-400 max-w-xl mx-auto">Built specifically for AI deployment safety. Not feature flags with an AI sticker.</p>
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="mb-6"
+          >
+            <div className="inline-flex items-center gap-2 text-xs text-red-400 font-mono mb-4">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+              quality regressions caught live
+            </div>
+            <h2 className="text-3xl md:text-5xl font-bold text-white mb-3">AI models break silently.</h2>
+            <p className="text-gray-400 max-w-xl">Zero HTTP errors. Zero exceptions. Just worse outputs your users silently abandon — and you don&apos;t know for days.</p>
+          </motion.div>
+
+          <div className="relative mt-10">
+            <div className="flex gap-4 overflow-x-auto pb-4" style={{ scrollbarWidth: "none" }}>
+              {researchCards.map((card, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, x: 20 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.08, duration: 0.5 }}
+                  className={`shrink-0 w-72 rounded-2xl p-6 flex flex-col justify-between gap-4 ${card.highlight ? "bg-gray-600/40 border border-gray-500/40" : "bg-gray-900/60 border border-gray-800"}`}
+                  style={{ minHeight: 220 }}
+                >
+                  <div>
+                    <span className="text-[10px] font-semibold tracking-widest uppercase text-gray-400 bg-gray-800 px-2 py-1 rounded">{card.tag}</span>
+                    <h4 className="text-white font-semibold text-base mt-4 leading-snug">{card.title}</h4>
+                    <p className="text-gray-400 text-sm mt-2 leading-relaxed">{card.sub}</p>
+                  </div>
+                  <div className="text-xs text-gray-500 uppercase tracking-wider">{card.author}</div>
+                </motion.div>
+              ))}
+            </div>
+            <div className="flex gap-2 mt-6">
+              <button className="w-8 h-8 rounded-full border border-gray-700 flex items-center justify-center text-gray-400 hover:text-white hover:border-gray-500 transition-colors">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button className="w-8 h-8 rounded-full border border-gray-700 flex items-center justify-center text-gray-400 hover:text-white hover:border-gray-500 transition-colors">
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="mt-16 rounded-2xl border border-gray-800 bg-gray-900/50 p-8"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <div className="text-sm text-gray-400 mb-1">Quality score over time — Repath catches the drop instantly</div>
+                <div className="flex gap-4">
+                  <span className="flex items-center gap-1.5 text-xs text-gray-400"><span className="w-2 h-2 rounded-full bg-indigo-400 inline-block" />v1 stable</span>
+                  <span className="flex items-center gap-1.5 text-xs text-gray-400"><span className="w-2 h-2 rounded-full bg-orange-400 inline-block" />v2 canary</span>
+                </div>
+              </div>
+              <div className="text-right text-xs text-red-400 bg-red-900/30 border border-red-800/50 rounded-lg px-3 py-1.5">
+                Auto-rollback triggered
+              </div>
+            </div>
+            <div className="h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={qualityData} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6366F1" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="#6366F1" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#F97316" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="#F97316" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                  <XAxis dataKey="t" tick={{ fill: "#6B7280", fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis domain={[0.4, 1.0]} tickFormatter={(v: number) => v.toFixed(2)} tick={{ fill: "#6B7280", fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<ChartTooltip />} />
+                  <ReferenceLine y={0.85} stroke="rgba(239,68,68,0.6)" strokeDasharray="4 4" label={{ value: "rollback threshold", fill: "#EF4444", fontSize: 10, position: "insideTopRight" }} />
+                  <Area type="monotone" dataKey="v1" name="v1" stroke="#6366F1" strokeWidth={2} fill="url(#g1)" dot={false} />
+                  <Area type="monotone" dataKey="v2" name="v2" stroke="#F97316" strokeWidth={2} fill="url(#g2)" dot={false} connectNulls={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ══ HOW IT WORKS ══════════════════════════════════════════════════════ */}
+      <section id="how-it-works" className="max-w-7xl mx-auto px-6 py-24">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+          className="mb-14"
+        >
+          <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-3">How it works</p>
+          <h2 className="text-3xl md:text-4xl font-bold tracking-tight max-w-xl">Three steps. Automatic.<br />No code changes beyond one line.</h2>
+        </motion.div>
+
+        <div className="grid md:grid-cols-3 gap-8">
+          {[
+            { n: "01", title: "Split traffic",              body: "Point your app at Repath instead of OpenAI directly. We route a small % to your new prompt or model — users see nothing different." },
+            { n: "02", title: "Score every response",       body: "An LLM judge evaluates every response against your quality criteria. Async — never adds latency to your app." },
+            { n: "03", title: "Auto-advance or rollback",   body: "Quality holding? Traffic advances to 100%. Quality drops? Rollback in under 500ms, before your users notice." },
+          ].map((step, i) => (
+            <motion.div
+              key={step.n}
+              initial={{ opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: i * 0.1, duration: 0.5 }}
+              className="flex flex-col gap-4"
+            >
+              <div className="text-[11px] font-semibold tracking-widest uppercase text-violet-500">{step.n}</div>
+              <div className="w-full h-px bg-gray-200 relative">
+                <div className="absolute left-0 top-0 h-px bg-violet-400" style={{ width: i === 0 ? "100%" : i === 1 ? "50%" : "10%" }} />
+              </div>
+              <h3 className="text-xl font-semibold mt-2">{step.title}</h3>
+              <p className="text-gray-500 text-sm leading-relaxed">{step.body}</p>
+            </motion.div>
+          ))}
+        </div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+          className="mt-14 rounded-2xl border border-gray-200 bg-gray-50 p-8"
+        >
+          <div className="text-sm font-medium text-gray-700 mb-1">Rollout: <span className="font-mono text-gray-900">new-support-prompt</span></div>
+          <div className="text-xs text-gray-400 mb-6">Quality gate: score ≥ 0.85 to advance</div>
+          <div className="flex items-center gap-0">
             {[
-              { icon: GitBranch, title: "Canary deployments",        body: "5% → 25% → 50% → 100% with configurable quality gates at each step." },
-              { icon: Eye,       title: "LLM-as-judge evaluation",   body: "Define criteria in plain English. Scores every response asynchronously — never slows your app." },
-              { icon: Shield,    title: "Auto-rollback in <500ms",   body: "Score drops below threshold? Back to baseline instantly. No manual intervention, no on-call alerts." },
-              { icon: Zap,       title: "Provider failover",          body: "OpenAI down? We retry, then silently switch to Anthropic or OpenRouter. Your app keeps running." },
-              { icon: Activity,  title: "Provider health tracking",  body: "Live error rates per provider. Know about outages before your users do." },
-              { icon: TrendingUp, title: "Full audit trail",          body: "Every advance and rollback logged with exact scores. Complete visibility into every decision." },
-            ].map(({ icon: Icon, title, body }, i) => (
-              <div key={i} className="group rounded-xl border border-white/[0.06] bg-white/[0.02] p-6 hover:border-violet-500/25 hover:bg-violet-600/[0.02] transition-all">
-                <div className="w-9 h-9 rounded-lg bg-violet-500/10 group-hover:bg-violet-500/15 flex items-center justify-center mb-4 transition-colors">
-                  <Icon className="w-4.5 h-4.5 text-violet-400" strokeWidth={1.5} />
+              { label: "5%",   status: "passed" },
+              { label: "25%",  status: "passed" },
+              { label: "50%",  status: "live" },
+              { label: "100%", status: "pending" },
+            ].map((step, i) => (
+              <div key={step.label} className="flex items-center flex-1 last:flex-none">
+                <div className="flex flex-col items-center gap-2">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold border-2 ${step.status === "passed" ? "bg-emerald-50 border-emerald-400 text-emerald-700" : step.status === "live" ? "bg-blue-50 border-blue-400 text-blue-700 animate-pulse" : "bg-gray-100 border-gray-300 text-gray-400"}`}>
+                    {step.status === "passed" ? <Check className="w-3.5 h-3.5" /> : step.status === "live" ? "●" : "○"}
+                  </div>
+                  <div className="text-xs font-semibold text-gray-700">{step.label}</div>
+                  <div className={`text-[10px] ${step.status === "passed" ? "text-emerald-600" : step.status === "live" ? "text-blue-600" : "text-gray-400"}`}>
+                    {step.status === "passed" ? "✓ passed" : step.status === "live" ? "live" : "pending"}
+                  </div>
                 </div>
-                <h3 className="text-[15px] font-semibold mb-2">{title}</h3>
-                <p className="text-[13px] text-zinc-400 leading-relaxed">{body}</p>
+                {i < 3 && (
+                  <div className="flex-1 h-0.5 mx-2 mb-8" style={{ background: step.status === "passed" ? "#34D399" : "#E5E7EB" }} />
+                )}
               </div>
+            ))}
+          </div>
+        </motion.div>
+      </section>
+
+      {/* ══ FEATURES GRID ═════════════════════════════════════════════════════ */}
+      <section className="border-t border-gray-100 py-24">
+        <div className="max-w-7xl mx-auto px-6">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="mb-14"
+          >
+            <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-3">Everything you need</p>
+            <h2 className="text-3xl md:text-4xl font-bold tracking-tight max-w-xl">
+              Built specifically for AI deployment safety.<br />
+              <span className="text-gray-400">Not feature flags with an AI sticker.</span>
+            </h2>
+          </motion.div>
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
+            {features.map((f, i) => (
+              <motion.div
+                key={f.title}
+                initial={{ opacity: 0, y: 12 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: (i % 3) * 0.08, duration: 0.5 }}
+                className="flex flex-col gap-3 group"
+              >
+                <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center group-hover:bg-violet-100 transition-colors">
+                  <f.icon className="w-5 h-5 text-gray-600 group-hover:text-violet-600 transition-colors" />
+                </div>
+                <h3 className="font-semibold text-[15px]">{f.title}</h3>
+                <p className="text-sm text-gray-500 leading-relaxed">{f.body}</p>
+              </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── Pricing ──────────────────────────────────────────────── */}
-      <section id="pricing" className="py-24 border-t border-white/[0.05] bg-white/[0.01]">
+      {/* ══ PRICING ═══════════════════════════════════════════════════════════ */}
+      <section id="pricing" className="border-t border-gray-100 py-24">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="text-center mb-5">
-            <h2 className="text-[38px] md:text-[50px] font-bold mb-4">Simple pricing</h2>
-            <p className="text-[17px] text-zinc-400 max-w-xl mx-auto">7-day free trial on every plan. No credit card required to start.</p>
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="text-center mb-5"
+          >
+            <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-3">Simple pricing</p>
+            <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-3">7-day free trial on every plan.</h2>
+            <p className="text-gray-500">No credit card required to start.</p>
+          </motion.div>
+
+          <div className="flex items-center justify-center gap-2 mb-12 text-sm text-gray-500">
+            <span>🇮🇳</span>
+            <span>Indian customers: pay in INR via UPI, cards, net banking — powered by Razorpay</span>
           </div>
 
-          {/* INR note */}
-          <p className="text-center text-[13px] text-zinc-500 mb-12">
-            🇮🇳 Indian customers: pay in INR via UPI, cards, net banking — powered by Razorpay
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            {plans.map((plan) => (
-              <div key={plan.name} className={`rounded-2xl border flex flex-col p-8 transition-all ${
-                plan.highlight
-                  ? "border-violet-500/50 bg-violet-600/[0.05] shadow-xl shadow-violet-600/10"
-                  : "border-white/[0.08] bg-white/[0.02] hover:border-white/[0.12]"
-              }`}>
-                {plan.highlight && (
-                  <span className="mb-4 self-start px-3 py-1 rounded-full bg-violet-500 text-white text-[11px] font-bold">MOST POPULAR</span>
+          <div className="grid md:grid-cols-3 gap-6">
+            {pricingPlans.map((plan, i) => (
+              <motion.div
+                key={plan.name}
+                initial={{ opacity: 0, y: 16 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.1, duration: 0.5 }}
+                className={`relative rounded-2xl p-8 flex flex-col gap-6 border ${plan.style === "primary" ? "border-gray-900 bg-[#0A0A0B] text-white" : "border-gray-200 bg-white text-gray-900"}`}
+              >
+                {plan.badge && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <span className="px-3 py-1 text-[10px] font-semibold tracking-widest bg-violet-600 text-white rounded-full">{plan.badge}</span>
+                  </div>
                 )}
-                <h3 className="text-[20px] font-bold mb-1">{plan.name}</h3>
-                <div className="mb-1">
-                  <span className="text-[40px] font-bold">{plan.price}</span>
-                  <span className="text-zinc-500 text-[15px]">{plan.period}</span>
+                <div>
+                  <div className={`text-xs font-semibold tracking-widest uppercase mb-4 ${plan.style === "primary" ? "text-gray-400" : "text-gray-500"}`}>{plan.name}</div>
+                  <div className="flex items-baseline gap-1 mb-1">
+                    <span className="text-4xl font-bold">{plan.usd}</span>
+                    {plan.period && <span className={`text-sm ${plan.style === "primary" ? "text-gray-400" : "text-gray-500"}`}>{plan.period}</span>}
+                  </div>
+                  {plan.inr && (
+                    <div className={`text-sm mt-1 ${plan.style === "primary" ? "text-gray-400" : "text-gray-500"}`}>{plan.inr}/month in India</div>
+                  )}
                 </div>
-                {plan.inr !== "Custom" && (
-                  <p className="text-[13px] text-zinc-500 mb-1">{plan.inr}{plan.period} in India</p>
-                )}
-                <p className="text-[13px] text-violet-400 font-medium mb-6">{plan.evals}</p>
-
-                <ul className="space-y-3 mb-8 flex-1">
-                  {plan.features.map((f, i) => (
-                    <li key={i} className="flex items-start gap-2.5 text-[14px]">
-                      <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                      <span className="text-zinc-300">{f}</span>
+                <ul className="flex flex-col gap-3 flex-1">
+                  {plan.features.map((f) => (
+                    <li key={f} className={`flex items-start gap-2.5 text-sm ${plan.style === "primary" ? "text-gray-300" : "text-gray-600"}`}>
+                      <Check className={`w-4 h-4 shrink-0 mt-0.5 ${plan.style === "primary" ? "text-violet-400" : "text-emerald-500"}`} />
+                      {f}
                     </li>
                   ))}
                 </ul>
-
-                <Link href={plan.href} className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-[14px] font-bold transition-all ${
-                  plan.highlight
-                    ? "bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-600/25 hover:-translate-y-0.5"
-                    : plan.name === "Enterprise"
-                    ? "border border-white/[0.1] bg-white/[0.04] hover:bg-white/[0.08] text-white"
-                    : "border border-violet-500/40 text-violet-300 hover:bg-violet-600/10 hover:border-violet-500/70"
-                }`}>
+                <Link
+                  href={plan.name === "Enterprise" ? "mailto:hello@tryrepath.com?subject=Enterprise" : "/signup"}
+                  className={`py-2.5 px-4 rounded-lg text-sm font-medium text-center transition-all ${plan.style === "primary" ? "bg-white text-black hover:bg-gray-100" : "bg-[#0A0A0B] text-white hover:bg-gray-800"}`}
+                >
                   {plan.cta}
-                  {plan.name !== "Enterprise" && <ArrowRight className="w-4 h-4" />}
                 </Link>
+              </motion.div>
+            ))}
+          </div>
+
+          <p className="text-center text-sm text-gray-400 mt-8">All plans include provider failover, auto-rollback, and real-time dashboard. Cancel anytime.</p>
+        </div>
+      </section>
+
+      {/* ══ CTA ═══════════════════════════════════════════════════════════════ */}
+      <section className="border-t border-gray-100 py-24" style={{ background: C.dark }}>
+        <div className="max-w-3xl mx-auto px-6 text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+          >
+            <div className="flex items-center gap-2 text-gray-400 text-sm justify-center mb-3">
+              <div className="flex items-center gap-2">
+                <Image src="/logo-icon.png" alt="Repath" width={24} height={24} className="rounded-md" />
+                <span className="font-medium text-white">Repath</span>
+              </div>
+            </div>
+            <h2 className="text-3xl md:text-5xl font-bold text-white mb-4">Stop shipping AI blind.</h2>
+            <p className="text-gray-400 text-lg mb-8 max-w-xl mx-auto">
+              Know if your prompt change is better or worse — before your users do. Start your free trial in 30 seconds.
+            </p>
+            <Link href="/signup" className="inline-flex items-center gap-2 px-6 py-3 bg-white text-black font-medium rounded-lg hover:bg-gray-100 transition-colors text-sm mb-6">
+              Start free trial — no card needed <ArrowRight className="w-4 h-4" />
+            </Link>
+            <div className="text-sm text-gray-500 mt-4">
+              Questions? <a href="mailto:hello@tryrepath.com" className="text-gray-300 hover:text-white transition-colors">hello@tryrepath.com</a>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ══ FOOTER ════════════════════════════════════════════════════════════ */}
+      <footer className="bg-gray-50 border-t border-gray-200 overflow-hidden">
+        <div className="max-w-7xl mx-auto px-6 pt-16 pb-0">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-12">
+            <div className="col-span-2 md:col-span-1 flex flex-col gap-3">
+              <Link href="/" className="flex items-center gap-2">
+                <Image src="/logo-icon.png" alt="Repath" width={22} height={22} className="rounded-md" />
+                <span className="font-semibold text-sm">Repath</span>
+              </Link>
+            </div>
+            {[
+              { h: "PRODUCT",    links: ["Canary Deployments", "LLM-as-Judge", "Auto-Rollback", "Provider Failover", "Dashboard"] },
+              { h: "DEVELOPERS", links: ["Docs", "API Reference", "GitHub", "Status"] },
+              { h: "PRICING",    links: ["Pricing overview", "Starter", "Pro", "Enterprise"] },
+              { h: "COMPANY",    links: ["About", "Blog", "Careers", "Contact", "Support"] },
+            ].map((col) => (
+              <div key={col.h} className="flex flex-col gap-3">
+                <h4 className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">{col.h}</h4>
+                <ul className="flex flex-col gap-2">
+                  {col.links.map((l) => (
+                    <li key={l}><a href="#" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">{l}</a></li>
+                  ))}
+                </ul>
               </div>
             ))}
           </div>
-
-          <p className="text-center text-[13px] text-zinc-500 mt-8">
-            All plans include provider failover, auto-rollback, and real-time dashboard. Cancel anytime.
-          </p>
         </div>
-      </section>
 
-      {/* ── Final CTA ────────────────────────────────────────────── */}
-      <section className="py-24 border-t border-white/[0.05]">
-        <div className="max-w-3xl mx-auto px-6 text-center">
-          <div className="mb-8 inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-violet-600/10 border border-violet-500/20">
-            <Image src="/logo-icon.png" alt="Repath" width={40} height={40} className="rounded-xl" />
+        {/* Watermark */}
+        <div className="relative overflow-hidden" style={{ height: 120 }}>
+          <div
+            className="absolute bottom-0 left-0 right-0 text-center select-none pointer-events-none"
+            style={{
+              fontSize: "clamp(80px, 16vw, 180px)",
+              fontWeight: 800,
+              letterSpacing: "-0.03em",
+              lineHeight: 0.85,
+              color: "rgba(0,0,0,0.05)",
+            }}
+          >
+            Repath
           </div>
-          <h2 className="text-[36px] md:text-[48px] font-bold mb-4">
-            Stop shipping AI blind.
-          </h2>
-          <p className="text-[17px] text-zinc-400 mb-10 max-w-xl mx-auto">
-            Know if your prompt change is better or worse — before your users do. Start your free trial in 30 seconds.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/signup" className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-500 text-white px-10 py-4 rounded-xl text-[16px] font-bold transition-all shadow-2xl shadow-violet-600/30 hover:-translate-y-0.5">
-              Start free trial — no card needed
-              <ArrowRight className="w-5 h-5" />
-            </Link>
-          </div>
-          <p className="mt-4 text-[13px] text-zinc-600">Questions? <a href="mailto:hello@tryrepath.com" className="text-zinc-400 hover:text-white underline">hello@tryrepath.com</a></p>
         </div>
-      </section>
 
-      {/* ── Footer ───────────────────────────────────────────────── */}
-      <footer className="border-t border-white/[0.05] py-10">
-        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-3">
-            <Image src="/logo-icon.png" alt="Repath" width={22} height={22} className="rounded" />
-            <span className="text-[15px] font-bold">Repath</span>
-            <span className="text-zinc-600 text-[13px]">© 2026</span>
-          </div>
-          <div className="flex items-center gap-6">
-            {[
-              ["#features","Features"],
-              ["#how","How It Works"],
-              ["#pricing","Pricing"],
-              ["/login","Sign in"],
-              ["mailto:hello@tryrepath.com","Contact"],
-            ].map(([href, label]) => (
-              <a key={href} href={href} className="text-[13px] text-zinc-500 hover:text-white transition-colors">{label}</a>
-            ))}
+        <div className="border-t border-gray-200 bg-gray-50">
+          <div className="max-w-7xl mx-auto px-6 py-5 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <p className="text-xs text-gray-400">© 2026 Repath</p>
+            <div className="flex gap-5 text-xs text-gray-400">
+              {["Privacy Policy", "Terms of service", "Contact"].map((l) => (
+                <a key={l} href="#" className="hover:text-gray-700 transition-colors">{l}</a>
+              ))}
+            </div>
           </div>
         </div>
       </footer>
