@@ -51,109 +51,11 @@ const researchCards = [
   { tag: "FAILOVER", title: "Silent provider switching",               sub: "OpenAI down? We retry then silently failover to Anthropic or OpenRouter. Your app keeps running.", author: "Repath Platform" },
 ];
 
+// Feature tabs — data only, panels rendered inline below
 const featureTabs = [
-  {
-    id: "canary",
-    label: "Canary Deployments",
-    icon: GitBranch,
-    headline: "Canary Deployments",
-    primary: "5% → 25% → 50% → 100% with configurable quality gates at each step. Point your app at Repath instead of OpenAI directly. We route a small % to your new prompt — users see nothing different.",
-    sub: [
-      { label: "Traffic splitting", desc: "Any % down to 0.1% granularity. No SDK rewrites." },
-      { label: "Quality-gated advance", desc: "Traffic only increases when scores consistently hold." },
-      { label: "Instant abort", desc: "Any step can halt immediately — traffic snaps back." },
-    ],
-    panel: (
-      <div className="h-full flex flex-col gap-3 p-6 font-mono text-xs">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-emerald-600 font-semibold text-[11px] tracking-wide">ROLLOUT: new-support-prompt</span>
-        </div>
-        <div className="text-[11px] text-gray-500 mb-2">Quality gate: score ≥ 0.85 to advance</div>
-        {[
-          { pct: "5%",   status: "passed", color: "text-emerald-600" },
-          { pct: "25%",  status: "passed", color: "text-emerald-600" },
-          { pct: "50%",  status: "live",   color: "text-blue-600" },
-          { pct: "100%", status: "pending",color: "text-gray-400" },
-        ].map((step) => (
-          <div key={step.pct} className="flex items-center gap-3">
-            <div className={`w-12 text-right font-semibold ${step.color === "text-gray-400" ? "text-gray-400" : "text-gray-800"}`}>{step.pct}</div>
-            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-              <div className={`h-full rounded-full transition-all ${step.status === "passed" ? "bg-emerald-400 w-full" : step.status === "live" ? "bg-blue-400 w-1/2" : "w-0"}`} />
-            </div>
-            <span className={`text-[11px] font-medium ${step.color}`}>
-              {step.status === "passed" ? "✓ passed" : step.status === "live" ? "● live" : "pending"}
-            </span>
-          </div>
-        ))}
-      </div>
-    ),
-  },
-  {
-    id: "judge",
-    label: "LLM-as-Judge",
-    icon: BarChart2,
-    headline: "LLM-as-Judge Evaluation",
-    primary: "An independent LLM judge scores every response against your custom rubric — accuracy, tone, safety, format. Results stream back in ~120ms, fully async. No latency added to your users.",
-    sub: [
-      { label: "Plain-English criteria", desc: "Define what \"good\" means in natural language." },
-      { label: "8 judge models", desc: "GPT-4o, Claude 3.5, Gemini 1.5 Pro and more." },
-      { label: "Per-dimension scores", desc: "Accuracy, safety, format, tone — individually weighted." },
-    ],
-    panel: (
-      <div className="h-full p-6 flex flex-col gap-4">
-        <div className="text-xs text-gray-500 font-mono mb-1">EVAL RESULT — response #48291</div>
-        {[
-          { dim: "Accuracy",  score: 0.91, color: "#7C3AED" },
-          { dim: "Safety",    score: 0.98, color: "#10B981" },
-          { dim: "Format",    score: 0.84, color: "#F97316" },
-          { dim: "Tone",      score: 0.79, color: "#EC4899" },
-        ].map((r) => (
-          <div key={r.dim} className="flex flex-col gap-1">
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-600 font-medium">{r.dim}</span>
-              <span className="font-semibold text-gray-900 font-mono">{r.score.toFixed(2)}</span>
-            </div>
-            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-              <div className="h-full rounded-full" style={{ width: `${r.score * 100}%`, background: r.color }} />
-            </div>
-          </div>
-        ))}
-        <div className="mt-2 pt-3 border-t border-gray-100 flex items-center justify-between text-xs">
-          <span className="text-gray-500">Composite</span>
-          <span className="font-bold text-gray-900 font-mono">0.88 — PASS</span>
-        </div>
-      </div>
-    ),
-  },
-  {
-    id: "rollback",
-    label: "Auto-Rollback",
-    icon: RefreshCw,
-    headline: "Auto-Rollback in <500ms",
-    primary: "Score drops below your threshold? Repath halts the canary and restores 100% of traffic to the stable version automatically — in under 500ms. No manual intervention, no on-call alerts at 3am.",
-    sub: [
-      { label: "Sub-500ms revert", desc: "Detected and reverted before users see a second bad response." },
-      { label: "4-response detection", desc: "Mean lag before a quality drop triggers rollback." },
-      { label: "Full audit trail", desc: "Every decision logged with scores and timestamps." },
-    ],
-    panel: (
-      <div className="h-full p-6 flex flex-col gap-3">
-        <div className="text-xs font-mono text-gray-500 mb-1">ROLLBACK EVENT — 2026-06-20 03:47 UTC</div>
-        <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-xs text-red-700 flex items-start gap-2">
-          <RefreshCw className="w-3.5 h-3.5 mt-0.5 shrink-0 text-red-500" />
-          <span>Quality score dropped to <strong>0.61</strong> (threshold: 0.85) — auto-rollback triggered</span>
-        </div>
-        <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-xs text-emerald-700 flex items-start gap-2">
-          <Check className="w-3.5 h-3.5 mt-0.5 shrink-0 text-emerald-500" />
-          <span>100% traffic restored to <strong>v1-stable</strong> in <strong>412ms</strong></span>
-        </div>
-        <div className="text-xs text-gray-500 font-mono mt-auto pt-3 border-t border-gray-100">
-          Detection lag: 4 responses · 0 users impacted beyond threshold
-        </div>
-      </div>
-    ),
-  },
+  { id: "canary",   label: "Canary Deployments", icon: GitBranch },
+  { id: "judge",    label: "LLM-as-Judge",        icon: BarChart2 },
+  { id: "rollback", label: "Auto-Rollback",       icon: RefreshCw },
 ];
 
 const features = [
@@ -626,60 +528,345 @@ export default function LandingPage() {
       </section>
 
       {/* ══ TAB FEATURES ══════════════════════════════════════════════════════ */}
-      <section id="features" className="border-t border-gray-100 py-24">
+      <section id="features" className="border-t border-gray-100 py-24 bg-[#f8f9fb]">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="grid grid-cols-3 border-b border-gray-200 mb-12">
-            {featureTabs.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setActiveTab(t.id)}
-                className={`py-4 text-sm font-medium text-center transition-all border-b-2 -mb-px ${
-                  activeTab === t.id
-                    ? "border-[#0A0A0B] text-[#0A0A0B]"
-                    : "border-transparent text-gray-400 hover:text-gray-600"
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
+
+          {/* Tab bar — centered, icon + label */}
+          <div className="flex justify-center mb-14">
+            <div className="flex rounded-2xl bg-white border border-gray-200 shadow-sm p-1.5 gap-1">
+              {featureTabs.map((t) => {
+                const active = activeTab === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setActiveTab(t.id)}
+                    className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[14px] font-medium transition-all duration-200 ${
+                      active
+                        ? "bg-violet-600 text-white shadow-sm"
+                        : "text-gray-500 hover:text-gray-800 hover:bg-gray-50"
+                    }`}
+                  >
+                    <t.icon className="w-4 h-4" strokeWidth={1.8} />
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
+          {/* Panel — full-width dashboard card */}
           <motion.div
             key={activeTab}
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            className="grid md:grid-cols-2 gap-12 items-start"
+            transition={{ duration: 0.28 }}
           >
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center">
-                  <tab.icon className="w-4 h-4 text-violet-600" />
-                </div>
-                <h3 className="text-lg font-semibold">{tab.headline}</h3>
-              </div>
-              <p className="text-gray-500 leading-relaxed mb-6">{tab.primary}</p>
-              <div className="flex flex-col gap-4 mb-8">
-                {tab.sub.map((item) => (
-                  <div key={item.label} className="flex items-start gap-3">
-                    <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center shrink-0 mt-0.5">
-                      <div className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+
+            {/* ── CANARY DEPLOYMENTS ── */}
+            {activeTab === "canary" && (
+              <div className="grid lg:grid-cols-[340px_1fr] gap-8 items-start">
+                {/* Left: description */}
+                <div>
+                  <div className="w-12 h-12 rounded-2xl bg-violet-100 flex items-center justify-center mb-5">
+                    <GitBranch className="w-6 h-6 text-violet-600" strokeWidth={1.8} />
+                  </div>
+                  <h3 className="text-[28px] font-bold text-gray-900 leading-tight mb-3">
+                    Canary Deployments<br /><span className="text-violet-600">without the risk</span>
+                  </h3>
+                  <p className="text-[15px] text-gray-500 leading-relaxed mb-6">
+                    Route a small % of traffic to a new prompt version. Quality gates control every step — traffic only advances when scores consistently hold.
+                  </p>
+                  {[
+                    { label: "Traffic splitting", desc: "Any % down to 0.1% granularity. No SDK rewrites." },
+                    { label: "Quality-gated advance", desc: "Traffic only increases when scores hold." },
+                    { label: "Instant abort", desc: "Any step can halt immediately — traffic snaps back." },
+                  ].map(item => (
+                    <div key={item.label} className="flex items-start gap-3 mb-4">
+                      <div className="w-5 h-5 rounded-full bg-violet-100 flex items-center justify-center shrink-0 mt-0.5">
+                        <Check className="w-3 h-3 text-violet-600" strokeWidth={2.5} />
+                      </div>
+                      <div>
+                        <div className="text-[14px] font-semibold text-gray-900">{item.label}</div>
+                        <div className="text-[13px] text-gray-500">{item.desc}</div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">{item.label}</div>
-                      <div className="text-sm text-gray-500">{item.desc}</div>
+                  ))}
+                  <Link href="/signup" className="inline-flex items-center gap-2 mt-2 px-5 py-2.5 bg-gray-900 text-white text-[13px] font-semibold rounded-lg hover:bg-gray-800 transition-colors">
+                    START FREE TRIAL <ArrowRight className="w-4 h-4" />
+                  </Link>
+                </div>
+
+                {/* Right: dashboard card */}
+                <div className="rounded-2xl bg-white border border-gray-200 shadow-sm overflow-hidden">
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-[15px] font-semibold text-gray-900">Deployment Monitor</span>
+                      <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-[11px] font-semibold text-emerald-600 border border-emerald-100">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
+                      </span>
+                    </div>
+                    <span className="text-[12px] text-gray-400 font-medium">rollout: support-v2</span>
+                  </div>
+
+                  {/* Stats row */}
+                  <div className="grid grid-cols-4 divide-x divide-gray-100">
+                    {[
+                      { label: "QUALITY SCORE", val: "0.87", sub: "was 0.91", valColor: "text-emerald-600" },
+                      { label: "THRESHOLD",      val: "0.85", sub: "configured" },
+                      { label: "TRAFFIC",        val: "50%",  sub: "to support-v2", valColor: "text-violet-600" },
+                      { label: "STEP",           val: "3/4",  sub: "advancing" },
+                    ].map(s => (
+                      <div key={s.label} className="px-5 py-4">
+                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">{s.label}</p>
+                        <p className={`text-[22px] font-bold ${s.valColor ?? "text-gray-900"}`}>{s.val}</p>
+                        <p className="text-[11px] text-gray-400 mt-0.5">{s.sub}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Rollout progress */}
+                  <div className="px-6 py-5 border-t border-gray-100">
+                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-4">Rollout Steps</p>
+                    <div className="space-y-3">
+                      {[
+                        { pct: "5%",   label: "Step 1",  status: "passed",  score: "0.91" },
+                        { pct: "25%",  label: "Step 2",  status: "passed",  score: "0.89" },
+                        { pct: "50%",  label: "Step 3",  status: "live",    score: "0.87" },
+                        { pct: "100%", label: "Step 4",  status: "pending", score: "—" },
+                      ].map(step => (
+                        <div key={step.pct} className="flex items-center gap-4">
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+                            step.status === "passed"  ? "bg-emerald-100" :
+                            step.status === "live"    ? "bg-violet-100" : "bg-gray-100"
+                          }`}>
+                            {step.status === "passed"  && <Check className="w-3.5 h-3.5 text-emerald-600" strokeWidth={2.5} />}
+                            {step.status === "live"    && <span className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />}
+                            {step.status === "pending" && <span className="w-2 h-2 rounded-full bg-gray-300" />}
+                          </div>
+                          <div className="w-10 text-[13px] font-semibold text-gray-700">{step.pct}</div>
+                          <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full transition-all duration-700 ${
+                              step.status === "passed" ? "w-full bg-emerald-400" :
+                              step.status === "live"   ? "w-1/2 bg-violet-500" : "w-0"
+                            }`} />
+                          </div>
+                          <div className={`text-[12px] font-mono w-10 text-right ${
+                            step.status === "passed" ? "text-emerald-600" :
+                            step.status === "live"   ? "text-violet-600" : "text-gray-300"
+                          }`}>{step.score}</div>
+                          <div className={`text-[11px] font-medium w-16 ${
+                            step.status === "passed" ? "text-emerald-500" :
+                            step.status === "live"   ? "text-violet-500 font-semibold" : "text-gray-300"
+                          }`}>
+                            {step.status === "passed" ? "✓ passed" : step.status === "live" ? "● live" : "pending"}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                ))}
-              </div>
-              <Link href="/signup" className="inline-flex items-center gap-1.5 text-sm font-semibold bg-[#0A0A0B] text-white px-5 py-2.5 rounded-lg hover:bg-gray-800 transition-colors">
-                START FREE TRIAL
-              </Link>
-            </div>
 
-            <div className="rounded-2xl border border-gray-200 bg-gray-50 overflow-hidden" style={{ minHeight: 260 }}>
-              {tab.panel}
-            </div>
+                  {/* Gate expression */}
+                  <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 flex items-center gap-3">
+                    <span className="text-[11px] text-gray-400 uppercase tracking-wide font-semibold">Quality gate</span>
+                    <code className="text-[12px] font-mono text-violet-600 bg-violet-50 px-2.5 py-0.5 rounded-md">score ≥ 0.85 for 10 min</code>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── LLM-AS-JUDGE ── */}
+            {activeTab === "judge" && (
+              <div className="grid lg:grid-cols-[340px_1fr] gap-8 items-start">
+                <div>
+                  <div className="w-12 h-12 rounded-2xl bg-purple-100 flex items-center justify-center mb-5">
+                    <BarChart2 className="w-6 h-6 text-purple-600" strokeWidth={1.8} />
+                  </div>
+                  <h3 className="text-[28px] font-bold text-gray-900 leading-tight mb-3">
+                    LLM-as-Judge<br /><span className="text-purple-600">Evaluation</span>
+                  </h3>
+                  <p className="text-[15px] text-gray-500 leading-relaxed mb-6">
+                    An independent LLM judge scores every response against your custom rubric — async, ~120ms, zero latency added to your users.
+                  </p>
+                  {[
+                    { label: "Plain-English criteria", desc: "Define what \"good\" means in natural language." },
+                    { label: "8 judge models", desc: "GPT-4o, Claude 3.5, Gemini 1.5 Pro and more." },
+                    { label: "Per-dimension scores", desc: "Accuracy, safety, format, tone — individually weighted." },
+                  ].map(item => (
+                    <div key={item.label} className="flex items-start gap-3 mb-4">
+                      <div className="w-5 h-5 rounded-full bg-purple-100 flex items-center justify-center shrink-0 mt-0.5">
+                        <Check className="w-3 h-3 text-purple-600" strokeWidth={2.5} />
+                      </div>
+                      <div>
+                        <div className="text-[14px] font-semibold text-gray-900">{item.label}</div>
+                        <div className="text-[13px] text-gray-500">{item.desc}</div>
+                      </div>
+                    </div>
+                  ))}
+                  <Link href="/signup" className="inline-flex items-center gap-2 mt-2 px-5 py-2.5 bg-gray-900 text-white text-[13px] font-semibold rounded-lg hover:bg-gray-800 transition-colors">
+                    START FREE TRIAL <ArrowRight className="w-4 h-4" />
+                  </Link>
+                </div>
+
+                <div className="rounded-2xl bg-white border border-gray-200 shadow-sm overflow-hidden">
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-[15px] font-semibold text-gray-900">Evaluation Result</span>
+                      <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-[11px] font-bold text-emerald-600 border border-emerald-100">PASS</span>
+                    </div>
+                    <span className="text-[12px] text-gray-400 font-mono">response #48291</span>
+                  </div>
+
+                  {/* Score bars */}
+                  <div className="px-6 py-5 space-y-5">
+                    {[
+                      { dim: "Accuracy",    score: 0.91, color: "#7C3AED", bg: "bg-violet-500" },
+                      { dim: "Safety",      score: 0.98, color: "#10B981", bg: "bg-emerald-500" },
+                      { dim: "Helpfulness", score: 0.84, color: "#F97316", bg: "bg-orange-500" },
+                      { dim: "Tone",        score: 0.79, color: "#EC4899", bg: "bg-pink-500" },
+                    ].map(r => (
+                      <div key={r.dim}>
+                        <div className="flex justify-between mb-1.5">
+                          <span className="text-[13px] font-medium text-gray-700">{r.dim}</span>
+                          <span className="text-[13px] font-bold font-mono" style={{ color: r.color }}>{r.score.toFixed(2)}</span>
+                        </div>
+                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${r.bg}`} style={{ width: `${r.score * 100}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Composite */}
+                  <div className="mx-6 mb-5 rounded-xl bg-gray-50 border border-gray-200 px-5 py-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Composite Score</p>
+                      <p className="text-[28px] font-bold text-gray-900">0.88</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Judge Model</p>
+                      <p className="text-[13px] font-semibold text-gray-700">gpt-4o-mini</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">~124ms · async</p>
+                    </div>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 flex items-center gap-3">
+                    <span className="text-[11px] text-gray-400 uppercase tracking-wide font-semibold">Threshold</span>
+                    <code className="text-[12px] font-mono text-purple-600 bg-purple-50 px-2.5 py-0.5 rounded-md">composite ≥ 0.80 → advance</code>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── AUTO-ROLLBACK ── */}
+            {activeTab === "rollback" && (
+              <div className="grid lg:grid-cols-[340px_1fr] gap-8 items-start">
+                <div>
+                  <div className="w-12 h-12 rounded-2xl bg-red-100 flex items-center justify-center mb-5">
+                    <RefreshCw className="w-6 h-6 text-red-500" strokeWidth={1.8} />
+                  </div>
+                  <h3 className="text-[28px] font-bold text-gray-900 leading-tight mb-3">
+                    Auto-Rollback<br /><span className="text-red-500">in &lt;500ms</span>
+                  </h3>
+                  <p className="text-[15px] text-gray-500 leading-relaxed mb-6">
+                    Repath continuously monitors quality in real-time and automatically rolls back traffic before your users are affected.
+                  </p>
+                  {[
+                    { label: "Sub-500ms revert", desc: "Detected and reverted before users see a second bad response." },
+                    { label: "4-response detection", desc: "Mean lag before a quality drop triggers rollback." },
+                    { label: "Full audit trail", desc: "Every decision logged with scores and timestamps." },
+                  ].map(item => (
+                    <div key={item.label} className="flex items-start gap-3 mb-4">
+                      <div className="w-5 h-5 rounded-full bg-red-100 flex items-center justify-center shrink-0 mt-0.5">
+                        <Check className="w-3 h-3 text-red-500" strokeWidth={2.5} />
+                      </div>
+                      <div>
+                        <div className="text-[14px] font-semibold text-gray-900">{item.label}</div>
+                        <div className="text-[13px] text-gray-500">{item.desc}</div>
+                      </div>
+                    </div>
+                  ))}
+                  <Link href="/signup" className="inline-flex items-center gap-2 mt-2 px-5 py-2.5 bg-gray-900 text-white text-[13px] font-semibold rounded-lg hover:bg-gray-800 transition-colors">
+                    START FREE TRIAL <ArrowRight className="w-4 h-4" />
+                  </Link>
+                </div>
+
+                <div className="rounded-2xl bg-white border border-gray-200 shadow-sm overflow-hidden">
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-[15px] font-semibold text-gray-900">Deployment Monitor</span>
+                      <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-50 text-[11px] font-semibold text-red-600 border border-red-100">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-500" /> Rollback
+                      </span>
+                    </div>
+                    <span className="text-[12px] text-gray-400 font-medium">Last 30 min</span>
+                  </div>
+
+                  {/* Stats */}
+                  <div className="grid grid-cols-4 divide-x divide-gray-100">
+                    {[
+                      { label: "QUALITY SCORE", val: "0.61", sub: "was 0.91", valColor: "text-red-500" },
+                      { label: "THRESHOLD",      val: "0.85", sub: "configured" },
+                      { label: "TRAFFIC",        val: "25%",  sub: "to support-v2", valColor: "text-gray-700" },
+                      { label: "USERS IMPACTED", val: "0",    sub: "none", valColor: "text-emerald-600" },
+                    ].map(s => (
+                      <div key={s.label} className="px-5 py-4">
+                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">{s.label}</p>
+                        <p className={`text-[22px] font-bold ${s.valColor ?? "text-gray-900"}`}>{s.val}</p>
+                        <p className="text-[11px] text-gray-400 mt-0.5">{s.sub}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Timeline */}
+                  <div className="px-6 pt-5 pb-2 border-t border-gray-100">
+                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-4">Rollback Timeline</p>
+                    <div className="flex items-start gap-0">
+                      {[
+                        { time: "03:47:12", label: "Quality regression\ndetected",    done: true },
+                        { time: "03:47:12", label: "Threshold\ncrossed",              done: true },
+                        { time: "03:47:13", label: "Rollback\ninitiated",             done: true },
+                        { time: "03:47:13", label: "Traffic\nrestored",              done: true },
+                      ].map((step, i) => (
+                        <div key={i} className="flex-1 flex flex-col items-center text-center">
+                          <div className="flex items-center w-full">
+                            <div className="flex-1 h-0.5 bg-violet-200 first:opacity-0" style={{ opacity: i === 0 ? 0 : 1 }} />
+                            <div className="w-7 h-7 rounded-full bg-violet-600 flex items-center justify-center shrink-0 z-10">
+                              <Check className="w-3.5 h-3.5 text-white" strokeWidth={2.5} />
+                            </div>
+                            <div className="flex-1 h-0.5 bg-violet-200 last:opacity-0" style={{ opacity: i === 3 ? 0 : 1 }} />
+                          </div>
+                          <p className="text-[10px] font-mono text-gray-400 mt-2">{step.time}</p>
+                          <p className="text-[11px] text-gray-600 font-medium mt-0.5 leading-tight whitespace-pre-line">{step.label}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Footer result */}
+                  <div className="mx-6 mb-5 mt-4 rounded-xl bg-violet-600 px-5 py-3.5 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <RefreshCw className="w-4.5 h-4.5 text-white" strokeWidth={2} />
+                      <span className="text-[13px] font-bold text-white tracking-wide">AUTO-ROLLBACK COMPLETED</span>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[22px] font-bold text-white leading-none">412ms</p>
+                      <p className="text-[11px] text-violet-200">total time</p>
+                    </div>
+                  </div>
+
+                  {/* Deployment status sidebar row */}
+                  <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 grid grid-cols-2 gap-4 text-[12px]">
+                    <div><span className="text-gray-400">Restored to</span> <span className="font-semibold text-emerald-600 ml-1">support-v1</span></div>
+                    <div><span className="text-gray-400">Detection lag</span> <span className="font-semibold text-gray-700 ml-1">4 responses</span></div>
+                  </div>
+                </div>
+              </div>
+            )}
+
           </motion.div>
         </div>
       </section>
