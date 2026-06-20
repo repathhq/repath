@@ -47,8 +47,8 @@ struct TenantResponse {
 
 #[derive(Deserialize)]
 pub struct UpgradePlanRequest {
-    pub plan: String,           // "starter" | "pro" | "enterprise"
-    pub payment_id: String,     // Razorpay payment_id or Paddle transaction_id
+    pub plan: String,             // "starter" | "pro" | "enterprise"
+    pub payment_id: String,       // Razorpay payment_id or Paddle transaction_id
     pub payment_provider: String, // "razorpay" | "paddle"
 }
 
@@ -184,7 +184,10 @@ pub async fn upgrade_tenant(
 ) -> impl IntoResponse {
     let quota = plan_quota(&body.plan);
     if quota == 0 {
-        return cloud_error(StatusCode::BAD_REQUEST, format!("Unknown plan: {}", body.plan));
+        return cloud_error(
+            StatusCode::BAD_REQUEST,
+            format!("Unknown plan: {}", body.plan),
+        );
     }
 
     let result = sqlx::query(
@@ -221,10 +224,7 @@ pub async fn upgrade_tenant(
 
 /// GET /api/v1/cloud/tenants/:id/usage
 /// Current month evaluation usage for billing display.
-pub async fn get_usage(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
+pub async fn get_usage(State(state): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
     let result = sqlx::query(
         r#"
         SELECT
@@ -251,9 +251,7 @@ pub async fn get_usage(
             let used: i64 = row.get("this_month_evals");
             let trial_ends_at: Option<DateTime<Utc>> = row.get("trial_ends_at");
 
-            let trial_active = trial_ends_at
-                .map(|t| t > Utc::now())
-                .unwrap_or(false);
+            let trial_active = trial_ends_at.map(|t| t > Utc::now()).unwrap_or(false);
 
             Json(json!({
                 "plan": row.get::<String, _>("plan"),
@@ -312,23 +310,29 @@ pub async fn razorpay_webhook(
     }
 
     // Extract tenant_id and plan from notes (set during checkout creation)
-    let tenant_id = event.payload
+    let tenant_id = event
+        .payload
         .pointer("/payment/entity/notes/tenant_id")
         .and_then(|v| v.as_str())
         .unwrap_or("");
 
-    let plan = event.payload
+    let plan = event
+        .payload
         .pointer("/payment/entity/notes/plan")
         .and_then(|v| v.as_str())
         .unwrap_or("starter");
 
-    let payment_id = event.payload
+    let payment_id = event
+        .payload
         .pointer("/payment/entity/id")
         .and_then(|v| v.as_str())
         .unwrap_or("");
 
     if tenant_id.is_empty() {
-        return cloud_error(StatusCode::BAD_REQUEST, "Missing tenant_id in payment notes".into());
+        return cloud_error(
+            StatusCode::BAD_REQUEST,
+            "Missing tenant_id in payment notes".into(),
+        );
     }
 
     let quota = plan_quota(plan);
@@ -341,7 +345,12 @@ pub async fn razorpay_webhook(
     .execute(&state.db_pool)
     .await;
 
-    tracing::info!(tenant_id, plan, payment_id, "Razorpay payment captured — plan activated");
+    tracing::info!(
+        tenant_id,
+        plan,
+        payment_id,
+        "Razorpay payment captured — plan activated"
+    );
 
     Json(json!({ "status": "ok", "tenant_id": tenant_id, "plan": plan })).into_response()
 }
@@ -379,23 +388,25 @@ pub async fn paddle_webhook(
     }
 
     // Paddle custom_data contains tenant_id and plan set during checkout
-    let tenant_id = event.data
+    let tenant_id = event
+        .data
         .pointer("/custom_data/tenant_id")
         .and_then(|v| v.as_str())
         .unwrap_or("");
 
-    let plan = event.data
+    let plan = event
+        .data
         .pointer("/custom_data/plan")
         .and_then(|v| v.as_str())
         .unwrap_or("starter");
 
-    let transaction_id = event.data
-        .get("id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let transaction_id = event.data.get("id").and_then(|v| v.as_str()).unwrap_or("");
 
     if tenant_id.is_empty() {
-        return cloud_error(StatusCode::BAD_REQUEST, "Missing tenant_id in custom_data".into());
+        return cloud_error(
+            StatusCode::BAD_REQUEST,
+            "Missing tenant_id in custom_data".into(),
+        );
     }
 
     let quota = plan_quota(plan);
@@ -408,7 +419,12 @@ pub async fn paddle_webhook(
     .execute(&state.db_pool)
     .await;
 
-    tracing::info!(tenant_id, plan, transaction_id, "Paddle transaction completed — plan activated");
+    tracing::info!(
+        tenant_id,
+        plan,
+        transaction_id,
+        "Paddle transaction completed — plan activated"
+    );
 
     Json(json!({ "status": "ok", "tenant_id": tenant_id, "plan": plan })).into_response()
 }
@@ -417,16 +433,16 @@ pub async fn paddle_webhook(
 
 fn plan_quota(plan: &str) -> i32 {
     match plan {
-        "starter"    => 10_000,
-        "pro"        => 100_000,
+        "starter" => 10_000,
+        "pro" => 100_000,
         "enterprise" => i32::MAX,
-        _            => 0,
+        _ => 0,
     }
 }
 
 fn build_gateway_url(tenant_id: &str) -> String {
-    let domain = std::env::var("REPATH_CLOUD_DOMAIN")
-        .unwrap_or_else(|_| "localhost:8080".to_string());
+    let domain =
+        std::env::var("REPATH_CLOUD_DOMAIN").unwrap_or_else(|_| "localhost:8080".to_string());
     format!("https://{}/v1", domain)
     // In production with subdomain routing:
     // format!("https://gw-{}.{}/v1", tenant_id, domain)
@@ -437,8 +453,7 @@ fn build_gateway_url(tenant_id: &str) -> String {
 fn verify_razorpay_signature(body: &[u8], signature: &str) -> bool {
     use std::fmt::Write;
 
-    let secret = std::env::var("RAZORPAY_WEBHOOK_SECRET")
-        .unwrap_or_default();
+    let secret = std::env::var("RAZORPAY_WEBHOOK_SECRET").unwrap_or_default();
 
     if secret.is_empty() {
         // In dev/test mode, skip verification
@@ -460,8 +475,7 @@ fn verify_razorpay_signature(body: &[u8], signature: &str) -> bool {
 fn verify_paddle_signature(body: &[u8], signature: &str) -> bool {
     use std::fmt::Write;
 
-    let secret = std::env::var("PADDLE_WEBHOOK_SECRET")
-        .unwrap_or_default();
+    let secret = std::env::var("PADDLE_WEBHOOK_SECRET").unwrap_or_default();
 
     if secret.is_empty() {
         tracing::warn!("PADDLE_WEBHOOK_SECRET not set — skipping signature verification");
@@ -470,11 +484,13 @@ fn verify_paddle_signature(body: &[u8], signature: &str) -> bool {
 
     // Paddle uses: sha256(ts:body) with HMAC
     // signature format: "ts=1234567890;h1=hexhash"
-    let ts = signature.split(';')
+    let ts = signature
+        .split(';')
         .find(|p| p.starts_with("ts="))
         .and_then(|p| p.strip_prefix("ts="))
         .unwrap_or("");
-    let provided_hash = signature.split(';')
+    let provided_hash = signature
+        .split(';')
         .find(|p| p.starts_with("h1="))
         .and_then(|p| p.strip_prefix("h1="))
         .unwrap_or("");

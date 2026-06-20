@@ -11,11 +11,7 @@
 //! - REPATH_DATABASE_URL -> config.database.url
 //! - REPATH_REDIS_URL -> config.redis.url
 
-use repath_common::{
-    config::ServerConfig,
-    Error,
-    Result,
-};
+use repath_common::{config::ServerConfig, Error, Result};
 use std::path::Path;
 use tracing::{debug, info};
 
@@ -46,8 +42,8 @@ const DEFAULT_CONFIG_PATH: &str = "repath.toml";
 /// - Validation fails
 pub fn load_config() -> Result<ServerConfig> {
     // Determine config file path
-    let config_path = std::env::var("REPATH_CONFIG_PATH")
-        .unwrap_or_else(|_| DEFAULT_CONFIG_PATH.to_string());
+    let config_path =
+        std::env::var("REPATH_CONFIG_PATH").unwrap_or_else(|_| DEFAULT_CONFIG_PATH.to_string());
 
     debug!(path = %config_path, "Loading configuration file");
 
@@ -109,7 +105,11 @@ fn apply_env_overrides(config: &mut ServerConfig) -> Result<()> {
             message: format!("Invalid REPATH_SERVER_PORT: {}", port_str),
             source: Some(e.into()),
         })?;
-        debug!(old = config.server.port, new = port, "Overriding server port from environment");
+        debug!(
+            old = config.server.port,
+            new = port,
+            "Overriding server port from environment"
+        );
         config.server.port = port;
     }
 
@@ -118,7 +118,11 @@ fn apply_env_overrides(config: &mut ServerConfig) -> Result<()> {
             message: format!("Invalid REPATH_METRICS_PORT: {}", metrics_port_str),
             source: Some(e.into()),
         })?;
-        debug!(old = config.server.metrics_port, new = port, "Overriding metrics port from environment");
+        debug!(
+            old = config.server.metrics_port,
+            new = port,
+            "Overriding metrics port from environment"
+        );
         config.server.metrics_port = port;
     }
 
@@ -140,7 +144,11 @@ fn apply_env_overrides(config: &mut ServerConfig) -> Result<()> {
             message: format!("Invalid REPATH_EVALUATION_SAMPLE_RATE: {}", sample_rate_str),
             source: Some(e.into()),
         })?;
-        debug!(old = config.evaluation.sample_rate, new = sample_rate, "Overriding evaluation sample rate from environment");
+        debug!(
+            old = config.evaluation.sample_rate,
+            new = sample_rate,
+            "Overriding evaluation sample rate from environment"
+        );
         config.evaluation.sample_rate = sample_rate;
     }
 
@@ -226,14 +234,17 @@ mod tests {
     fn test_apply_env_overrides_port() {
         let _guard = ENV_MUTEX.lock().unwrap();
 
-        let mut config = ServerConfig::from_toml(r#"
+        let mut config = ServerConfig::from_toml(
+            r#"
             [server]
             host = "0.0.0.0"
             port = 8080
 
             [database]
             url = "postgres://localhost/test"
-        "#).unwrap();
+        "#,
+        )
+        .unwrap();
 
         std::env::set_var("REPATH_SERVER_PORT", "9000");
         let result = apply_env_overrides(&mut config);
@@ -247,14 +258,17 @@ mod tests {
     fn test_apply_env_overrides_invalid_port() {
         let _guard = ENV_MUTEX.lock().unwrap();
 
-        let mut config = ServerConfig::from_toml(r#"
+        let mut config = ServerConfig::from_toml(
+            r#"
             [server]
             host = "0.0.0.0"
             port = 8080
 
             [database]
             url = "postgres://localhost/test"
-        "#).unwrap();
+        "#,
+        )
+        .unwrap();
 
         std::env::set_var("REPATH_SERVER_PORT", "not_a_number");
         let result = apply_env_overrides(&mut config);

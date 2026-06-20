@@ -18,7 +18,11 @@ pub fn state_badge(state: &str) -> String {
         "shadow" => format!(" {state} ").black().on_blue().bold().to_string(),
         "promoted" => format!(" {state} ").black().on_green().bold().to_string(),
         "rolled_back" => format!(" {state} ").white().on_red().bold().to_string(),
-        "created" => format!(" {state} ").black().on_bright_black().bold().to_string(),
+        "created" => format!(" {state} ")
+            .black()
+            .on_bright_black()
+            .bold()
+            .to_string(),
         "paused" => format!(" {state} ").black().on_white().bold().to_string(),
         other => format!(" {other} ").normal().to_string(),
     }
@@ -78,11 +82,7 @@ pub fn make_table(headers: Vec<&str>) -> Table {
         .set_header(
             headers
                 .iter()
-                .map(|h| {
-                    Cell::new(h)
-                        .add_attribute(Attribute::Bold)
-                        .fg(Color::Cyan)
-                })
+                .map(|h| Cell::new(h).add_attribute(Attribute::Bold).fg(Color::Cyan))
                 .collect::<Vec<_>>(),
         );
     table
@@ -109,10 +109,5 @@ pub fn traffic_bar(label: &str, weight: f64, bar_width: usize) {
         "█".repeat(filled).green(),
         "░".repeat(empty).dimmed(),
     );
-    println!(
-        "  {:<12} [{}]  {}",
-        label,
-        bar,
-        weight_pct(weight).bold(),
-    );
+    println!("  {:<12} [{}]  {}", label, bar, weight_pct(weight).bold(),);
 }

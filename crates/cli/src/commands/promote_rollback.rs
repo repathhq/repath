@@ -10,12 +10,15 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 pub async fn promote(pool: &PgPool, id_or_name: &str) -> Result<()> {
-    let (rollout_id, rollout_name, state, weight) =
-        fetch_rollout_basics(pool, id_or_name).await?;
+    let (rollout_id, rollout_name, state, weight) = fetch_rollout_basics(pool, id_or_name).await?;
 
     // Guard: can only promote active rollouts
     if state == "promoted" {
-        println!("{} Rollout '{}' is already promoted.", "✓".green(), rollout_name.bold());
+        println!(
+            "{} Rollout '{}' is already promoted.",
+            "✓".green(),
+            rollout_name.bold()
+        );
         return Ok(());
     }
     if state == "rolled_back" {
@@ -71,8 +74,7 @@ pub async fn promote(pool: &PgPool, id_or_name: &str) -> Result<()> {
 }
 
 pub async fn rollback(pool: &PgPool, id_or_name: &str) -> Result<()> {
-    let (rollout_id, rollout_name, state, weight) =
-        fetch_rollout_basics(pool, id_or_name).await?;
+    let (rollout_id, rollout_name, state, weight) = fetch_rollout_basics(pool, id_or_name).await?;
 
     if state == "rolled_back" {
         println!(

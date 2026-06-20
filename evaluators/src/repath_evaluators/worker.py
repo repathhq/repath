@@ -39,7 +39,6 @@ reclaimed, which is correct but wastes one evaluation).
 from __future__ import annotations
 
 import asyncio
-import os
 import signal
 import time
 from typing import Any
@@ -50,12 +49,12 @@ from openai import AsyncOpenAI
 from redis.asyncio import Redis
 from redis.exceptions import ConnectionError as RedisConnectionError
 
+from . import logging_setup
 from .config import settings
 from .db import create_pool, insert_evaluation
 from .evaluators.llm_judge import LlmJudgeEvaluator
 from .evaluators.programmatic import ProgrammaticEvaluator
 from .scorer import EvalJob, Scorer
-from . import logging_setup
 
 log = structlog.get_logger(__name__)
 

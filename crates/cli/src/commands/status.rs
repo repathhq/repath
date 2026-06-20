@@ -6,9 +6,7 @@ use colored::Colorize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::display::{
-    kv, quality_score, relative_time, section, state_badge, traffic_bar,
-};
+use crate::display::{kv, quality_score, relative_time, section, state_badge, traffic_bar};
 
 pub async fn status(pool: &PgPool, id_or_name: &str) -> Result<()> {
     let rollout = fetch_rollout(pool, id_or_name).await?;
@@ -24,8 +22,20 @@ pub async fn status(pool: &PgPool, id_or_name: &str) -> Result<()> {
 
     // ── Overview ──────────────────────────────────────────────────────────────
     section("Overview");
-    kv("Baseline", &format!("{} ({})", rollout.baseline_model, rollout.baseline_version_id));
-    kv("Candidate", &format!("{} ({})", rollout.candidate_model, rollout.candidate_version_id));
+    kv(
+        "Baseline",
+        &format!(
+            "{} ({})",
+            rollout.baseline_model, rollout.baseline_version_id
+        ),
+    );
+    kv(
+        "Candidate",
+        &format!(
+            "{} ({})",
+            rollout.candidate_model, rollout.candidate_version_id
+        ),
+    );
     kv("Created", &relative_time(&rollout.created_at));
     if let Some(completed) = rollout.completed_at {
         kv("Completed", &relative_time(&completed));
@@ -43,7 +53,12 @@ pub async fn status(pool: &PgPool, id_or_name: &str) -> Result<()> {
     if !metrics.is_empty() {
         section("Quality (last 10 min)");
         let mut table = crate::display::make_table(vec![
-            "VERSION", "ROLE", "QUALITY", "P95 LATENCY", "ERROR RATE", "SAMPLES",
+            "VERSION",
+            "ROLE",
+            "QUALITY",
+            "P95 LATENCY",
+            "ERROR RATE",
+            "SAMPLES",
         ]);
         for m in &metrics {
             use comfy_table::Cell;
@@ -64,7 +79,10 @@ pub async fn status(pool: &PgPool, id_or_name: &str) -> Result<()> {
         println!("{table}");
     } else {
         section("Quality");
-        println!("  {}", "No evaluation data yet — traffic may be too low.".dimmed());
+        println!(
+            "  {}",
+            "No evaluation data yet — traffic may be too low.".dimmed()
+        );
     }
 
     // ── Steps ─────────────────────────────────────────────────────────────────
@@ -108,7 +126,11 @@ pub async fn status(pool: &PgPool, id_or_name: &str) -> Result<()> {
         }
         println!(
             "  {}",
-            format!("Run `repath rollout history {}` to see full history.", id_or_name).dimmed()
+            format!(
+                "Run `repath rollout history {}` to see full history.",
+                id_or_name
+            )
+            .dimmed()
         );
     }
 

@@ -102,11 +102,10 @@ async fn main() -> Result<()> {
     print_banner();
 
     // Load configuration from file and environment
-    let config = config::load_config()
-        .map_err(|e| {
-            error!("Failed to load configuration: {}", e);
-            e
-        })?;
+    let config = config::load_config().map_err(|e| {
+        error!("Failed to load configuration: {}", e);
+        e
+    })?;
 
     info!(
         host = %config.server.host,
@@ -121,12 +120,10 @@ async fn main() -> Result<()> {
     })?;
 
     // Initialize database connection pool
-    let db_pool = db::create_pool(&config.database)
-        .await
-        .map_err(|e| {
-            error!("Failed to create database pool: {}", e);
-            e
-        })?;
+    let db_pool = db::create_pool(&config.database).await.map_err(|e| {
+        error!("Failed to create database pool: {}", e);
+        e
+    })?;
 
     info!(
         url = %config.database.url.split('@').last().unwrap_or("***"),
@@ -178,21 +175,24 @@ async fn main() -> Result<()> {
     // Capacity of 1024 at 50K req/s gives ~20ms of buffer before back-pressure
     // kicks in — sufficient for any normal DB hiccup.
     let (record_tx, record_rx) = tokio::sync::mpsc::channel(1024);
-    let recorder_handle = tokio::spawn(
-        recorder::run_recorder(record_rx, db_pool.clone(), redis.clone())
-    );
+    let recorder_handle = tokio::spawn(recorder::run_recorder(
+        record_rx,
+        db_pool.clone(),
+        redis.clone(),
+    ));
 
     // Initialize rollout cache (empty on startup; populated by first DB query)
     let rollout_cache = Arc::new(arc_swap::ArcSwap::from_pointee(
-        router::RolloutCache::empty()
+        router::RolloutCache::empty(),
     ));
 
     // Spawn background rollout cache refresher.
     // Polls the DB every 5 seconds and swaps the cache atomically.
     // This decouples every request handler from direct DB reads for routing.
-    let cache_refresh_handle = tokio::spawn(
-        router::run_cache_refresher(db_pool.clone(), rollout_cache.clone())
-    );
+    let cache_refresh_handle = tokio::spawn(router::run_cache_refresher(
+        db_pool.clone(),
+        rollout_cache.clone(),
+    ));
 
     // Build application state
     let state = AppState {
@@ -212,15 +212,13 @@ async fn main() -> Result<()> {
 
     // Bind to address
     let addr = format!("{}:{}", config.server.host, config.server.port);
-    let listener = tokio::net::TcpListener::bind(&addr)
-        .await
-        .map_err(|e| {
-            error!("Failed to bind to {}: {}", addr, e);
-            Error::Internal {
-                message: format!("Failed to bind to address: {}", addr),
-                source: Some(e.into()),
-            }
-        })?;
+    let listener = tokio::net::TcpListener::bind(&addr).await.map_err(|e| {
+        error!("Failed to bind to {}: {}", addr, e);
+        Error::Internal {
+            message: format!("Failed to bind to address: {}", addr),
+            source: Some(e.into()),
+        }
+    })?;
 
     info!(
         addr = %addr,
@@ -270,7 +268,10 @@ async fn main() -> Result<()> {
     // Serve with graceful shutdown
     info!("🚀 Repath Gateway started successfully");
     info!("API endpoint: http://{}", addr);
-    info!("Metrics endpoint: http://{}:{}/metrics", config.server.host, config.server.metrics_port);
+    info!(
+        "Metrics endpoint: http://{}:{}/metrics",
+        config.server.host, config.server.metrics_port
+    );
 
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal)
@@ -300,13 +301,10 @@ async fn main() -> Result<()> {
     info!("Rollout cache refresher stopped");
 
     // Drop the sender to signal the recorder channel is closed
-    drop(state);  // drops record_tx inside AppState
+    drop(state); // drops record_tx inside AppState
 
     // Give recorder up to 5 seconds to drain its in-flight queue
-    match tokio::time::timeout(
-        std::time::Duration::from_secs(5),
-        recorder_handle,
-    ).await {
+    match tokio::time::timeout(std::time::Duration::from_secs(5), recorder_handle).await {
         Ok(Ok(())) => info!("Recorder drained and exited cleanly"),
         Ok(Err(e)) => error!("Recorder task panicked: {}", e),
         Err(_) => error!("Recorder did not drain within 5s — some records may be lost"),
@@ -324,7 +322,8 @@ async fn main() -> Result<()> {
 
 /// Print startup banner to stdout
 fn print_banner() {
-    println!(r#"
+    println!(
+        r#"
     ____                  __  __
    / __ \___  ____  ____ _/ /_/ /_
   / /_/ / _ \/ __ \/ __ `/ __/ __ \
@@ -334,7 +333,9 @@ fn print_banner() {
 
 Progressive Delivery for AI Models
 Version: {}
-"#, env!("CARGO_PKG_VERSION"));
+"#,
+        env!("CARGO_PKG_VERSION")
+    );
 }
 
 #[cfg(test)]

@@ -60,10 +60,10 @@ static BLOCKED_HEADERS: &[&str] = &[
     "trailers",
     "transfer-encoding",
     "upgrade",
-    "host",           // reqwest sets this correctly for the upstream URL
+    "host", // reqwest sets this correctly for the upstream URL
     "content-length", // reqwest recalculates this from the actual body bytes;
-                      // forwarding the original value causes OpenAI to truncate
-                      // the body if we injected a system prompt (changing body size)
+            // forwarding the original value causes OpenAI to truncate
+            // the body if we injected a system prompt (changing body size)
 ];
 
 /// Main proxy handler — handles all requests to /v1/* paths.
@@ -83,10 +83,7 @@ static BLOCKED_HEADERS: &[&str] = &[
         latency_ms = tracing::field::Empty,
     )
 )]
-pub async fn handle_proxy(
-    State(state): State<AppState>,
-    req: Request<Body>,
-) -> Response<Body> {
+pub async fn handle_proxy(State(state): State<AppState>, req: Request<Body>) -> Response<Body> {
     let request_id = Uuid::new_v4();
     let span = tracing::Span::current();
     span.record("request_id", request_id.to_string());
@@ -132,7 +129,9 @@ async fn proxy_inner(
     // the entire request.
     let (parts, body) = req.into_parts();
     let method = parts.method.clone();
-    let path = parts.uri.path_and_query()
+    let path = parts
+        .uri
+        .path_and_query()
         .map(|pq| pq.as_str().to_owned())
         .unwrap_or_default();
 
@@ -168,7 +167,9 @@ async fn proxy_inner(
     // the upstream or every request will be rejected with 401.
     // `host` is excluded — reqwest sets it correctly from the upstream URL.
     // Forwarding the client's `host` would send the gateway hostname to OpenAI.
-    let upstream_headers: HeaderMap = parts.headers.iter()
+    let upstream_headers: HeaderMap = parts
+        .headers
+        .iter()
         .filter(|(name, _)| !is_blocked_header(name.as_str()))
         .map(|(n, v)| (n.clone(), v.clone()))
         .collect();
@@ -178,9 +179,7 @@ async fn proxy_inner(
     // The gateway route is `/v1/*path`. Clients send `/v1/chat/completions`.
     // The upstream URL already ends with `/v1` (e.g. https://api.openai.com/v1).
     // Strip the leading `/v1` from path to avoid `/v1/v1/chat/completions`.
-    let upstream_path = path
-        .strip_prefix("/v1")
-        .unwrap_or(&path);
+    let upstream_path = path.strip_prefix("/v1").unwrap_or(&path);
     let upstream_url = format!(
         "{}{}",
         version.provider_url.trim_end_matches('/'),
@@ -197,14 +196,12 @@ async fn proxy_inner(
     let (body_bytes_raw, is_streaming) = read_request_body(req, &version).await?;
 
     // Translate request body for non-OpenAI providers (e.g. Anthropic format)
-    let body_bytes = crate::proxy::provider::translate_request_body(
-        &body_bytes_raw, &detected_provider,
-    );
+    let body_bytes =
+        crate::proxy::provider::translate_request_body(&body_bytes_raw, &detected_provider);
 
     // Normalize headers for the target provider (Anthropic needs x-api-key, not Bearer)
-    let upstream_headers = crate::proxy::provider::normalize_headers(
-        upstream_headers, &detected_provider, None,
-    );
+    let upstream_headers =
+        crate::proxy::provider::normalize_headers(upstream_headers, &detected_provider, None);
 
     // ── Forward to upstream with retry + failover ─────────────────────────
     let start = Instant::now();
@@ -223,7 +220,8 @@ async fn proxy_inner(
         &fallback_chain,
         &upstream_path,
         request_id,
-    ).await?;
+    )
+    .await?;
 
     let upstream_status = upstream_response.status();
     let upstream_headers_response = upstream_response.headers().clone();
@@ -236,8 +234,7 @@ async fn proxy_inner(
     }
 
     // ── Build client response ─────────────────────────────────────────────
-    let mut response_builder = Response::builder()
-        .status(upstream_status.as_u16());
+    let mut response_builder = Response::builder().status(upstream_status.as_u16());
 
     // Forward upstream headers to client (minus hop-by-hop)
     for (name, value) in &upstream_headers_response {
@@ -280,7 +277,9 @@ async fn proxy_inner(
         output_tokens: stream_result.output_tokens,
         latency_ms,
         status_code: upstream_status.as_u16(),
-        error: if upstream_status.is_success() { None } else {
+        error: if upstream_status.is_success() {
+            None
+        } else {
             Some(format!("Upstream returned {}", upstream_status))
         },
         session_id,
@@ -300,7 +299,9 @@ async fn proxy_inner(
     }
 
     state.metrics.requests_total.inc();
-    state.metrics.request_duration
+    state
+        .metrics
+        .request_duration
         .observe(latency_ms as f64 / 1000.0);
 
     info!(
@@ -349,7 +350,11 @@ fn active_version(rollout: &ActiveRollout, assignment: VersionAssignment) -> Req
 fn default_version(state: &AppState) -> Result<RequestVersion> {
     // If a provider is configured in repath.toml, use it.
     // Otherwise fall back to OpenAI (the client's Authorization header passes through).
-    let provider_url = state.config.providers.iter().next()
+    let provider_url = state
+        .config
+        .providers
+        .iter()
+        .next()
         .map(|(_, p)| p.base_url.clone())
         .unwrap_or_else(|| "https://api.openai.com/v1".to_string());
 
@@ -367,10 +372,7 @@ fn default_version(state: &AppState) -> Result<RequestVersion> {
 ///
 /// If the version has a `prompt_override`, we inject the system prompt into
 /// the messages array. Otherwise we return the raw bytes unchanged.
-async fn read_request_body(
-    req: Request<Body>,
-    version: &RequestVersion,
-) -> Result<(Bytes, bool)> {
+async fn read_request_body(req: Request<Body>, version: &RequestVersion) -> Result<(Bytes, bool)> {
     use axum::body::to_bytes;
 
     let body_bytes = to_bytes(req.into_body(), 10 * 1024 * 1024) // 10MB max
@@ -390,8 +392,8 @@ async fn read_request_body(
 
     // If candidate has a system prompt override, inject it
     if let Some(ref system_prompt) = version.prompt_override {
-        let bytes = inject_system_prompt(&body_bytes, system_prompt)
-            .unwrap_or_else(|_| body_bytes.clone());
+        let bytes =
+            inject_system_prompt(&body_bytes, system_prompt).unwrap_or_else(|_| body_bytes.clone());
         return Ok((bytes, is_streaming));
     }
 
@@ -442,10 +444,7 @@ async fn build_streaming_response(
     // Channel that feeds the Axum Body stream
     let (byte_tx, byte_rx) = mpsc::channel::<Result<Bytes>>(64);
 
-    let accumulator_result = streaming::accumulate_and_forward(
-        upstream_stream,
-        byte_tx,
-    ).await;
+    let accumulator_result = streaming::accumulate_and_forward(upstream_stream, byte_tx).await;
 
     // Convert the receiver into a Body stream
     let body_stream = tokio_stream::wrappers::ReceiverStream::new(byte_rx)
@@ -453,11 +452,14 @@ async fn build_streaming_response(
 
     let body = Body::from_stream(body_stream);
 
-    Ok((body, ResponseParts {
-        response_text: accumulator_result.response_text,
-        input_tokens: accumulator_result.input_tokens,
-        output_tokens: accumulator_result.output_tokens,
-    }))
+    Ok((
+        body,
+        ResponseParts {
+            response_text: accumulator_result.response_text,
+            input_tokens: accumulator_result.input_tokens,
+            output_tokens: accumulator_result.output_tokens,
+        },
+    ))
 }
 
 async fn build_buffered_response(
@@ -476,16 +478,18 @@ async fn build_buffered_response(
     let body_bytes = crate::proxy::provider::translate_response_body(&raw_bytes, provider);
 
     // Extract token counts from the JSON response
-    let (input_tokens, output_tokens, response_text) =
-        extract_non_streaming_metadata(&body_bytes);
+    let (input_tokens, output_tokens, response_text) = extract_non_streaming_metadata(&body_bytes);
 
     let body = Body::from(body_bytes);
 
-    Ok((body, ResponseParts {
-        response_text,
-        input_tokens,
-        output_tokens,
-    }))
+    Ok((
+        body,
+        ResponseParts {
+            response_text,
+            input_tokens,
+            output_tokens,
+        },
+    ))
 }
 
 /// Extract token usage and response text from a non-streaming completion response.
@@ -546,7 +550,9 @@ async fn send_with_failover(
     attempts.push((
         primary_url.to_string(),
         primary_provider_base.to_string(),
-        Provider::from_url(primary_provider_base).to_str().to_string(),
+        Provider::from_url(primary_provider_base)
+            .to_str()
+            .to_string(),
         None,
     ));
 
@@ -558,7 +564,9 @@ async fn send_with_failover(
 
     let mut last_error: Option<String> = None;
 
-    for (attempt_idx, (url, provider_base, provider_name, api_key_override)) in attempts.iter().enumerate() {
+    for (attempt_idx, (url, provider_base, provider_name, api_key_override)) in
+        attempts.iter().enumerate()
+    {
         // Build headers for this specific attempt
         // If fallback has its own API key, inject it as Authorization header
         let mut attempt_headers = headers.clone();
@@ -570,9 +578,8 @@ async fn send_with_failover(
 
         // Apply provider-specific normalization (Anthropic header translation, etc.)
         let detected = Provider::from_url(provider_base);
-        let normalized_headers = crate::proxy::provider::normalize_headers(
-            attempt_headers, &detected, None,
-        );
+        let normalized_headers =
+            crate::proxy::provider::normalize_headers(attempt_headers, &detected, None);
         let normalized_body = if attempt_idx > 0 {
             // Re-translate body for the fallback's provider format
             crate::proxy::provider::translate_request_body(&body, &detected)
@@ -581,7 +588,8 @@ async fn send_with_failover(
         };
 
         // Attempt 1: send
-        let send_result = state.http_client
+        let send_result = state
+            .http_client
             .request(method.clone(), url.as_str())
             .headers(normalized_headers.clone())
             .body(normalized_body.clone())
@@ -608,7 +616,8 @@ async fn send_with_failover(
                     // Single retry on primary before trying fallbacks
                     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
 
-                    let retry_result = state.http_client
+                    let retry_result = state
+                        .http_client
                         .request(method.clone(), url.as_str())
                         .headers(normalized_headers)
                         .body(normalized_body)
@@ -623,7 +632,10 @@ async fn send_with_failover(
                                 return Ok((retry_resp, provider_base.clone()));
                             }
                             // Retry also failed — move to fallback
-                            last_error = Some(format!("{} returned {} on retry", provider_name, retry_status));
+                            last_error = Some(format!(
+                                "{} returned {} on retry",
+                                provider_name, retry_status
+                            ));
                             let _ = retry_resp.bytes().await;
                         }
                         Err(e) => {
@@ -776,7 +788,11 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
 
         let messages = parsed["messages"].as_array().unwrap();
-        assert_eq!(messages.len(), 2, "Old system message should be replaced, not added");
+        assert_eq!(
+            messages.len(),
+            2,
+            "Old system message should be replaced, not added"
+        );
         assert_eq!(messages[0]["content"], "New system prompt.");
     }
 

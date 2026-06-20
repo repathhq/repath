@@ -188,8 +188,8 @@ fn check_advance_gate(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use uuid::Uuid;
     use crate::metrics_aggregator::{RolloutMetrics, VersionSnapshot};
+    use uuid::Uuid;
 
     fn policy() -> RolloutPolicy {
         RolloutPolicy {
@@ -203,8 +203,10 @@ mod tests {
     }
 
     fn make_metrics(
-        baseline_q: f64, baseline_lat: u32,
-        candidate_q: f64, candidate_lat: u32,
+        baseline_q: f64,
+        baseline_lat: u32,
+        candidate_q: f64,
+        candidate_lat: u32,
         candidate_errors: f64,
     ) -> RolloutMetrics {
         RolloutMetrics {
@@ -232,7 +234,8 @@ mod tests {
         let result = evaluate(&metrics, &policy(), 0.10, 0.50, false, 700, 600);
         assert!(
             matches!(result, PolicyVerdict::Advance { .. }),
-            "Expected Advance, got {:?}", result
+            "Expected Advance, got {:?}",
+            result
         );
     }
 
@@ -242,7 +245,8 @@ mod tests {
         let result = evaluate(&metrics, &policy(), 0.10, 0.50, false, 700, 600);
         assert!(
             matches!(result, PolicyVerdict::Rollback { .. }),
-            "Expected Rollback, got {:?}", result
+            "Expected Rollback, got {:?}",
+            result
         );
     }
 
@@ -253,7 +257,8 @@ mod tests {
         let result = evaluate(&metrics, &policy(), 0.10, 0.50, false, 700, 600);
         assert!(
             matches!(result, PolicyVerdict::Hold { .. }),
-            "Expected Hold, got {:?}", result
+            "Expected Hold, got {:?}",
+            result
         );
     }
 
@@ -263,7 +268,8 @@ mod tests {
         let result = evaluate(&metrics, &policy(), 0.10, 0.50, false, 700, 600);
         assert!(
             matches!(result, PolicyVerdict::Rollback { .. }),
-            "Expected Rollback due to error rate, got {:?}", result
+            "Expected Rollback due to error rate, got {:?}",
+            result
         );
     }
 
@@ -274,7 +280,8 @@ mod tests {
         let result = evaluate(&metrics, &policy(), 0.10, 0.50, false, 700, 600);
         assert!(
             matches!(result, PolicyVerdict::Hold { .. }),
-            "Expected Hold due to latency regression, got {:?}", result
+            "Expected Hold due to latency regression, got {:?}",
+            result
         );
     }
 
@@ -283,13 +290,18 @@ mod tests {
         // Quality is great but step duration hasn't passed
         let metrics = make_metrics(0.92, 500, 0.93, 480, 0.01);
         let result = evaluate(
-            &metrics, &policy(), 0.10, 0.50, false,
+            &metrics,
+            &policy(),
+            0.10,
+            0.50,
+            false,
             300, // elapsed: 300s
             600, // required: 600s
         );
         assert!(
             matches!(result, PolicyVerdict::Hold { .. }),
-            "Expected Hold because step duration not elapsed, got {:?}", result
+            "Expected Hold because step duration not elapsed, got {:?}",
+            result
         );
     }
 
@@ -299,7 +311,8 @@ mod tests {
         let result = evaluate(&metrics, &policy(), 0.50, 1.0, true, 700, 600);
         assert!(
             matches!(result, PolicyVerdict::Advance { is_final: true, .. }),
-            "Expected Advance with is_final=true, got {:?}", result
+            "Expected Advance with is_final=true, got {:?}",
+            result
         );
     }
 
@@ -310,11 +323,13 @@ mod tests {
         if let PolicyVerdict::Rollback { reason } = result {
             assert!(
                 reason.contains("0.600") || reason.contains("0.60"),
-                "Reason should include the actual quality score: {}", reason
+                "Reason should include the actual quality score: {}",
+                reason
             );
             assert!(
                 reason.contains("0.70") || reason.contains("rollback threshold"),
-                "Reason should mention the threshold: {}", reason
+                "Reason should mention the threshold: {}",
+                reason
             );
         } else {
             panic!("Expected Rollback");
@@ -335,7 +350,8 @@ mod tests {
         // → Hold
         assert!(
             matches!(result, PolicyVerdict::Hold { .. }),
-            "At exact rollback threshold, should Hold (< not <=): got {:?}", result
+            "At exact rollback threshold, should Hold (< not <=): got {:?}",
+            result
         );
     }
 
@@ -345,7 +361,8 @@ mod tests {
         let result = evaluate(&metrics, &policy(), 0.10, 0.50, false, 700, 600);
         assert!(
             matches!(result, PolicyVerdict::Rollback { .. }),
-            "Expected Rollback, got {:?}", result
+            "Expected Rollback, got {:?}",
+            result
         );
     }
 }

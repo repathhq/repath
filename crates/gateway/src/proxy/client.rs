@@ -53,11 +53,9 @@ pub fn create_http_client(config: &ServerConfig) -> Result<Client> {
         .user_agent(format!("Repath-Gateway/{}", env!("CARGO_PKG_VERSION")))
         // Build the client
         .build()
-        .map_err(|e| {
-            Error::Internal {
-                message: "Failed to create HTTP client".to_string(),
-                source: Some(e.into()),
-            }
+        .map_err(|e| Error::Internal {
+            message: "Failed to create HTTP client".to_string(),
+            source: Some(e.into()),
         })?;
 
     info!(

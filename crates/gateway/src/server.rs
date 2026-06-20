@@ -59,8 +59,8 @@ pub fn create_server(state: AppState) -> Router {
 
     Router::new()
         // Health and readiness probes
-        .route("/health",   get(health_handler))
-        .route("/ready",    get(readiness_handler))
+        .route("/health", get(health_handler))
+        .route("/ready", get(readiness_handler))
         // Management API for dashboard and CLI
         .nest("/api/v1", crate::api::api_router())
         // OpenAI-compatible proxy surface (catch-all under /v1)
@@ -68,11 +68,7 @@ pub fn create_server(state: AppState) -> Router {
         // State shared across all handlers
         .with_state(state)
         // Middleware (applied to all routes)
-        .layer(
-            ServiceBuilder::new()
-                .layer(trace_layer)
-                .layer(cors_layer),
-        )
+        .layer(ServiceBuilder::new().layer(trace_layer).layer(cors_layer))
 }
 
 // ── Health handlers ────────────────────────────────────────────────────────

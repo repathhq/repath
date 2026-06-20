@@ -21,7 +21,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-
 # Patterns that indicate the model refused to respond.
 # Matches are case-insensitive. This list covers the most common refusal
 # patterns from OpenAI and Anthropic models as of 2025.

@@ -1,7 +1,7 @@
 """Evaluator implementations."""
 
+from .llm_judge import JudgeResult, LlmJudgeEvaluator
 from .programmatic import ProgrammaticEvaluator, ProgrammaticResult
-from .llm_judge import LlmJudgeEvaluator, JudgeResult
 
 __all__ = [
     "ProgrammaticEvaluator",

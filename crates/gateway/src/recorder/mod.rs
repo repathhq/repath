@@ -171,7 +171,6 @@ pub async fn run_recorder(
     // Channel closed — we are in graceful shutdown.
     info!(
         records_written,
-        records_discarded,
-        "Recorder task draining and exiting"
+        records_discarded, "Recorder task draining and exiting"
     );
 }

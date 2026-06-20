@@ -29,39 +29,46 @@
 pub mod cloud;
 pub mod handlers;
 
-use axum::{middleware, routing::{get, post}, Router};
 use crate::{auth::require_api_token, AppState};
+use axum::{
+    middleware,
+    routing::{get, post},
+    Router,
+};
 
 pub fn api_router() -> Router<AppState> {
     // Webhook routes — no API token, but payload is signature-verified
     let webhook_router = Router::new()
         .route("/razorpay", post(cloud::razorpay_webhook))
-        .route("/paddle",   post(cloud::paddle_webhook));
+        .route("/paddle", post(cloud::paddle_webhook));
 
     // Cloud management routes — require API token
     let cloud_router = Router::new()
-        .route("/tenants",                      post(cloud::create_tenant))
-        .route("/tenants/:id",                  get(cloud::get_tenant))
-        .route("/tenants/:id/upgrade",          post(cloud::upgrade_tenant))
-        .route("/tenants/:id/usage",            get(cloud::get_usage))
-        .route("/tenants/by-email/:email",      get(cloud::get_tenant_by_email))
+        .route("/tenants", post(cloud::create_tenant))
+        .route("/tenants/:id", get(cloud::get_tenant))
+        .route("/tenants/:id/upgrade", post(cloud::upgrade_tenant))
+        .route("/tenants/:id/usage", get(cloud::get_usage))
+        .route("/tenants/by-email/:email", get(cloud::get_tenant_by_email))
         .layer(middleware::from_fn(require_api_token));
 
     // Core rollout + system routes — require API token
     let core_router = Router::new()
-        .route("/rollouts",                       get(handlers::list_rollouts))
-        .route("/rollouts/:id",                   get(handlers::get_rollout))
-        .route("/rollouts/:id/metrics",           get(handlers::get_rollout_metrics))
-        .route("/rollouts/:id/steps",             get(handlers::get_rollout_steps))
-        .route("/rollouts/:id/decisions",         get(handlers::get_rollout_decisions))
-        .route("/rollouts/:id/promote",           post(handlers::promote_rollout))
-        .route("/rollouts/:id/rollback",          post(handlers::rollback_rollout))
-        .route("/system/health",                  get(handlers::system_health))
-        .route("/system/providers",               get(handlers::provider_health))
+        .route("/rollouts", get(handlers::list_rollouts))
+        .route("/rollouts/:id", get(handlers::get_rollout))
+        .route("/rollouts/:id/metrics", get(handlers::get_rollout_metrics))
+        .route("/rollouts/:id/steps", get(handlers::get_rollout_steps))
+        .route(
+            "/rollouts/:id/decisions",
+            get(handlers::get_rollout_decisions),
+        )
+        .route("/rollouts/:id/promote", post(handlers::promote_rollout))
+        .route("/rollouts/:id/rollback", post(handlers::rollback_rollout))
+        .route("/system/health", get(handlers::system_health))
+        .route("/system/providers", get(handlers::provider_health))
         .layer(middleware::from_fn(require_api_token));
 
     Router::new()
         .merge(core_router)
-        .nest("/cloud",    cloud_router)
+        .nest("/cloud", cloud_router)
         .nest("/webhooks", webhook_router)
 }

@@ -246,10 +246,7 @@ pub async fn get_rollout(
             };
             Json(json!(detail)).into_response()
         }
-        Ok(None) => api_error(
-            StatusCode::NOT_FOUND,
-            format!("Rollout not found: '{id}'"),
-        ),
+        Ok(None) => api_error(StatusCode::NOT_FOUND, format!("Rollout not found: '{id}'")),
         Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
 }
@@ -333,12 +330,11 @@ pub async fn get_rollout_steps(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    let rollout_id_row = sqlx::query(
-        "SELECT id FROM rollouts WHERE id::text = $1 OR name = $1 LIMIT 1",
-    )
-    .bind(&id)
-    .fetch_optional(&state.db_pool)
-    .await;
+    let rollout_id_row =
+        sqlx::query("SELECT id FROM rollouts WHERE id::text = $1 OR name = $1 LIMIT 1")
+            .bind(&id)
+            .fetch_optional(&state.db_pool)
+            .await;
 
     let rollout_id: Uuid = match rollout_id_row {
         Ok(Some(r)) => r.get("id"),
@@ -383,12 +379,11 @@ pub async fn get_rollout_decisions(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    let rollout_id_row = sqlx::query(
-        "SELECT id FROM rollouts WHERE id::text = $1 OR name = $1 LIMIT 1",
-    )
-    .bind(&id)
-    .fetch_optional(&state.db_pool)
-    .await;
+    let rollout_id_row =
+        sqlx::query("SELECT id FROM rollouts WHERE id::text = $1 OR name = $1 LIMIT 1")
+            .bind(&id)
+            .fetch_optional(&state.db_pool)
+            .await;
 
     let rollout_id: Uuid = match rollout_id_row {
         Ok(Some(r)) => r.get("id"),
@@ -471,7 +466,11 @@ pub async fn system_health(State(state): State<AppState>) -> impl IntoResponse {
     let health = SystemHealth {
         status: overall.to_string(),
         database: if db_ok { "ok".into() } else { "error".into() },
-        redis: if redis_ok { "ok".into() } else { "error".into() },
+        redis: if redis_ok {
+            "ok".into()
+        } else {
+            "error".into()
+        },
         gateway_version: env!("CARGO_PKG_VERSION").to_string(),
         active_rollouts,
     };

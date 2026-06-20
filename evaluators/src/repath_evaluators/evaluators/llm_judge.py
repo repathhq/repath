@@ -40,20 +40,20 @@ The scoring prompt is intentionally simple:
 from __future__ import annotations
 
 import json
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any
 
 import structlog
-from openai import AsyncOpenAI, RateLimitError, APIError
+from openai import APIError, AsyncOpenAI, RateLimitError
 from tenacity import (
+    before_sleep_log,
     retry,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    before_sleep_log,
 )
-import logging
 
 log = structlog.get_logger(__name__)
 

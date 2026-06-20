@@ -15,7 +15,7 @@
 //! - `REPATH_CONTROLLER_WINDOW_MINUTES`  — Metric aggregation window (default: 10)
 //! - `RUST_LOG`                           — Log level filter (default: info)
 
-use repath_controller::loop_runner::{ControllerConfig, run};
+use repath_controller::loop_runner::{run, ControllerConfig};
 use sqlx::postgres::PgPoolOptions;
 use std::time::Duration;
 use tracing::info;
@@ -33,9 +33,8 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     // Load required configuration from environment
-    let db_url = std::env::var("REPATH_DATABASE_URL").map_err(|_| {
-        anyhow::anyhow!("REPATH_DATABASE_URL must be set")
-    })?;
+    let db_url = std::env::var("REPATH_DATABASE_URL")
+        .map_err(|_| anyhow::anyhow!("REPATH_DATABASE_URL must be set"))?;
 
     let decision_interval_secs = std::env::var("REPATH_CONTROLLER_INTERVAL_SECS")
         .ok()
@@ -49,8 +48,7 @@ async fn main() -> anyhow::Result<()> {
 
     info!(
         decision_interval_secs,
-        metric_window_minutes,
-        "Starting Repath Controller"
+        metric_window_minutes, "Starting Repath Controller"
     );
 
     // Create database pool — controller only needs a small pool (1-2 conns)

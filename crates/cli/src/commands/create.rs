@@ -43,10 +43,8 @@ pub async fn create(pool: &PgPool, file: PathBuf) -> Result<()> {
     let mut tx = pool.begin().await.context("Failed to begin transaction")?;
 
     // ── Upsert providers ─────────────────────────────────────────────────────
-    let baseline_provider_id =
-        upsert_provider(&mut tx, &config.spec.baseline.provider).await?;
-    let candidate_provider_id =
-        upsert_provider(&mut tx, &config.spec.candidate.provider).await?;
+    let baseline_provider_id = upsert_provider(&mut tx, &config.spec.baseline.provider).await?;
+    let candidate_provider_id = upsert_provider(&mut tx, &config.spec.candidate.provider).await?;
 
     // ── Create versions ───────────────────────────────────────────────────────
     // Use the rollout UUID in version names so re-creating a same-named rollout
@@ -63,7 +61,11 @@ pub async fn create(pool: &PgPool, file: PathBuf) -> Result<()> {
 
     let candidate_version_id = insert_version(
         &mut tx,
-        &format!("{}-candidate-{}", rollout_name, &rollout_id.to_string()[..8]),
+        &format!(
+            "{}-candidate-{}",
+            rollout_name,
+            &rollout_id.to_string()[..8]
+        ),
         candidate_provider_id,
         &config.spec.candidate.model,
         config.spec.candidate.prompt.system.as_deref(),
@@ -223,9 +225,12 @@ async fn insert_version(
 }
 
 fn build_strategy(config: &RolloutConfig) -> Result<RolloutStrategy> {
-    use repath_common::types::{RolloutStep};
+    use repath_common::types::RolloutStep;
 
-    let steps = config.spec.strategy.steps
+    let steps = config
+        .spec
+        .strategy
+        .steps
         .iter()
         .enumerate()
         .map(|(i, s)| RolloutStep {
@@ -278,7 +283,13 @@ fn validate_config(config: &RolloutConfig) -> Result<()> {
     if config.spec.strategy.steps.is_empty() {
         anyhow::bail!("Strategy must have at least one step");
     }
-    let last_weight = config.spec.strategy.steps.last().map(|s| s.weight).unwrap_or(0);
+    let last_weight = config
+        .spec
+        .strategy
+        .steps
+        .last()
+        .map(|s| s.weight)
+        .unwrap_or(0);
     if last_weight != 100 {
         anyhow::bail!(
             "Last strategy step must have weight: 100 (got {})",

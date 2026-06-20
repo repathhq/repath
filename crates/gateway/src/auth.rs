@@ -36,10 +36,7 @@ use tracing::warn;
 /// Axum middleware that enforces bearer token authentication.
 ///
 /// Apply this to the `/api/v1` router only — not to `/v1/*` (proxy) or `/health`.
-pub async fn require_api_token(
-    req: Request<Body>,
-    next: Next,
-) -> Response {
+pub async fn require_api_token(req: Request<Body>, next: Next) -> Response {
     // Read the expected token from the environment.
     // This is re-read on every request so token rotation takes effect without restart.
     // In practice, the OS caches env reads and this is effectively free.
@@ -57,7 +54,8 @@ pub async fn require_api_token(
                         "type": "configuration_error"
                     }
                 })),
-            ).into_response();
+            )
+                .into_response();
         }
     };
 

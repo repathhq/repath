@@ -41,8 +41,8 @@ from typing import Any
 
 import structlog
 
-from .evaluators.llm_judge import JudgeResult, LlmJudgeEvaluator
-from .evaluators.programmatic import ProgrammaticEvaluator, ProgrammaticResult
+from .evaluators.llm_judge import LlmJudgeEvaluator
+from .evaluators.programmatic import ProgrammaticEvaluator
 
 log = structlog.get_logger(__name__)
 
@@ -68,7 +68,7 @@ class EvalJob:
     status_code: int = 200
 
     @classmethod
-    def from_stream_entry(cls, fields: dict[str, str]) -> "EvalJob":
+    def from_stream_entry(cls, fields: dict[str, str]) -> EvalJob:
         """Parse an EvalJob from a Redis Stream entry's field dict."""
         return cls(
             request_id=fields["request_id"],

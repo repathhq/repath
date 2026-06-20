@@ -129,10 +129,12 @@ async fn process_rollout(
     _config: &ControllerConfig,
 ) -> Result<()> {
     // Parse the policy from JSONB — if it's malformed, fail loudly
-    let policy: RolloutPolicy = serde_json::from_value(rollout.policy_json.clone())
-        .map_err(|e| repath_common::Error::Serialization {
-            context: format!("policy field for rollout {}", rollout.id),
-            source: e.into(),
+    let policy: RolloutPolicy =
+        serde_json::from_value(rollout.policy_json.clone()).map_err(|e| {
+            repath_common::Error::Serialization {
+                context: format!("policy field for rollout {}", rollout.id),
+                source: e.into(),
+            }
         })?;
 
     // Start 'created' rollouts (transition created → canary)
@@ -159,7 +161,8 @@ async fn process_rollout(
     let (step_elapsed_secs, step_target_weight, is_final_step, min_step_duration_secs) =
         match &active_step {
             Some(step) => {
-                let elapsed = step.started_at
+                let elapsed = step
+                    .started_at
                     .map(|t| (Utc::now() - t).num_seconds().max(0) as u64)
                     .unwrap_or(0);
                 let duration = step.pause_duration_seconds.unwrap_or(0).max(0) as u64;
@@ -189,8 +192,7 @@ async fn process_rollout(
         };
 
     // Fetch the rollout's baseline and candidate version IDs
-    let (baseline_version_id, candidate_version_id) =
-        fetch_version_ids(pool, rollout.id).await?;
+    let (baseline_version_id, candidate_version_id) = fetch_version_ids(pool, rollout.id).await?;
 
     // Aggregate metrics for this rollout's rolling window
     let agg = metrics_aggregator::aggregate(
@@ -299,24 +301,23 @@ async fn process_rollout(
 }
 
 /// Fetch the baseline and candidate version IDs for a rollout.
-async fn fetch_version_ids(
-    pool: &PgPool,
-    rollout_id: Uuid,
-) -> Result<(Uuid, Uuid)> {
+async fn fetch_version_ids(pool: &PgPool, rollout_id: Uuid) -> Result<(Uuid, Uuid)> {
     use sqlx::Row;
 
-    let row = sqlx::query(
-        "SELECT baseline_version_id, candidate_version_id FROM rollouts WHERE id = $1",
-    )
-    .bind(rollout_id)
-    .fetch_one(pool)
-    .await
-    .map_err(|e| repath_common::Error::Database {
-        operation: "fetch rollout version IDs".to_string(),
-        source: e.into(),
-    })?;
+    let row =
+        sqlx::query("SELECT baseline_version_id, candidate_version_id FROM rollouts WHERE id = $1")
+            .bind(rollout_id)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| repath_common::Error::Database {
+                operation: "fetch rollout version IDs".to_string(),
+                source: e.into(),
+            })?;
 
-    Ok((row.get("baseline_version_id"), row.get("candidate_version_id")))
+    Ok((
+        row.get("baseline_version_id"),
+        row.get("candidate_version_id"),
+    ))
 }
 
 use uuid::Uuid;

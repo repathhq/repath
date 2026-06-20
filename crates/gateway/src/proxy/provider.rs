@@ -93,10 +93,7 @@ pub fn normalize_headers(
 
             // Add Anthropic-specific headers
             if let Ok(v) = HeaderValue::from_str(&api_key) {
-                headers.insert(
-                    HeaderName::from_static("x-api-key"),
-                    v,
-                );
+                headers.insert(HeaderName::from_static("x-api-key"), v);
             }
             headers.insert(
                 HeaderName::from_static("anthropic-version"),
@@ -258,9 +255,9 @@ fn translate_from_anthropic(body: &Bytes) -> Bytes {
 
 fn extract_system_from_messages(json: &mut Value) -> Option<String> {
     let messages = json.get_mut("messages")?.as_array_mut()?;
-    let pos = messages.iter().position(|m| {
-        m.get("role").and_then(|r| r.as_str()) == Some("system")
-    })?;
+    let pos = messages
+        .iter()
+        .position(|m| m.get("role").and_then(|r| r.as_str()) == Some("system"))?;
     let system_msg = messages.remove(pos);
     system_msg.get("content")?.as_str().map(str::to_string)
 }
@@ -284,8 +281,14 @@ mod tests {
 
     #[test]
     fn test_provider_detection() {
-        assert_eq!(Provider::from_url("https://api.openai.com/v1"), Provider::OpenAI);
-        assert_eq!(Provider::from_url("https://api.anthropic.com/v1"), Provider::Anthropic);
+        assert_eq!(
+            Provider::from_url("https://api.openai.com/v1"),
+            Provider::OpenAI
+        );
+        assert_eq!(
+            Provider::from_url("https://api.anthropic.com/v1"),
+            Provider::Anthropic
+        );
         assert_eq!(
             Provider::from_url("https://generativelanguage.googleapis.com/v1beta/openai"),
             Provider::Gemini

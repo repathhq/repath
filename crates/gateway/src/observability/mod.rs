@@ -3,5 +3,5 @@
 pub mod metrics;
 pub mod tracing_setup;
 
-pub use metrics::{Metrics, serve_metrics};
+pub use metrics::{serve_metrics, Metrics};
 pub use tracing_setup::init_tracing;

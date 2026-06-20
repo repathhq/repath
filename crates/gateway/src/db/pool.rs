@@ -41,11 +41,9 @@ pub async fn create_pool(settings: &DatabaseSettings) -> Result<PgPool> {
         .max_lifetime(Some(Duration::from_secs(3600))) // Recycle connections after 1 hour
         .connect(&settings.url)
         .await
-        .map_err(|e| {
-            Error::Database {
-                operation: "create connection pool".to_string(),
-                source: e.into(),
-            }
+        .map_err(|e| Error::Database {
+            operation: "create connection pool".to_string(),
+            source: e.into(),
         })?;
 
     info!(
@@ -74,11 +72,9 @@ pub async fn verify_connection(pool: &PgPool) -> Result<()> {
     sqlx::query("SELECT 1")
         .execute(pool)
         .await
-        .map_err(|e| {
-            Error::Database {
-                operation: "verify connection".to_string(),
-                source: e.into(),
-            }
+        .map_err(|e| Error::Database {
+            operation: "verify connection".to_string(),
+            source: e.into(),
         })?;
 
     info!("Database connection verified");

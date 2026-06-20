@@ -90,7 +90,9 @@ impl BreakerState {
         match self.state {
             CircuitState::HalfOpen => {
                 warn!(tenant_id, "Circuit breaker → Open (probe failed)");
-                self.state = CircuitState::Open { opened_at: Instant::now() };
+                self.state = CircuitState::Open {
+                    opened_at: Instant::now(),
+                };
             }
             CircuitState::Closed => {
                 if self.consecutive_failures >= FAILURE_THRESHOLD {
@@ -99,7 +101,9 @@ impl BreakerState {
                         failures = self.consecutive_failures,
                         "Circuit breaker → Open (threshold reached)"
                     );
-                    self.state = CircuitState::Open { opened_at: Instant::now() };
+                    self.state = CircuitState::Open {
+                        opened_at: Instant::now(),
+                    };
                 }
             }
             _ => {}

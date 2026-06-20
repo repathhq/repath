@@ -154,10 +154,7 @@ impl RolloutState {
     }
 
     pub fn is_terminal(&self) -> bool {
-        matches!(
-            self,
-            RolloutState::Promoted | RolloutState::RolledBack
-        )
+        matches!(self, RolloutState::Promoted | RolloutState::RolledBack)
     }
 }
 

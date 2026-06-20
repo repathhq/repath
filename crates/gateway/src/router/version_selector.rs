@@ -41,10 +41,7 @@ pub enum VersionAssignment {
 ///
 /// `VersionAssignment::Candidate` with probability == `rollout.candidate_weight`.
 /// `VersionAssignment::Baseline` otherwise.
-pub fn select_version(
-    rollout: &ActiveRollout,
-    session_id: Option<&str>,
-) -> VersionAssignment {
+pub fn select_version(rollout: &ActiveRollout, session_id: Option<&str>) -> VersionAssignment {
     let sample = match session_id {
         Some(sid) => sticky_sample(sid, rollout.rollout_id),
         None => rand::thread_rng().gen::<f64>(),
@@ -102,10 +99,7 @@ mod tests {
     fn test_zero_weight_always_baseline() {
         let rollout = make_rollout(0.0);
         for _ in 0..1000 {
-            assert_eq!(
-                select_version(&rollout, None),
-                VersionAssignment::Baseline
-            );
+            assert_eq!(select_version(&rollout, None), VersionAssignment::Baseline);
         }
     }
 
@@ -113,10 +107,7 @@ mod tests {
     fn test_full_weight_always_candidate() {
         let rollout = make_rollout(1.0);
         for _ in 0..1000 {
-            assert_eq!(
-                select_version(&rollout, None),
-                VersionAssignment::Candidate
-            );
+            assert_eq!(select_version(&rollout, None), VersionAssignment::Candidate);
         }
     }
 

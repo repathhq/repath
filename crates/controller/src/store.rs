@@ -188,7 +188,11 @@ pub async fn apply_advance(
     insert_decision(
         pool,
         rollout_id,
-        if new_state == "promoted" { "promote" } else { "advance" },
+        if new_state == "promoted" {
+            "promote"
+        } else {
+            "advance"
+        },
         reason,
         Some(old_weight),
         Some(new_weight),
@@ -302,10 +306,7 @@ pub async fn activate_next_step(pool: &PgPool, rollout_id: Uuid) -> Result<Optio
 }
 
 /// Get the currently active step for a rollout.
-pub async fn get_active_step(
-    pool: &PgPool,
-    rollout_id: Uuid,
-) -> Result<Option<ActiveStepRow>> {
+pub async fn get_active_step(pool: &PgPool, rollout_id: Uuid) -> Result<Option<ActiveStepRow>> {
     let row = sqlx::query(
         r#"
         SELECT step_number, target_weight, gate_expression,

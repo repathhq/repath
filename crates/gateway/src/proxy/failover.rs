@@ -45,7 +45,11 @@ pub struct ProviderEndpoint {
 
 impl ProviderEndpoint {
     pub fn new(url: impl Into<String>, name: impl Into<String>) -> Self {
-        Self { url: url.into(), name: name.into(), api_key: None }
+        Self {
+            url: url.into(),
+            name: name.into(),
+            api_key: None,
+        }
     }
 
     pub fn with_key(mut self, key: impl Into<String>) -> Self {
@@ -64,22 +68,24 @@ pub fn anthropic_endpoint() -> ProviderEndpoint {
 }
 
 pub fn gemini_endpoint() -> ProviderEndpoint {
-    ProviderEndpoint::new("https://generativelanguage.googleapis.com/v1beta/openai", "gemini")
+    ProviderEndpoint::new(
+        "https://generativelanguage.googleapis.com/v1beta/openai",
+        "gemini",
+    )
 }
 
 /// OpenRouter — acts as a universal fallback hub.
 /// One API key gives access to 100+ models. If primary provider is down,
 /// OpenRouter can route to a working alternative automatically.
 pub fn openrouter_endpoint(api_key: impl Into<String>) -> ProviderEndpoint {
-    ProviderEndpoint::new("https://openrouter.ai/api/v1", "openrouter")
-        .with_key(api_key)
+    ProviderEndpoint::new("https://openrouter.ai/api/v1", "openrouter").with_key(api_key)
 }
 
 // ── Health tracking ─────────────────────────────────────────────────────────
 
 const HEALTH_WINDOW: Duration = Duration::from_secs(60);
 const DEGRADED_THRESHOLD: f64 = 0.20; // 20% error rate = degraded
-const MIN_SAMPLES: u32 = 5;           // need at least 5 requests to assess health
+const MIN_SAMPLES: u32 = 5; // need at least 5 requests to assess health
 
 #[derive(Debug)]
 struct ProviderHealthEntry {
@@ -89,19 +95,24 @@ struct ProviderHealthEntry {
 
 impl ProviderHealthEntry {
     fn new() -> Self {
-        Self { samples: Vec::with_capacity(64) }
+        Self {
+            samples: Vec::with_capacity(64),
+        }
     }
 
     fn record(&mut self, is_error: bool) {
         let now = Instant::now();
         // Evict samples older than the window
-        self.samples.retain(|(t, _)| now.duration_since(*t) < HEALTH_WINDOW);
+        self.samples
+            .retain(|(t, _)| now.duration_since(*t) < HEALTH_WINDOW);
         self.samples.push((now, is_error));
     }
 
     fn error_rate(&self) -> f64 {
         let now = Instant::now();
-        let recent: Vec<_> = self.samples.iter()
+        let recent: Vec<_> = self
+            .samples
+            .iter()
             .filter(|(t, _)| now.duration_since(*t) < HEALTH_WINDOW)
             .collect();
         if recent.len() < MIN_SAMPLES as usize {
@@ -117,7 +128,8 @@ impl ProviderHealthEntry {
 
     fn total_requests(&self) -> u32 {
         let now = Instant::now();
-        self.samples.iter()
+        self.samples
+            .iter()
             .filter(|(t, _)| now.duration_since(*t) < HEALTH_WINDOW)
             .count() as u32
     }
@@ -134,7 +146,9 @@ pub struct ProviderHealthRegistry {
 
 impl ProviderHealthRegistry {
     pub fn new() -> Self {
-        Self { entries: Arc::new(Mutex::new(HashMap::new())) }
+        Self {
+            entries: Arc::new(Mutex::new(HashMap::new())),
+        }
     }
 
     pub fn record_success(&self, provider_url: &str) {
@@ -160,25 +174,27 @@ impl ProviderHealthRegistry {
 
     pub fn error_rate(&self, provider_url: &str) -> f64 {
         let map = self.entries.lock().unwrap();
-        map.get(provider_url)
-            .map(|e| e.error_rate())
-            .unwrap_or(0.0)
+        map.get(provider_url).map(|e| e.error_rate()).unwrap_or(0.0)
     }
 
     /// Snapshot of all provider health for the dashboard API.
     pub fn snapshot(&self) -> Vec<ProviderHealthSnapshot> {
         let map = self.entries.lock().unwrap();
-        map.iter().map(|(url, entry)| ProviderHealthSnapshot {
-            provider_url: url.clone(),
-            error_rate: entry.error_rate(),
-            total_requests: entry.total_requests(),
-            degraded: entry.is_degraded(),
-        }).collect()
+        map.iter()
+            .map(|(url, entry)| ProviderHealthSnapshot {
+                provider_url: url.clone(),
+                error_rate: entry.error_rate(),
+                total_requests: entry.total_requests(),
+                degraded: entry.is_degraded(),
+            })
+            .collect()
     }
 }
 
 impl Default for ProviderHealthRegistry {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -197,7 +213,10 @@ pub enum AttemptOutcome {
     /// Provider responded (even with 4xx — those are not retried).
     Success(reqwest::Response),
     /// Provider returned 5xx or timed out — eligible for failover.
-    ProviderError { status: Option<u16>, message: String },
+    ProviderError {
+        status: Option<u16>,
+        message: String,
+    },
 }
 
 /// Classify a reqwest error or response status for failover eligibility.
@@ -235,12 +254,7 @@ pub fn build_fallback_chain(
 }
 
 /// Log a provider failover incident.
-pub fn log_failover(
-    primary: &str,
-    fallback: &str,
-    reason: &str,
-    request_id: uuid::Uuid,
-) {
+pub fn log_failover(primary: &str, fallback: &str, reason: &str, request_id: uuid::Uuid) {
     warn!(
         request_id = %request_id,
         primary_provider = primary,
@@ -293,7 +307,9 @@ mod tests {
         let registry = ProviderHealthRegistry::new();
         let openai = "https://api.openai.com/v1";
         let anthropic = "https://api.anthropic.com/v1";
-        for _ in 0..10 { registry.record_error(openai); }
+        for _ in 0..10 {
+            registry.record_error(openai);
+        }
         assert!(registry.is_degraded(openai));
         assert!(!registry.is_degraded(anthropic));
     }

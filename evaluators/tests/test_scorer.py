@@ -1,12 +1,12 @@
-kill"""Tests for the Scorer — composite scoring and LLM judge sampling logic."""
+"""Tests for the Scorer — composite scoring and LLM judge sampling logic."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from repath_evaluators.scorer import EvalJob, Scorer
-from repath_evaluators.evaluators.programmatic import ProgrammaticEvaluator
-from repath_evaluators.evaluators.llm_judge import JudgeResult, CriterionScore
+import pytest
 
+from repath_evaluators.evaluators.llm_judge import CriterionScore, JudgeResult
+from repath_evaluators.evaluators.programmatic import ProgrammaticEvaluator
+from repath_evaluators.scorer import EvalJob, Scorer
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 

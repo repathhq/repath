@@ -104,7 +104,10 @@ async fn main() {
 
     // `repath serve` doesn't need a DB connection — handle it before pool setup
     if let Commands::Serve { .. } = &cli.command {
-        println!("{}", "Use docker compose up to start all services.".dimmed());
+        println!(
+            "{}",
+            "Use docker compose up to start all services.".dimmed()
+        );
         println!("{}", "Standalone 'repath serve' coming in v0.2.".dimmed());
         return;
     }
@@ -112,11 +115,7 @@ async fn main() {
     let db_url = match cli.database_url {
         Some(url) => url,
         None => {
-            eprintln!(
-                "{} {}",
-                "error:".red().bold(),
-                "No database URL provided."
-            );
+            eprintln!("{} {}", "error:".red().bold(), "No database URL provided.");
             eprintln!(
                 "{}",
                 "Set REPATH_DATABASE_URL or pass --database-url <URL>".dimmed()

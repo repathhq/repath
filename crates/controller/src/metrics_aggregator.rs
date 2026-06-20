@@ -79,12 +79,7 @@ pub async fn aggregate(
     candidate_version_id: Uuid,
     min_samples: u32,
 ) -> Result<AggregationResult> {
-    let raw = store::aggregate_version_metrics(
-        pool,
-        rollout_id,
-        DEFAULT_WINDOW_MINUTES,
-    )
-    .await?;
+    let raw = store::aggregate_version_metrics(pool, rollout_id, DEFAULT_WINDOW_MINUTES).await?;
 
     // Find baseline and candidate rows by version_id
     let baseline_raw = raw.iter().find(|m| m.version_id == baseline_version_id);

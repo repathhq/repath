@@ -20,10 +20,7 @@
 //! ```
 
 use axum::{routing::get, Router};
-use prometheus::{
-    Counter, Histogram, HistogramOpts, Opts, Registry,
-    TextEncoder, Encoder,
-};
+use prometheus::{Counter, Encoder, Histogram, HistogramOpts, Opts, Registry, TextEncoder};
 use repath_common::{Error, Result};
 use std::sync::Arc;
 use tracing::info;
@@ -52,22 +49,24 @@ impl Metrics {
         // LLM requests are slow (2–30s), so buckets span a wide range.
         // Standard HTTP buckets (.005, .01, .025 ...) are useless here.
         let latency_buckets = vec![
-            0.01,  // 10ms  (very fast, embedding calls)
-            0.05,  // 50ms
-            0.1,   // 100ms
-            0.25,  // 250ms
-            0.5,   // 500ms
-            1.0,   // 1s
-            2.0,   // 2s
-            5.0,   // 5s
-            10.0,  // 10s (long generation)
-            30.0,  // 30s (timeout boundary)
-            60.0,  // 60s (absolute max)
+            0.01, // 10ms  (very fast, embedding calls)
+            0.05, // 50ms
+            0.1,  // 100ms
+            0.25, // 250ms
+            0.5,  // 500ms
+            1.0,  // 1s
+            2.0,  // 2s
+            5.0,  // 5s
+            10.0, // 10s (long generation)
+            30.0, // 30s (timeout boundary)
+            60.0, // 60s (absolute max)
         ];
 
-        let requests_total = Counter::with_opts(
-            Opts::new("repath_requests_total", "Total number of proxied LLM requests"),
-        ).expect("metric name conflict: repath_requests_total");
+        let requests_total = Counter::with_opts(Opts::new(
+            "repath_requests_total",
+            "Total number of proxied LLM requests",
+        ))
+        .expect("metric name conflict: repath_requests_total");
 
         let request_duration = Histogram::with_opts(
             HistogramOpts::new(
@@ -75,37 +74,43 @@ impl Metrics {
                 "Duration of proxied requests from first byte received to last byte sent",
             )
             .buckets(latency_buckets),
-        ).expect("metric name conflict: repath_request_duration_seconds");
+        )
+        .expect("metric name conflict: repath_request_duration_seconds");
 
-        let recorder_dropped_total = Counter::with_opts(
-            Opts::new(
-                "repath_recorder_dropped_total",
-                "Number of request records dropped because the recorder channel was full",
-            ),
-        ).expect("metric name conflict: repath_recorder_dropped_total");
+        let recorder_dropped_total = Counter::with_opts(Opts::new(
+            "repath_recorder_dropped_total",
+            "Number of request records dropped because the recorder channel was full",
+        ))
+        .expect("metric name conflict: repath_recorder_dropped_total");
 
-        let rollback_total = Counter::with_opts(
-            Opts::new("repath_rollback_total", "Number of rollouts rolled back by the controller"),
-        ).expect("metric name conflict: repath_rollback_total");
+        let rollback_total = Counter::with_opts(Opts::new(
+            "repath_rollback_total",
+            "Number of rollouts rolled back by the controller",
+        ))
+        .expect("metric name conflict: repath_rollback_total");
 
-        let upstream_errors_total = Counter::with_opts(
-            Opts::new(
-                "repath_upstream_errors_total",
-                "Number of 4xx/5xx responses received from upstream providers",
-            ),
-        ).expect("metric name conflict: repath_upstream_errors_total");
+        let upstream_errors_total = Counter::with_opts(Opts::new(
+            "repath_upstream_errors_total",
+            "Number of 4xx/5xx responses received from upstream providers",
+        ))
+        .expect("metric name conflict: repath_upstream_errors_total");
 
         // Register all metrics. Uses .expect() intentionally: a name collision
         // is a programming error that should crash at startup, not be silently ignored.
-        registry.register(Box::new(requests_total.clone()))
+        registry
+            .register(Box::new(requests_total.clone()))
             .expect("failed to register requests_total");
-        registry.register(Box::new(request_duration.clone()))
+        registry
+            .register(Box::new(request_duration.clone()))
             .expect("failed to register request_duration");
-        registry.register(Box::new(recorder_dropped_total.clone()))
+        registry
+            .register(Box::new(recorder_dropped_total.clone()))
             .expect("failed to register recorder_dropped_total");
-        registry.register(Box::new(rollback_total.clone()))
+        registry
+            .register(Box::new(rollback_total.clone()))
             .expect("failed to register rollback_total");
-        registry.register(Box::new(upstream_errors_total.clone()))
+        registry
+            .register(Box::new(upstream_errors_total.clone()))
             .expect("failed to register upstream_errors_total");
 
         Self {
@@ -128,8 +133,9 @@ impl Metrics {
 pub async fn serve_metrics(port: u16, metrics: Arc<Metrics>) -> Result<()> {
     let addr = format!("0.0.0.0:{}", port);
 
-    let app = Router::new()
-        .route("/metrics", get(move || {
+    let app = Router::new().route(
+        "/metrics",
+        get(move || {
             let registry = metrics.registry.clone();
             async move {
                 let mf = registry.gather();
@@ -146,7 +152,8 @@ pub async fn serve_metrics(port: u16, metrics: Arc<Metrics>) -> Result<()> {
                     buf,
                 )
             }
-        }));
+        }),
+    );
 
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
@@ -202,7 +209,8 @@ mod tests {
         metrics.request_duration.observe(25.0);
 
         let mf = metrics.registry.gather();
-        let duration_family = mf.iter()
+        let duration_family = mf
+            .iter()
             .find(|f| f.get_name() == "repath_request_duration_seconds")
             .expect("duration metric should exist");
 

@@ -62,14 +62,8 @@ pub async fn apply_verdict(
                 "ROLLBACK triggered"
             );
 
-            let applied = store::apply_rollback(
-                pool,
-                rollout_id,
-                &reason,
-                current_weight,
-                snapshot,
-            )
-            .await?;
+            let applied =
+                store::apply_rollback(pool, rollout_id, &reason, current_weight, snapshot).await?;
 
             if applied {
                 Ok(DecisionOutcome::RolledBack { rollout_id, reason })
@@ -82,7 +76,11 @@ pub async fn apply_verdict(
             }
         }
 
-        PolicyVerdict::Advance { new_weight, is_final, reason } => {
+        PolicyVerdict::Advance {
+            new_weight,
+            is_final,
+            reason,
+        } => {
             let new_state = if is_final { "promoted" } else { "canary" };
 
             info!(
@@ -119,7 +117,10 @@ pub async fn apply_verdict(
             } else {
                 // Activate the next step so the loop can track duration
                 store::activate_next_step(pool, rollout_id).await?;
-                Ok(DecisionOutcome::Advanced { rollout_id, new_weight })
+                Ok(DecisionOutcome::Advanced {
+                    rollout_id,
+                    new_weight,
+                })
             }
         }
 

@@ -87,10 +87,7 @@ impl RolloutCache {
 /// At 50K req/s, a 2ms DB query per request = 100K DB queries/second. That
 /// would saturate any reasonable PostgreSQL instance. The refresher reduces
 /// this to 1 query every 5 seconds regardless of request rate.
-pub async fn run_cache_refresher(
-    db_pool: PgPool,
-    cache: Arc<ArcSwap<RolloutCache>>,
-) {
+pub async fn run_cache_refresher(db_pool: PgPool, cache: Arc<ArcSwap<RolloutCache>>) {
     info!("Rollout cache refresher started (interval: 5s)");
 
     let mut interval = tokio::time::interval(Duration::from_secs(5));
@@ -163,17 +160,17 @@ async fn fetch_active_rollout(pool: &PgPool) -> Result<RolloutCache> {
     let active = row.map(|r: sqlx::postgres::PgRow| {
         use sqlx::Row;
         ActiveRollout {
-            rollout_id:               r.get("rollout_id"),
-            baseline_version_id:      r.get("baseline_version_id"),
-            candidate_version_id:     r.get("candidate_version_id"),
-            candidate_weight:         r.get("candidate_weight"),
-            baseline_model:           r.get("baseline_model"),
-            baseline_prompt:          r.get("baseline_prompt"),
-            baseline_provider_url:    r.get("baseline_provider_url"),
-            candidate_model:          r.get("candidate_model"),
-            candidate_prompt:         r.get("candidate_prompt"),
-            candidate_provider_url:   r.get("candidate_provider_url"),
-            tenant_id:                r.get("tenant_id"),
+            rollout_id: r.get("rollout_id"),
+            baseline_version_id: r.get("baseline_version_id"),
+            candidate_version_id: r.get("candidate_version_id"),
+            candidate_weight: r.get("candidate_weight"),
+            baseline_model: r.get("baseline_model"),
+            baseline_prompt: r.get("baseline_prompt"),
+            baseline_provider_url: r.get("baseline_provider_url"),
+            candidate_model: r.get("candidate_model"),
+            candidate_prompt: r.get("candidate_prompt"),
+            candidate_provider_url: r.get("candidate_provider_url"),
+            tenant_id: r.get("tenant_id"),
         }
     });
 

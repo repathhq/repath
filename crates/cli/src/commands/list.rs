@@ -21,7 +21,13 @@ pub async fn list(pool: &PgPool) -> Result<()> {
     }
 
     let mut table = make_table(vec![
-        "NAME", "STATE", "TRAFFIC", "QUALITY", "BASELINE", "CANDIDATE", "CREATED",
+        "NAME",
+        "STATE",
+        "TRAFFIC",
+        "QUALITY",
+        "BASELINE",
+        "CANDIDATE",
+        "CREATED",
     ]);
 
     for r in &rows {

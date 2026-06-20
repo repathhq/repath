@@ -71,13 +71,12 @@ async fn resolve_id(pool: &PgPool, id_or_name: &str) -> Result<Uuid> {
         return Ok(id);
     }
 
-    let row = sqlx::query(
-        "SELECT id FROM rollouts WHERE name = $1 ORDER BY created_at DESC LIMIT 1",
-    )
-    .bind(id_or_name)
-    .fetch_optional(pool)
-    .await
-    .context("Failed to resolve rollout name")?;
+    let row =
+        sqlx::query("SELECT id FROM rollouts WHERE name = $1 ORDER BY created_at DESC LIMIT 1")
+            .bind(id_or_name)
+            .fetch_optional(pool)
+            .await
+            .context("Failed to resolve rollout name")?;
 
     row.map(|r| r.get("id"))
         .ok_or_else(|| anyhow::anyhow!("Rollout not found: '{id_or_name}'"))
