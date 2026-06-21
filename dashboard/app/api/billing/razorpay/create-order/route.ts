@@ -7,13 +7,30 @@ const PLAN_PRICES: Record<string, number> = {
   pro:     1249900,  // ₹12,499
 };
 
+// Server-side coupon validation
+const COUPONS: Record<string, { discountPaise: number | "flat"; flatPaise?: number }> = {
+  avibuddi: { discountPaise: "flat", flatPaise: 100 }, // ₹1
+};
+
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { plan, guest_email, guest_name } = body;
+  const { plan, guest_email, guest_name, coupon } = body;
 
-  const amount = PLAN_PRICES[plan];
-  if (!amount) {
+  const baseAmount = PLAN_PRICES[plan];
+  if (!baseAmount) {
     return NextResponse.json({ error: "Invalid plan. Must be 'starter' or 'pro'." }, { status: 400 });
+  }
+
+  // Apply coupon if provided
+  let amount = baseAmount;
+  let appliedCoupon: string | null = null;
+  if (coupon && typeof coupon === "string") {
+    const c = COUPONS[coupon.toLowerCase().trim()];
+    if (!c) {
+      return NextResponse.json({ error: "Invalid coupon code." }, { status: 400 });
+    }
+    amount = c.discountPaise === "flat" ? (c.flatPaise ?? 100) : Math.max(100, baseAmount - c.discountPaise);
+    appliedCoupon = coupon.toLowerCase().trim();
   }
 
   const keyId     = process.env.RAZORPAY_KEY_ID;
@@ -62,7 +79,7 @@ export async function POST(req: NextRequest) {
         amount,
         currency: "INR",
         receipt:  `repath_${tenantId}_${Date.now()}`.slice(0, 40),
-        notes: { tenant_id: tenantId, plan, email },
+        notes: { tenant_id: tenantId, plan, email, ...(appliedCoupon && { coupon: appliedCoupon }) },
       }),
     });
   } catch (e) {

@@ -115,6 +115,13 @@ const navItems = [
   { id: "danger",       label: "Danger Zone",      icon: Trash2 },
 ];
 
+interface SessionData {
+  tenantId: string;
+  email: string;
+  name: string;
+  plan: string;
+}
+
 export default function SettingsPage() {
   const [active, setActive] = useState("profile");
   const [showSecret, setShowSecret] = useState(false);
@@ -122,9 +129,22 @@ export default function SettingsPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [usage, setUsage] = useState<UserData | null>(null);
+  const [session, setSession] = useState<SessionData | null>(null);
+  const [profileName, setProfileName] = useState("");
+  const [profileEmail, setProfileEmail] = useState("");
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
+    fetch("/api/auth/session")
+      .then(r => r.ok ? r.json() : null)
+      .then((d: SessionData | null) => {
+        if (d) {
+          setSession(d);
+          setProfileName(d.name);
+          setProfileEmail(d.email);
+        }
+      })
+      .catch(() => {});
     fetch("/api/billing/usage")
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setUsage(d); })
@@ -201,10 +221,10 @@ export default function SettingsPage() {
             <div>
               <Section title="Profile" desc="Your personal information and display settings.">
                 <Field label="Full name">
-                  <Input placeholder="Your name" />
+                  <Input value={profileName} onChange={setProfileName} placeholder="Your name" />
                 </Field>
                 <Field label="Email address" hint="Used for billing and alerts.">
-                  <Input type="email" placeholder="you@company.com" />
+                  <Input value={profileEmail} onChange={setProfileEmail} type="email" placeholder="you@company.com" />
                 </Field>
                 <Field label="Company" hint="Optional.">
                   <Input placeholder="Your company name" />
@@ -255,7 +275,7 @@ export default function SettingsPage() {
                   </div>
                 </Field>
                 <Field label="Tenant ID" hint="Pass as X-Repath-Tenant-Id header.">
-                  <CopyField value="ten_9be07433" />
+                  <CopyField value={session?.tenantId ?? "—"} />
                 </Field>
               </Section>
 

@@ -13,9 +13,9 @@ export default function RolloutsPage() {
   return (
     <div>
       {/* Page header — sticky */}
-      <div className="bg-white border-b border-gray-100 px-6 sm:px-8 h-14 flex items-center justify-between sticky top-0 z-20">
+      <div className="bg-white border-b border-gray-200 px-6 sm:px-8 h-14 flex items-center justify-between sticky top-0 z-20">
         <div>
-          <h1 className="text-[15px] font-semibold text-gray-900">Rollouts</h1>
+          <h1 className="text-[16px] font-semibold text-gray-900">Rollouts</h1>
         </div>
         <div className="flex items-center gap-2.5">
           {health && (
@@ -35,7 +35,7 @@ export default function RolloutsPage() {
           </button>
         </div>
       </div>
-      <div className="p-6 sm:p-8 max-w-[1100px]">
+      <div className="p-6 sm:p-8 max-w-[1100px] mx-auto">
 
       {/* Error state */}
       {error && (

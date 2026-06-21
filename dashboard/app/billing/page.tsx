@@ -30,8 +30,12 @@ export default function BillingPage() {
   const [usage, setUsage] = useState<Usage | null>(null);
   const [loading, setLoading] = useState(true);
   const [upgrading, setUpgrading] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [coupon, setCoupon] = useState("");
+  const [couponApplied, setCouponApplied] = useState(false);
+  const [couponError, setCouponError] = useState("");
 
   const isIndia = typeof window !== "undefined" && (
     Intl.DateTimeFormat().resolvedOptions().timeZone?.includes("Calcutta") ||
@@ -42,10 +46,12 @@ export default function BillingPage() {
     fetch("/api/billing/usage")
       .then(r => {
         if (r.status === 401) { window.location.href = "/login"; return null; }
+        if (!r.ok) return null;
         return r.json();
       })
-      .then(d => { if (d) setUsage(d); setLoading(false); })
-      .catch(() => setLoading(false));
+      .then(d => { if (d) setUsage(d); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
   const daysLeft = usage?.trial_ends_at
@@ -55,11 +61,17 @@ export default function BillingPage() {
   const handleRazorpay = async (plan: string) => {
     const res = await fetch("/api/billing/razorpay/create-order", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ plan }),
+      body: JSON.stringify({ plan, ...(couponApplied && coupon && { coupon: coupon.trim() }) }),
     });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({})) as { error?: string };
-      setError(errData.error ?? "Failed to create payment order. Try again.");
+      const msg = errData.error ?? "Failed to create payment order. Try again.";
+      if (msg.toLowerCase().includes("coupon")) {
+        setCouponError(msg);
+        setCouponApplied(false);
+      } else {
+        setError(msg);
+      }
       setUpgrading(null);
       return;
     }
@@ -91,6 +103,7 @@ export default function BillingPage() {
         razorpay_order_id: string;
         razorpay_signature: string;
       }) => {
+        setVerifying(true);
         // Verify signature server-side before activating plan
         const verify = await fetch("/api/billing/razorpay/verify-payment", {
           method: "POST",
@@ -104,9 +117,9 @@ export default function BillingPage() {
           }),
         });
         if (verify.ok) {
-          // Redirect to success page — session cookie is already refreshed server-side
           window.location.href = `/billing/success?plan=${order.plan}`;
         } else {
+          setVerifying(false);
           const errData = await verify.json().catch(() => ({})) as { error?: string };
           setError(errData.error ?? `Payment received but activation failed. Contact support@tryrepath.com — payment ID: ${response.razorpay_payment_id}`);
           setUpgrading(null);
@@ -139,6 +152,18 @@ export default function BillingPage() {
     return (
       <div className="flex items-center justify-center h-64" style={FONT}>
         <Loader2 className="w-6 h-6 text-violet-600 animate-spin" />
+      </div>
+    );
+  }
+
+  if (verifying) {
+    return (
+      <div className="flex flex-col items-center justify-center h-80 gap-4" style={FONT}>
+        <Loader2 className="w-8 h-8 text-violet-600 animate-spin" />
+        <div className="text-center">
+          <p className="text-[16px] font-semibold text-gray-900">Verifying payment...</p>
+          <p className="text-[13px] text-gray-500 mt-1">Activating your plan. This takes a few seconds.</p>
+        </div>
       </div>
     );
   }
@@ -185,11 +210,11 @@ export default function BillingPage() {
   return (
     <div style={FONT}>
       {/* Page header — sticky */}
-      <div className="bg-white border-b border-gray-100 px-6 sm:px-8 h-14 flex items-center sticky top-0 z-20">
-        <h1 className="text-[15px] font-semibold text-gray-900">Billing</h1>
+      <div className="bg-white border-b border-gray-200 px-6 sm:px-8 h-14 flex items-center sticky top-0 z-20">
+        <h1 className="text-[16px] font-semibold text-gray-900">Billing</h1>
       </div>
 
-      <div className="p-6 sm:p-8 max-w-[900px]">
+      <div className="p-6 sm:p-8 max-w-[900px] mx-auto">
 
 
       {/* Success / Error */}
@@ -234,6 +259,7 @@ export default function BillingPage() {
           </div>
 
           {/* Usage bar */}
+          {(usage.eval_quota_monthly ?? 0) > 0 && (
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-[13px] text-gray-600 flex items-center gap-1.5">
@@ -256,11 +282,12 @@ export default function BillingPage() {
               {(usage.evals_remaining ?? 0).toLocaleString()} evaluations remaining
             </p>
           </div>
+          )}
         </div>
       )}
 
       {/* Plans — always shown so users can buy at any time */}
-      {usage?.plan !== "enterprise" && (
+      {(!usage || usage.plan !== "enterprise") && (
         <div id="upgrade">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-[16px] font-semibold text-gray-900">
@@ -269,6 +296,36 @@ export default function BillingPage() {
             <p className="text-[12px] text-gray-500">
               {isIndia ? "🇮🇳 UPI, cards, net banking via Razorpay" : "Cards & PayPal via Paddle"}
             </p>
+          </div>
+
+          {/* Coupon input */}
+          <div className="flex flex-wrap items-center gap-2 mb-5 p-4 rounded-xl border border-dashed border-gray-300 bg-gray-50">
+            <input
+              type="text"
+              value={coupon}
+              onChange={e => { setCoupon(e.target.value); setCouponApplied(false); setCouponError(""); }}
+              placeholder="Coupon code"
+              className="px-3 py-2 rounded-lg border border-gray-200 text-[13px] text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent bg-white w-40"
+            />
+            <button
+              onClick={() => {
+                if (!coupon.trim()) return;
+                setCouponApplied(true);
+                setCouponError("");
+              }}
+              disabled={!coupon.trim() || couponApplied}
+              className="px-3.5 py-2 rounded-lg bg-violet-600 text-white text-[13px] font-medium hover:bg-violet-700 transition-colors disabled:opacity-40"
+            >
+              Apply
+            </button>
+            {couponApplied && (
+              <span className="flex items-center gap-1 text-[12px] text-emerald-600 font-semibold">
+                <Check className="w-3.5 h-3.5" /> Coupon applied — ₹1 checkout
+              </span>
+            )}
+            {couponError && (
+              <span className="text-[12px] text-red-600">{couponError}</span>
+            )}
           </div>
 
           <div className="grid md:grid-cols-2 gap-4 mb-4">
@@ -304,8 +361,15 @@ export default function BillingPage() {
 
                   <div className="mb-5">
                     <p className="text-[14px] font-bold text-gray-500 uppercase tracking-wide mb-2">{plan.name}</p>
-                    <div className="flex items-baseline gap-1 mb-0.5">
-                      <span className="text-[36px] font-bold text-gray-900">{isIndia ? plan.inr : plan.usd}</span>
+                    <div className="flex items-baseline gap-2 mb-0.5">
+                      {couponApplied && !isCurrent ? (
+                        <>
+                          <span className="text-[36px] font-bold text-emerald-600">₹1</span>
+                          <span className="text-[18px] text-gray-400 line-through">{isIndia ? plan.inr : plan.usd}</span>
+                        </>
+                      ) : (
+                        <span className="text-[36px] font-bold text-gray-900">{isIndia ? plan.inr : plan.usd}</span>
+                      )}
                       <span className="text-[14px] text-gray-500">/month</span>
                     </div>
                     <p className="text-[13px] font-semibold text-violet-600">{plan.evals}</p>
@@ -362,7 +426,7 @@ export default function BillingPage() {
       )}
 
       {/* Enterprise */}
-      <div className="rounded-2xl border border-gray-200 bg-gray-50 p-6 flex items-center justify-between">
+      <div className="rounded-2xl border border-gray-200 bg-gray-50 p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <CreditCard className="w-4 h-4 text-gray-500" strokeWidth={1.8} />

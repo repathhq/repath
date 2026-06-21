@@ -24,7 +24,7 @@ export default function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const inner = (
-    <aside className="flex h-full w-[240px] flex-col bg-white border-r border-gray-100">
+    <aside className="flex h-full w-[260px] flex-col bg-white border-r border-gray-200">
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-5 h-14 border-b border-gray-100 shrink-0">
         <Image src="/logo-icon.png" alt="Repath" width={26} height={26} className="rounded-lg" />
@@ -33,8 +33,8 @@ export default function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 py-4 px-3 space-y-0.5 overflow-auto">
-        <p className="px-2 mb-2 text-[10px] font-semibold tracking-widest uppercase text-gray-400">
+      <nav className="flex-1 py-5 px-3 space-y-1 overflow-auto">
+        <p className="px-3 mb-2 text-[10px] font-semibold tracking-widest uppercase text-gray-400">
           Deployments
         </p>
         {nav.map(({ href, label, icon: Icon }) => {
@@ -45,7 +45,7 @@ export default function Sidebar() {
               href={href}
               onClick={() => setMobileOpen(false)}
               className={cn(
-                "flex items-center gap-3 px-3 py-2.5 text-[13.5px] rounded-lg transition-all duration-150 group",
+                "flex items-center gap-3 px-3 py-2.5 text-[14px] rounded-lg transition-all duration-150 group",
                 active
                   ? "bg-violet-50 text-violet-700 font-semibold"
                   : "text-gray-600 hover:text-gray-900 hover:bg-gray-50 font-medium"

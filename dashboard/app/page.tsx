@@ -411,7 +411,7 @@ export default function LandingPage() {
       </header>
 
       {/* ══ HERO ═════════════════════════════════════════════════════════════ */}
-      <section className="relative max-w-7xl mx-auto px-8 pt-16 pb-20 min-h-[620px] flex items-center overflow-hidden">
+      <section className="relative max-w-7xl mx-auto px-5 sm:px-8 pt-12 sm:pt-16 pb-16 sm:pb-20 min-h-[520px] sm:min-h-[620px] flex items-center overflow-hidden">
         <HeroTrafficFlow />
 
         <div className="relative z-10 max-w-[480px]">
@@ -424,7 +424,7 @@ export default function LandingPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-            className="text-5xl md:text-6xl font-bold tracking-tight leading-[1.06] mb-5"
+            className="text-3xl sm:text-5xl md:text-6xl font-bold tracking-tight leading-[1.06] mb-5"
           >
             Ship AI changes<br />
             <span className="text-gray-400">without the risk.</span>

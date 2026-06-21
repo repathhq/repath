@@ -10,13 +10,42 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const res = await fetch(
-    `${GATEWAY}/api/v1/cloud/tenants/${session.tenantId}/usage`,
-    { headers: { "Authorization": `Bearer ${API_TOKEN}` } }
-  );
+  let res: Response;
+  try {
+    res = await fetch(
+      `${GATEWAY}/api/v1/cloud/tenants/${session.tenantId}/usage`,
+      {
+        headers: { "Authorization": `Bearer ${API_TOKEN}` },
+        signal: AbortSignal.timeout(5000),
+      }
+    );
+  } catch {
+    // Gateway unreachable — return plan from session as fallback
+    return NextResponse.json({
+      plan: session.plan,
+      eval_quota_monthly: 0,
+      evals_used: 0,
+      evals_remaining: 0,
+      usage_percent: 0,
+      trial_active: session.plan === "trial",
+      trial_ends_at: null,
+      active: true,
+      _fallback: true,
+    });
+  }
 
   if (!res.ok) {
-    return NextResponse.json({ error: "Failed to fetch usage" }, { status: 502 });
+    return NextResponse.json({
+      plan: session.plan,
+      eval_quota_monthly: 0,
+      evals_used: 0,
+      evals_remaining: 0,
+      usage_percent: 0,
+      trial_active: session.plan === "trial",
+      trial_ends_at: null,
+      active: true,
+      _fallback: true,
+    });
   }
 
   return NextResponse.json(await res.json());
