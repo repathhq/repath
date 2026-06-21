@@ -37,7 +37,7 @@ function SuccessContent() {
           </div>
         </div>
 
-        <Image src="/logo-icon.png" alt="Repath" width={30} height={30} className="rounded-lg mx-auto mb-5" />
+        <Image src="/repath.png" alt="Repath" width={30} height={30} className="rounded-lg mx-auto mb-5" />
 
         <div className="bg-white rounded-2xl border border-gray-200 shadow-[0_2px_8px_rgba(0,0,0,0.06)] p-8 mb-5">
           {ready ? (

@@ -22,7 +22,7 @@ export default function ContactPage() {
     <div className="min-h-screen bg-white" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
       <nav className="border-b border-gray-100 px-6 py-4 flex items-center justify-between sticky top-0 bg-white z-40">
         <Link href="/" className="flex items-center gap-2.5">
-          <Image src="/logo-icon.png" alt="Repath" width={32} height={32} className="rounded-lg" />
+          <Image src="/repath.png" alt="Repath" width={32} height={32} className="rounded-lg" />
           <span className="font-bold text-[18px] text-gray-900">Repath</span>
         </Link>
         <Link href="/signup" className="px-4 py-2 bg-gray-900 text-white text-[13px] font-medium rounded-lg hover:bg-gray-800 transition-colors">Start free trial</Link>

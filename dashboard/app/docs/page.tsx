@@ -109,7 +109,7 @@ export default function DocsPage() {
       {/* ── Nav ── */}
       <nav className="border-b border-gray-100 px-6 py-4 flex items-center justify-between sticky top-0 bg-white z-40 shadow-sm">
         <Link href="/" className="flex items-center gap-2.5">
-          <Image src="/logo-icon.png" alt="Repath" width={32} height={32} className="rounded-lg" />
+          <Image src="/repath.png" alt="Repath" width={32} height={32} className="rounded-lg" />
           <span className="font-bold text-[18px] text-gray-900">Repath</span>
           <span className="ml-1 text-[13px] text-gray-400 font-normal">/ Docs</span>
         </Link>

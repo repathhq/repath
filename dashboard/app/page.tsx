@@ -377,7 +377,7 @@ export default function LandingPage() {
       <header className={`sticky top-0 z-50 bg-white transition-shadow duration-200 ${scrolled ? "shadow-[0_1px_0_0_rgba(0,0,0,0.08)]" : ""}`}>
         <nav className="max-w-7xl mx-auto px-6 h-[68px] flex items-center justify-between gap-6">
           <Link href="/" className="flex items-center gap-3 shrink-0">
-            <Image src="/logo-icon.png" alt="Repath" width={40} height={40} className="rounded-xl" />
+            <Image src="/repath.png" alt="Repath" width={40} height={40} className="rounded-xl" />
             <span className="font-bold text-[20px] tracking-tight">Repath</span>
           </Link>
 
@@ -1155,7 +1155,7 @@ export default function LandingPage() {
           >
             <div className="flex items-center gap-2 text-gray-400 text-sm justify-center mb-3">
               <div className="flex items-center gap-2">
-                <Image src="/logo-icon.png" alt="Repath" width={24} height={24} className="rounded-md" />
+                <Image src="/repath.png" alt="Repath" width={24} height={24} className="rounded-md" />
                 <span className="font-medium text-white">Repath</span>
               </div>
             </div>
@@ -1179,7 +1179,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-12">
             <div className="col-span-2 md:col-span-1 flex flex-col gap-3">
               <Link href="/" className="flex items-center gap-2">
-                <Image src="/logo-icon.png" alt="Repath" width={22} height={22} className="rounded-md" />
+                <Image src="/repath.png" alt="Repath" width={22} height={22} className="rounded-md" />
                 <span className="font-semibold text-sm">Repath</span>
               </Link>
             </div>

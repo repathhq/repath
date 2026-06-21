@@ -17,8 +17,12 @@ export const metadata: Metadata = {
   title: "Repath — Progressive Delivery for AI",
   description: "Canary deployments, quality evaluation, and instant rollback for LLM systems.",
   icons: {
-    icon: "/logo-icon.png",
-    apple: "/logo-icon.png",
+    icon: [
+      { url: "/repath.ico", type: "image/x-icon" },
+      { url: "/repath.png", type: "image/png" },
+    ],
+    apple: "/repath.png",
+    shortcut: "/repath.ico",
   },
 };
 

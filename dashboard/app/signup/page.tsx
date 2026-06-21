@@ -42,7 +42,7 @@ function SignupForm() {
       {/* Nav */}
       <nav className="bg-white border-b border-gray-100 px-6 h-14 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2.5">
-          <Image src="/logo-icon.png" alt="Repath" width={26} height={26} className="rounded-lg" />
+          <Image src="/repath.png" alt="Repath" width={26} height={26} className="rounded-lg" />
           <span className="text-[15px] font-bold text-gray-900">Repath</span>
         </Link>
         <p className="text-[13px] text-gray-500">
