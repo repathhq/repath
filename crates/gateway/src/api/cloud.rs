@@ -308,7 +308,10 @@ pub async fn delete_tenant(
             tracing::info!(tenant_id = id, "Tenant account deleted");
             Json(json!({ "message": "Account deleted", "id": id })).into_response()
         }
-        Ok(None) => cloud_error(StatusCode::NOT_FOUND, format!("Tenant not found or already deleted: {id}")),
+        Ok(None) => cloud_error(
+            StatusCode::NOT_FOUND,
+            format!("Tenant not found or already deleted: {id}"),
+        ),
         Err(e) => cloud_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
 }

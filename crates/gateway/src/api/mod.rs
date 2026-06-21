@@ -16,10 +16,11 @@
 //! GET  /api/v1/system/health             System health
 //!
 //! Cloud-only:
-//! POST /api/v1/cloud/tenants             Create tenant (Clerk webhook)
-//! GET  /api/v1/cloud/tenants/:id         Get tenant
-//! POST /api/v1/cloud/tenants/:id/upgrade Upgrade plan (after payment)
-//! GET  /api/v1/cloud/tenants/:id/usage   Usage + quota
+//! POST   /api/v1/cloud/tenants             Create tenant (Clerk webhook)
+//! GET    /api/v1/cloud/tenants/:id         Get tenant
+//! DELETE /api/v1/cloud/tenants/:id         Delete tenant (account deletion)
+//! POST   /api/v1/cloud/tenants/:id/upgrade Upgrade plan (after payment)
+//! GET    /api/v1/cloud/tenants/:id/usage   Usage + quota
 //!
 //! Payment webhooks (signed, no auth token required):
 //! POST /api/v1/webhooks/razorpay         Razorpay payment.captured
@@ -32,7 +33,7 @@ pub mod handlers;
 use crate::{auth::require_api_token, AppState};
 use axum::{
     middleware,
-    routing::{delete, get, post},
+    routing::{get, post},
     Router,
 };
 
@@ -45,8 +46,10 @@ pub fn api_router() -> Router<AppState> {
     // Cloud management routes — require API token
     let cloud_router = Router::new()
         .route("/tenants", post(cloud::create_tenant))
-        .route("/tenants/:id", get(cloud::get_tenant))
-        .route("/tenants/:id", delete(cloud::delete_tenant))
+        .route(
+            "/tenants/:id",
+            get(cloud::get_tenant).delete(cloud::delete_tenant),
+        )
         .route("/tenants/:id/upgrade", post(cloud::upgrade_tenant))
         .route("/tenants/:id/usage", get(cloud::get_usage))
         .route("/tenants/by-email/:email", get(cloud::get_tenant_by_email))
