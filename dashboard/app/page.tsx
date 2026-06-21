@@ -376,10 +376,9 @@ export default function LandingPage() {
 
       {/* ══ NAV ══════════════════════════════════════════════════════════════ */}
       <header className={`sticky top-0 z-50 bg-white transition-shadow duration-200 ${scrolled ? "shadow-[0_1px_0_0_rgba(0,0,0,0.08)]" : ""}`}>
-        <nav className="max-w-7xl mx-auto px-6 h-[72px] flex items-center justify-between gap-6">
-          <Link href="/" className="flex items-center gap-2.5 shrink-0">
-            <Image src="/repath.png" alt="Repath" width={44} height={44} className="rounded-xl" />
-            <span className="font-bold text-[22px] tracking-tight text-gray-900">Repath</span>
+        <nav className="max-w-7xl mx-auto px-6 h-[108px] flex items-center justify-between gap-6">
+          <Link href="/" className="flex items-center shrink-0">
+            <Image src="/repath.png" alt="Repath" width={100} height={100} className="rounded-xl" />
           </Link>
 
           <div className="hidden md:flex items-center gap-0.5">
