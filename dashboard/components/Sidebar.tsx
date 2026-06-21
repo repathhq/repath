@@ -26,9 +26,8 @@ export default function Sidebar() {
   const inner = (
     <aside className="flex h-full w-[260px] flex-col bg-white border-r border-gray-200">
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-5 h-14 border-b border-gray-100 shrink-0">
-        <Image src="/repath.png" alt="Repath" width={38} height={38} className="rounded-xl" />
-        <span className="text-[15px] font-bold text-gray-900 tracking-tight">Repath</span>
+      <div className="flex items-center gap-2.5 px-4 h-14 border-b border-gray-100 shrink-0">
+        <Image src="/repath-logo.png" alt="Repath" width={100} height={32} style={{ height: 32, width: "auto" }} className="object-contain" />
         <span className="ml-auto text-[10px] font-semibold tracking-widest uppercase px-1.5 py-0.5 rounded bg-violet-50 text-violet-600 border border-violet-100">Beta</span>
       </div>
 
