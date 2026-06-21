@@ -140,7 +140,7 @@ jobs:
           target: evaluator
           push: false
 
-  # ── Deploy: gateway to Fly.io ─────────────────────────────────────────────────
+  # ── Deploy: gateway + evaluator to Fly.io ─────────────────────────────────────
   deploy-gateway:
     name: Deploy Gateway
     runs-on: ubuntu-latest
@@ -153,8 +153,13 @@ jobs:
       - name: Install Fly CLI
         uses: superfly/flyctl-actions/setup-flyctl@master
 
-      - name: Deploy to Fly
+      - name: Deploy gateway to Fly
         run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Deploy evaluator to Fly
+        run: flyctl deploy --config fly-evaluator.toml --remote-only
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 

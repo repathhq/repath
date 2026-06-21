@@ -40,13 +40,12 @@ ENTRYPOINT ["repath-controller"]
 
 FROM python:3.12-slim-bookworm AS evaluator
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev gcc && rm -rf /var/lib/apt/lists/*
-WORKDIR /app
-COPY evaluators/pyproject.toml evaluators/
+    libpq-dev gcc ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /app/evaluators
-RUN pip install --no-cache-dir -e "."
-COPY evaluators/ /app/evaluators/
-ENTRYPOINT ["python3", "-m", "repath_evaluators.worker"]
+# Copy full evaluator source first, then install
+COPY evaluators/ ./
+RUN pip install --no-cache-dir .
+ENTRYPOINT ["repath-evaluator"]
 
 # ── Dashboard (Next.js) ────────────────────────────────────────────────────────
 
