@@ -56,7 +56,7 @@ export default function OnboardingPage() {
       {/* Nav */}
       <nav className="bg-white border-b border-gray-100 px-6 h-14 flex items-center justify-between sticky top-0 z-30">
         <Link href="/" className="flex items-center gap-2.5">
-          <Image src="/repath.png" alt="Repath" width={26} height={26} className="rounded-lg" />
+          <Image src="/repath.png" alt="Repath" width={40} height={40} className="rounded-xl" />
           <span className="text-[15px] font-bold text-gray-900">Repath</span>
         </Link>
         <Link

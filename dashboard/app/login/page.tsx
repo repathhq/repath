@@ -29,7 +29,7 @@ export default function LoginPage() {
       {/* Nav */}
       <nav className="border-b border-gray-100 px-6 py-4 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2.5">
-          <Image src="/repath.png" alt="Repath" width={32} height={32} className="rounded-lg" />
+          <Image src="/repath.png" alt="Repath" width={40} height={40} className="rounded-xl" />
           <span className="font-bold text-[18px] tracking-tight text-gray-900">Repath</span>
         </Link>
         <p className="text-[14px] text-gray-500">Don&apos;t have an account? <Link href="/signup" className="text-violet-600 font-medium hover:underline">Start free trial</Link></p>

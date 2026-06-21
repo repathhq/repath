@@ -27,7 +27,7 @@ export default function Sidebar() {
     <aside className="flex h-full w-[260px] flex-col bg-white border-r border-gray-200">
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-5 h-14 border-b border-gray-100 shrink-0">
-        <Image src="/repath.png" alt="Repath" width={26} height={26} className="rounded-lg" />
+        <Image src="/repath.png" alt="Repath" width={34} height={34} className="rounded-xl" />
         <span className="text-[15px] font-bold text-gray-900 tracking-tight">Repath</span>
         <span className="ml-auto text-[10px] font-semibold tracking-widest uppercase px-1.5 py-0.5 rounded bg-violet-50 text-violet-600 border border-violet-100">Beta</span>
       </div>
