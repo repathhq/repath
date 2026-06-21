@@ -106,6 +106,18 @@ async function postApi(path: string): Promise<{ message: string }> {
   return res.json();
 }
 
+async function deleteApi(path: string): Promise<{ deleted: boolean }> {
+  const res = await fetch(`${PROXY}${path}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error((body as { error?: { message?: string } })?.error?.message ?? `API error ${res.status}`);
+  }
+  return res.json();
+}
+
 export const api = {
   rollouts: {
     list: () => fetchApi<{ rollouts: RolloutSummary[]; total: number }>("/rollouts"),
@@ -115,6 +127,7 @@ export const api = {
     decisions: (id: string) => fetchApi<{ decisions: DecisionInfo[] }>(`/rollouts/${id}/decisions`),
     promote: (id: string) => postApi(`/rollouts/${id}/promote`),
     rollback: (id: string) => postApi(`/rollouts/${id}/rollback`),
+    delete: (id: string) => deleteApi(`/rollouts/${id}`),
   },
   system: {
     health: () => fetchApi<SystemHealth>("/system/health"),

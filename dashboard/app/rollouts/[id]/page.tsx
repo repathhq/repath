@@ -15,7 +15,7 @@ import StepTimeline from "@/components/StepTimeline";
 import {
   cn, formatPercent, formatScore, formatLatency, formatRelative, scoreColor
 } from "@/lib/utils";
-import { ArrowLeft, RefreshCw, AlertTriangle, CheckCircle, RotateCcw } from "lucide-react";
+import { ArrowLeft, RefreshCw, AlertTriangle, CheckCircle, RotateCcw, Trash2 } from "lucide-react";
 
 export default function RolloutDetailPage({
   params,
@@ -29,14 +29,19 @@ export default function RolloutDetailPage({
   const steps      = useRolloutSteps(id);
   const decisions  = useRolloutDecisions(id);
 
-  const [actionLoading, setActionLoading] = useState<"promote" | "rollback" | null>(null);
+  const [actionLoading, setActionLoading] = useState<"promote" | "rollback" | "delete" | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const handleAction = async (action: "promote" | "rollback") => {
+  const handleAction = async (action: "promote" | "rollback" | "delete") => {
     if (!confirm(`Are you sure you want to ${action} this rollout?`)) return;
     setActionLoading(action);
     setActionError(null);
     try {
+      if (action === "delete") {
+        await api.rollouts.delete(id);
+        window.location.href = "/rollouts";
+        return;
+      }
       await (action === "promote" ? api.rollouts.promote(id) : api.rollouts.rollback(id));
       rollout.refresh();
       decisions.refresh();
@@ -121,6 +126,14 @@ export default function RolloutDetailPage({
             className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[12px] text-gray-500 hover:text-gray-900 transition-all"
           >
             <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.8} /> Refresh
+          </button>
+          <button
+            onClick={() => handleAction("delete")}
+            disabled={actionLoading !== null}
+            className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-[12px] font-medium text-red-600 hover:bg-red-50 transition-all disabled:opacity-40"
+          >
+            <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
+            {actionLoading === "delete" ? "Deleting…" : "Delete"}
           </button>
         </div>
       </div>

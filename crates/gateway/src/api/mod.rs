@@ -58,7 +58,10 @@ pub fn api_router() -> Router<AppState> {
     // Core rollout + system routes — require API token
     let core_router = Router::new()
         .route("/rollouts", get(handlers::list_rollouts))
-        .route("/rollouts/:id", get(handlers::get_rollout))
+        .route(
+            "/rollouts/:id",
+            get(handlers::get_rollout).delete(handlers::delete_rollout),
+        )
         .route("/rollouts/:id/metrics", get(handlers::get_rollout_metrics))
         .route("/rollouts/:id/steps", get(handlers::get_rollout_steps))
         .route(

@@ -572,6 +572,48 @@ async fn apply_manual_action(
     }
 }
 
+/// DELETE /api/v1/rollouts/:id
+/// Hard-deletes the rollout and all associated requests/decisions/steps.
+/// Versions are left intact (they may be shared).
+pub async fn delete_rollout(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    use sqlx::Row;
+
+    let row = sqlx::query("SELECT id FROM rollouts WHERE id::text = $1 OR name = $1 LIMIT 1")
+        .bind(&id)
+        .fetch_optional(&state.db_pool)
+        .await;
+
+    let rollout_id: Uuid = match row {
+        Ok(Some(r)) => r.get("id"),
+        Ok(None) => return api_error(StatusCode::NOT_FOUND, format!("Rollout not found: '{id}'")),
+        Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    };
+
+    // Delete requests referencing this rollout's versions, then the rollout.
+    // Cascade deletes rollout_steps and decisions automatically.
+    let result = sqlx::query("DELETE FROM requests WHERE rollout_id = $1")
+        .bind(rollout_id)
+        .execute(&state.db_pool)
+        .await;
+
+    if let Err(e) = result {
+        return api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
+    }
+
+    match sqlx::query("DELETE FROM rollouts WHERE id = $1 RETURNING id")
+        .bind(rollout_id)
+        .fetch_optional(&state.db_pool)
+        .await
+    {
+        Ok(Some(_)) => Json(json!({ "deleted": true, "id": rollout_id })).into_response(),
+        Ok(None) => api_error(StatusCode::NOT_FOUND, "Rollout not found".into()),
+        Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
 // ── Error helpers ───────────────────────────────────────────────────────────
 
 fn api_error(status: StatusCode, message: String) -> axum::response::Response {
