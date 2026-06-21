@@ -271,6 +271,48 @@ pub async fn get_usage(State(state): State<AppState>, Path(id): Path<String>) ->
     }
 }
 
+/// DELETE /api/v1/cloud/tenants/:id
+/// Permanently deactivates a tenant account and marks all data for deletion.
+pub async fn delete_tenant(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    // Soft-delete: set active=false and clear sensitive data.
+    // Actual data purge happens via background cleanup job.
+    let result = sqlx::query(
+        r#"
+        UPDATE tenants
+        SET active = false,
+            plan = 'deleted',
+            eval_quota_monthly = 0,
+            password_hash = NULL,
+            updated_at = NOW()
+        WHERE id = $1 AND active = true
+        RETURNING id
+        "#,
+    )
+    .bind(&id)
+    .fetch_optional(&state.db_pool)
+    .await;
+
+    match result {
+        Ok(Some(_)) => {
+            // Also pause all rollouts for this tenant
+            let _ = sqlx::query(
+                "UPDATE rollouts SET state = 'paused' WHERE tenant_id = $1 AND state IN ('canary', 'shadow')",
+            )
+            .bind(&id)
+            .execute(&state.db_pool)
+            .await;
+
+            tracing::info!(tenant_id = id, "Tenant account deleted");
+            Json(json!({ "message": "Account deleted", "id": id })).into_response()
+        }
+        Ok(None) => cloud_error(StatusCode::NOT_FOUND, format!("Tenant not found or already deleted: {id}")),
+        Err(e) => cloud_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
 // ── Payment webhooks ────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]

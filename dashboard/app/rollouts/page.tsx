@@ -11,16 +11,15 @@ export default function RolloutsPage() {
   const { data: health } = useSystemHealth();
 
   return (
-    <div className="p-8 max-w-[1100px] mx-auto">
-      {/* Header */}
-      <div className="mb-8 flex items-center justify-between">
+    <div>
+      {/* Page header — sticky */}
+      <div className="bg-white border-b border-gray-100 px-6 sm:px-8 h-14 flex items-center justify-between sticky top-0 z-20">
         <div>
-          <h1 className="text-[22px] font-bold text-gray-900 tracking-tight">Rollouts</h1>
-          <p className="text-[13px] text-gray-500 mt-0.5">Progressive deployments for your LLM prompts and models</p>
+          <h1 className="text-[15px] font-semibold text-gray-900">Rollouts</h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           {health && (
-            <div className="flex items-center gap-1.5 text-[12px] text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
+            <div className="flex items-center gap-1.5 text-[12px] text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
               <span className={cn("h-1.5 w-1.5 rounded-full",
                 health.status === "ok" ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
               )} />
@@ -29,13 +28,14 @@ export default function RolloutsPage() {
           )}
           <button
             onClick={refresh}
-            className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[13px] text-gray-600 hover:text-gray-900 hover:border-gray-300 transition-all shadow-sm"
+            className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[12.5px] text-gray-600 hover:text-gray-900 hover:border-gray-300 transition-all shadow-sm"
           >
             <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.8} />
             Refresh
           </button>
         </div>
       </div>
+      <div className="p-6 sm:p-8 max-w-[1100px]">
 
       {/* Error state */}
       {error && (
@@ -128,6 +128,7 @@ export default function RolloutsPage() {
           {data.total} rollout{data.total !== 1 ? "s" : ""} total
         </p>
       )}
+      </div>
     </div>
   );
 }

@@ -29,6 +29,25 @@ export async function POST(req: NextRequest) {
   const email    = session?.email    ?? guest_email ?? "";
   const name     = session?.name     ?? guest_name  ?? "";
 
+  // Guard: check live plan from DB to prevent double-purchase (session cookie may be stale)
+  if (session && tenantId !== "guest") {
+    const gatewayUrl = process.env.REPATH_GATEWAY_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+    const apiToken   = process.env.REPATH_API_TOKEN ?? "";
+    const usageRes = await fetch(
+      `${gatewayUrl}/api/v1/cloud/tenants/${tenantId}/usage`,
+      { headers: { "Authorization": `Bearer ${apiToken}` } }
+    ).catch(() => null);
+    if (usageRes?.ok) {
+      const usage = await usageRes.json() as { plan?: string };
+      if (usage.plan === plan) {
+        return NextResponse.json(
+          { error: `You are already on the ${plan} plan.` },
+          { status: 409 }
+        );
+      }
+    }
+  }
+
   // Create Razorpay order
   const credentials = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
   let rzpRes: Response;

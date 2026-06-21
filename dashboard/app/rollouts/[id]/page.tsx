@@ -77,54 +77,54 @@ export default function RolloutDetailPage({
   const advanceThreshold = (r.policy as any)?.advance_threshold ?? 0.9;
 
   return (
-    <div className="p-6 max-w-[1100px] mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between border-b border-gray-200 pb-6">
-        <div className="flex items-center gap-4">
+    <div>
+      {/* Page header — sticky */}
+      <div className="bg-white border-b border-gray-100 px-4 sm:px-6 h-14 flex items-center justify-between sticky top-0 z-20">
+        <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => window.history.back()}
-            className="text-gray-400 hover:text-gray-500 transition-colors p-1"
+            className="text-gray-400 hover:text-gray-600 transition-colors p-1.5 rounded-lg hover:bg-gray-100 shrink-0"
           >
-            <ArrowLeft className="h-5 w-5" strokeWidth={1.8} />
+            <ArrowLeft className="h-4 w-4" strokeWidth={2} />
           </button>
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <h1 className="text-[24px] font-semibold text-gray-900">{r.name}</h1>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-[15px] font-semibold text-gray-900 truncate">{r.name}</span>
               <StateBadge state={r.state} />
             </div>
-            <div className="text-[11px] text-gray-400 font-mono">ID: {r.id}</div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {(r.state === "canary" || r.state === "shadow") && (
             <>
               <button
                 onClick={() => handleAction("promote")}
                 disabled={actionLoading !== null}
-                className="flex items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-[12px] font-medium text-emerald-700 hover:bg-emerald-100 transition-all duration-150 disabled:opacity-40"
+                className="flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-[12px] font-semibold text-emerald-700 hover:bg-emerald-100 transition-all disabled:opacity-40"
               >
-                <CheckCircle className="h-3.5 w-3.5" strokeWidth={1.8} />
+                <CheckCircle className="h-3.5 w-3.5" strokeWidth={2} />
                 {actionLoading === "promote" ? "Promoting…" : "Promote"}
               </button>
               <button
                 onClick={() => handleAction("rollback")}
                 disabled={actionLoading !== null}
-                className="flex items-center gap-1.5 rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-[12px] font-medium text-red-700 hover:bg-red-100 transition-all duration-150 disabled:opacity-40"
+                className="flex items-center gap-1.5 rounded-lg border border-red-300 bg-red-50 px-3 py-1.5 text-[12px] font-semibold text-red-700 hover:bg-red-100 transition-all disabled:opacity-40"
               >
-                <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.8} />
+                <RotateCcw className="h-3.5 w-3.5" strokeWidth={2} />
                 {actionLoading === "rollback" ? "Rolling back…" : "Rollback"}
               </button>
             </>
           )}
           <button
             onClick={() => { rollout.refresh(); metrics.refresh(); decisions.refresh(); }}
-            className="flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-[12px] text-gray-500 hover:text-gray-900 transition-all duration-150"
+            className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[12px] text-gray-500 hover:text-gray-900 transition-all"
           >
             <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.8} /> Refresh
           </button>
         </div>
       </div>
+      <div className="p-4 sm:p-6 max-w-[1100px] mx-auto space-y-5">
 
       {actionError && (
         <p className="text-[12px] text-red-700">{actionError}</p>
@@ -249,6 +249,7 @@ export default function RolloutDetailPage({
             </div>
           </section>
         </div>
+      </div>
       </div>
     </div>
   );

@@ -57,7 +57,12 @@ export default function BillingPage() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ plan }),
     });
-    if (!res.ok) { setError("Failed to create payment order. Try again."); return; }
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({})) as { error?: string };
+      setError(errData.error ?? "Failed to create payment order. Try again.");
+      setUpgrading(null);
+      return;
+    }
     const order = await res.json() as {
       orderId: string; amount: number; currency: string;
       keyId: string; tenantId: string; email: string; name: string;
@@ -99,12 +104,13 @@ export default function BillingPage() {
           }),
         });
         if (verify.ok) {
-          setSuccess(`Payment verified! Your ${order.plan} plan is now active.`);
-          setTimeout(() => window.location.reload(), 2000);
+          // Redirect to success page — session cookie is already refreshed server-side
+          window.location.href = `/billing/success?plan=${order.plan}`;
         } else {
-          setError("Payment received but verification failed. Contact support@tryrepath.com with your payment ID: " + response.razorpay_payment_id);
+          const errData = await verify.json().catch(() => ({})) as { error?: string };
+          setError(errData.error ?? `Payment received but activation failed. Contact support@tryrepath.com — payment ID: ${response.razorpay_payment_id}`);
+          setUpgrading(null);
         }
-        setUpgrading(null);
       },
     }).open();
   };
@@ -119,9 +125,13 @@ export default function BillingPage() {
     if (checkoutUrl) window.location.href = checkoutUrl;
   };
 
-  const handleUpgrade = async (plan: string) => {
-    setUpgrading(plan); setError("");
-    isIndia ? await handleRazorpay(plan) : await handlePaddle(plan);
+  const handleUpgrade = async (planId: string) => {
+    if (usage?.plan === planId) {
+      setError(`You are already on the ${planId} plan.`);
+      return;
+    }
+    setUpgrading(planId); setError("");
+    isIndia ? await handleRazorpay(planId) : await handlePaddle(planId);
     setUpgrading(null);
   };
 
@@ -173,13 +183,13 @@ export default function BillingPage() {
   ];
 
   return (
-    <div className="p-8 max-w-[900px] mx-auto" style={FONT}>
-
-      {/* Page header */}
-      <div className="mb-8">
-        <h1 className="text-[22px] font-bold text-gray-900 tracking-tight">Billing</h1>
-        <p className="text-[13px] text-gray-500 mt-0.5">Manage your plan, usage, and payment</p>
+    <div style={FONT}>
+      {/* Page header — sticky */}
+      <div className="bg-white border-b border-gray-100 px-6 sm:px-8 h-14 flex items-center sticky top-0 z-20">
+        <h1 className="text-[15px] font-semibold text-gray-900">Billing</h1>
       </div>
+
+      <div className="p-6 sm:p-8 max-w-[900px]">
 
       {/* Test mode banner */}
       {process.env.NODE_ENV !== "production" && (
@@ -188,7 +198,7 @@ export default function BillingPage() {
           <div>
             <p className="text-[13px] font-semibold text-amber-800">Razorpay Test Mode</p>
             <p className="text-[12px] text-amber-700 mt-0.5">
-              Use card <code className="font-mono font-bold">4111 1111 1111 1111</code>, any CVV, any future expiry.
+              Domestic test cards: <code className="font-mono font-bold">4718 6094 5395 9382</code> (Visa) or <code className="font-mono font-bold">5267 3181 8797 5449</code> (MC) · OTP: <code className="font-mono font-bold">1234</code>
             </p>
           </div>
         </div>
@@ -276,6 +286,10 @@ export default function BillingPage() {
           <div className="grid md:grid-cols-2 gap-4 mb-4">
             {plans.map(plan => {
               const isCurrent = usage?.plan === plan.id;
+              const planRank = { trial: 0, starter: 1, pro: 2, enterprise: 3 };
+              const userRank = planRank[usage?.plan as keyof typeof planRank] ?? 0;
+              const cardRank = planRank[plan.id as keyof typeof planRank] ?? 0;
+              const isDowngrade = cardRank < userRank;
               return (
                 <div key={plan.id} className={`relative rounded-2xl border p-6 flex flex-col bg-white ${
                   isCurrent
@@ -323,6 +337,10 @@ export default function BillingPage() {
                   {isCurrent ? (
                     <div className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-[14px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                       <Check className="w-4 h-4" /> Active plan
+                    </div>
+                  ) : isDowngrade ? (
+                    <div className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-[14px] font-medium bg-gray-50 text-gray-400 border border-gray-200 cursor-not-allowed">
+                      Included in your plan
                     </div>
                   ) : (
                     <button
@@ -376,6 +394,7 @@ export default function BillingPage() {
         <Link href="/rollouts" className="text-[13px] text-gray-400 hover:text-gray-700 transition-colors">
           ← Back to Dashboard
         </Link>
+      </div>
       </div>
     </div>
   );
