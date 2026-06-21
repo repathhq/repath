@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   ArrowRight, Check, Loader2, AlertTriangle, BarChart3,
-  Zap, FlaskConical, CreditCard, Star
+  Zap, CreditCard, Star
 } from "lucide-react";
 
 interface Usage {
@@ -191,18 +191,6 @@ export default function BillingPage() {
 
       <div className="p-6 sm:p-8 max-w-[900px]">
 
-      {/* Test mode banner */}
-      {process.env.NODE_ENV !== "production" && (
-        <div className="flex items-start gap-3 p-4 rounded-xl border border-amber-200 bg-amber-50 mb-6">
-          <FlaskConical className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-          <div>
-            <p className="text-[13px] font-semibold text-amber-800">Razorpay Test Mode</p>
-            <p className="text-[12px] text-amber-700 mt-0.5">
-              Domestic test cards: <code className="font-mono font-bold">4718 6094 5395 9382</code> (Visa) or <code className="font-mono font-bold">5267 3181 8797 5449</code> (MC) · OTP: <code className="font-mono font-bold">1234</code>
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* Success / Error */}
       {success && (
