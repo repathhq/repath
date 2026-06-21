@@ -7,8 +7,7 @@ app = "repath-evaluator"
 primary_region = "sin"   # Same region as gateway to minimise Redis latency
 
 [build]
-  dockerfile = "Dockerfile"
-  target = "evaluator"
+  dockerfile = "Dockerfile.evaluator"
 
 [env]
   REPATH_CONSUMER_NAME   = "fly-worker-1"
