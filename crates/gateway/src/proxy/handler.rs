@@ -138,8 +138,28 @@ async fn proxy_inner(
     // ── Version selection (lock-free ArcSwap read) ────────────────────────
     let cache = state.rollout_cache.load();
     let session_id = extract_session_id(&parts.headers);
+    let tenant_id_for_routing = extract_tenant_id(&parts.headers);
 
-    let (version, rollout_id) = match &cache.active {
+    // Pick the rollout for this tenant. If the request carries
+    // X-Repath-Rollout header, honour it; otherwise use the first active
+    // rollout for the tenant (round-robin across features is handled by the
+    // caller passing the rollout ID explicitly).
+    let requested_rollout_id = parts
+        .headers
+        .get("x-repath-rollout")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| uuid::Uuid::parse_str(s).ok());
+
+    let active_rollout = requested_rollout_id
+        .and_then(|rid| {
+            cache
+                .all_for(&tenant_id_for_routing)
+                .iter()
+                .find(|r| r.rollout_id == rid)
+        })
+        .or_else(|| cache.active_for(&tenant_id_for_routing));
+
+    let (version, rollout_id) = match active_rollout {
         Some(rollout) => {
             let assignment = select_version(rollout, session_id.as_deref());
             let version = active_version(rollout, assignment);
@@ -148,7 +168,7 @@ async fn proxy_inner(
             (version, Some(rollout.rollout_id))
         }
         None => {
-            // No active rollout — use default provider from config
+            // No active rollout for this tenant — pass through to default provider
             let version = default_version(&state)?;
             (version, None)
         }

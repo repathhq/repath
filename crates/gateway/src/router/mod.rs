@@ -34,15 +34,19 @@ use uuid::Uuid;
 
 pub use version_selector::{select_version, VersionAssignment};
 
-/// Cached representation of the currently active rollout.
+use std::collections::HashMap;
+
+/// Cached representation of all currently active rollouts.
 ///
-/// This struct is what every request handler loads from the ArcSwap. It
-/// contains everything needed to make a routing decision with no further
-/// I/O.
+/// Keyed by tenant_id so every request can O(1) look up the right rollout
+/// without any locking. Replacing a single-rollout cache with a per-tenant
+/// map lets multiple tenants (or one tenant with multiple features) run
+/// independently.
 #[derive(Debug, Clone)]
 pub struct RolloutCache {
-    /// The active rollout, if one exists. None means pass-through to default.
-    pub active: Option<ActiveRollout>,
+    /// All active rollouts indexed by tenant_id.
+    /// A tenant with no active rollout is absent from the map.
+    pub by_tenant: HashMap<String, Vec<ActiveRollout>>,
     /// Monotonic timestamp of last refresh (for staleness metrics)
     pub refreshed_at: std::time::Instant,
 }
@@ -71,9 +75,22 @@ pub struct ActiveRollout {
 impl RolloutCache {
     pub fn empty() -> Self {
         Self {
-            active: None,
+            by_tenant: HashMap::new(),
             refreshed_at: std::time::Instant::now(),
         }
+    }
+
+    /// Return the first active rollout for this tenant (for simple cases).
+    pub fn active_for(&self, tenant_id: &str) -> Option<&ActiveRollout> {
+        self.by_tenant.get(tenant_id).and_then(|v| v.first())
+    }
+
+    /// Return all active rollouts for this tenant.
+    pub fn all_for(&self, tenant_id: &str) -> &[ActiveRollout] {
+        self.by_tenant
+            .get(tenant_id)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 }
 
@@ -99,10 +116,8 @@ pub async fn run_cache_refresher(db_pool: PgPool, cache: Arc<ArcSwap<RolloutCach
 
         match fetch_active_rollout(&db_pool).await {
             Ok(new_cache) => {
-                debug!(
-                    active = new_cache.active.is_some(),
-                    "Rollout cache refreshed"
-                );
+                let total: usize = new_cache.by_tenant.values().map(|v| v.len()).sum();
+                debug!(active_rollouts = total, "Rollout cache refreshed");
                 // ArcSwap::store is a single atomic pointer swap — O(1), never
                 // blocks any concurrent reader. Old Arc is dropped when the
                 // last holder releases it.
@@ -128,7 +143,7 @@ pub async fn run_cache_refresher(db_pool: PgPool, cache: Arc<ArcSwap<RolloutCach
 /// rollouts, keyed by tenant_id, but for simplicity we only support one
 /// active rollout per tenant at a time.
 async fn fetch_active_rollout(pool: &PgPool) -> Result<RolloutCache> {
-    let row = sqlx::query(
+    let rows = sqlx::query(
         r#"
         SELECT
             r.id                    AS rollout_id,
@@ -141,25 +156,27 @@ async fn fetch_active_rollout(pool: &PgPool) -> Result<RolloutCache> {
             cv.model                AS candidate_model,
             cv.prompt_template      AS candidate_prompt,
             COALESCE(cv.provider_url, 'https://api.openai.com/v1') AS candidate_provider_url,
-            COALESCE(r.tenant_id, 'default')  AS tenant_id
+            COALESCE(r.tenant_id, 'default') AS tenant_id
         FROM rollouts r
         JOIN versions bv ON r.baseline_version_id = bv.id
         JOIN versions cv ON r.candidate_version_id = cv.id
         WHERE r.state IN ('shadow', 'canary')
         ORDER BY r.created_at DESC
-        LIMIT 1
         "#,
     )
-    .fetch_optional(pool)
+    .fetch_all(pool)
     .await
     .map_err(|e| repath_common::Error::Database {
-        operation: "fetch active rollout".to_string(),
+        operation: "fetch active rollouts".to_string(),
         source: e.into(),
     })?;
 
-    let active = row.map(|r: sqlx::postgres::PgRow| {
+    let mut by_tenant: HashMap<String, Vec<ActiveRollout>> = HashMap::new();
+
+    for r in rows {
         use sqlx::Row;
-        ActiveRollout {
+        let tenant_id: String = r.get("tenant_id");
+        let rollout = ActiveRollout {
             rollout_id: r.get("rollout_id"),
             baseline_version_id: r.get("baseline_version_id"),
             candidate_version_id: r.get("candidate_version_id"),
@@ -170,12 +187,13 @@ async fn fetch_active_rollout(pool: &PgPool) -> Result<RolloutCache> {
             candidate_model: r.get("candidate_model"),
             candidate_prompt: r.get("candidate_prompt"),
             candidate_provider_url: r.get("candidate_provider_url"),
-            tenant_id: r.get("tenant_id"),
-        }
-    });
+            tenant_id: tenant_id.clone(),
+        };
+        by_tenant.entry(tenant_id).or_default().push(rollout);
+    }
 
     Ok(RolloutCache {
-        active,
+        by_tenant,
         refreshed_at: std::time::Instant::now(),
     })
 }
