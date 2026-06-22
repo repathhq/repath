@@ -211,7 +211,7 @@ function HeroTrafficFlow() {
     });
 
   return (
-    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-[62%] min-w-[580px] h-[580px] pointer-events-none select-none" aria-hidden>
+    <div className="hidden md:block absolute right-0 top-1/2 -translate-y-1/2 w-[62%] min-w-[580px] h-[580px] pointer-events-none select-none" aria-hidden>
       <svg viewBox="0 0 820 500" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
         <defs>
           <filter id="sh1"><feDropShadow dx="0" dy="2" stdDeviation="8" floodColor="#6366f1" floodOpacity="0.09"/></filter>
@@ -357,6 +357,54 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
   );
 }
 
+/* ─── Mobile hero diagram — static, scales to any width ──────────────────── */
+function HeroTrafficFlowMobile() {
+  return (
+    <div className="w-full rounded-2xl border border-gray-100 bg-gray-50 overflow-hidden p-4">
+      <svg viewBox="0 0 400 260" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-auto">
+        {/* Your App */}
+        <rect x="8" y="100" width="80" height="60" rx="10" fill="white" stroke="#e5e7eb" strokeWidth="1.5"/>
+        <text x="48" y="124" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="8" fontWeight="600" fill="#374151">YOUR APP</text>
+        <text x="48" y="137" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="6" fill="#9ca3af">any LLM client</text>
+        {/* Arrow */}
+        <line x1="90" y1="130" x2="118" y2="130" stroke="#818cf8" strokeWidth="1.5" markerEnd="url(#mv)"/>
+        {/* Gateway */}
+        <rect x="120" y="90" width="100" height="80" rx="10" fill="white" stroke="#c7d2fe" strokeWidth="1.5"/>
+        <text x="170" y="120" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="8" fontWeight="700" fill="#4338ca">REPATH</text>
+        <text x="170" y="132" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="8" fontWeight="700" fill="#4338ca">GATEWAY</text>
+        <text x="170" y="148" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="6" fill="#9ca3af">routes · scores · &lt;2ms</text>
+        {/* Baseline arrow */}
+        <line x1="222" y1="110" x2="260" y2="55" stroke="#818cf8" strokeWidth="1.5" markerEnd="url(#mv)"/>
+        {/* Candidate arrow */}
+        <line x1="222" y1="150" x2="260" y2="200" stroke="#818cf8" strokeWidth="1.5" markerEnd="url(#mv)"/>
+        {/* Baseline box */}
+        <rect x="262" y="20" width="128" height="60" rx="8" fill="white" stroke="#e5e7eb" strokeWidth="1.5"/>
+        <text x="326" y="42" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="8" fontWeight="700" fill="#1d4ed8">BASELINE</text>
+        <text x="326" y="54" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="7" fill="#6b7280">80% of traffic</text>
+        <text x="326" y="67" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="6" fill="#16a34a">score: 0.91 ✓ stable</text>
+        {/* Candidate box */}
+        <rect x="262" y="170" width="128" height="60" rx="8" fill="white" stroke="#e5e7eb" strokeWidth="1.5"/>
+        <text x="326" y="192" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="8" fontWeight="700" fill="#b45309">CANDIDATE</text>
+        <text x="326" y="204" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="7" fill="#6b7280">20% of traffic</text>
+        <text x="326" y="217" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="6" fill="#7c3aed">score: 0.85 · advancing</text>
+        {/* LLM Judge */}
+        <rect x="120" y="195" width="100" height="50" rx="8" fill="#faf5ff" stroke="#e9d5ff" strokeWidth="1.5"/>
+        <text x="170" y="216" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="7" fontWeight="700" fill="#7c3aed">⚡ LLM JUDGE</text>
+        <text x="170" y="228" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="6" fill="#9ca3af">scores every response</text>
+        <text x="170" y="238" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="5.5" fill="#9ca3af">async · ~120ms · 0ms user impact</text>
+        {/* Judge dotted line */}
+        <line x1="170" y1="172" x2="170" y2="193" stroke="#c4b5fd" strokeWidth="1.5" strokeDasharray="3,2"/>
+        {/* Marker */}
+        <defs>
+          <marker id="mv" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+            <path d="M0,1 L0,5 L6,3 z" fill="#818cf8"/>
+          </marker>
+        </defs>
+      </svg>
+    </div>
+  );
+}
+
 /* ─── Page ─────────────────────────────────────────────────────────────────── */
 export default function LandingPage() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -412,66 +460,79 @@ export default function LandingPage() {
       </header>
 
       {/* ══ HERO ═════════════════════════════════════════════════════════════ */}
-      <section className="relative max-w-7xl mx-auto px-5 sm:px-8 pt-12 sm:pt-16 pb-16 sm:pb-20 min-h-[520px] sm:min-h-[620px] flex items-center overflow-hidden">
-        <HeroTrafficFlow />
+      <section className="relative max-w-7xl mx-auto px-5 sm:px-8 pt-10 sm:pt-16 pb-10 sm:pb-20 overflow-hidden">
+        {/* Desktop: side-by-side | Mobile: stacked */}
+        <div className="flex flex-col md:flex-row md:items-center gap-10 md:gap-0">
 
-        <div className="relative z-10 max-w-[480px]">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-100 text-xs text-gray-500 mb-6 border border-gray-200">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-            AI-native progressive delivery · 7-day free trial
+          {/* Left — text */}
+          <div className="relative z-10 w-full md:max-w-[480px] md:shrink-0">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-100 text-xs text-gray-500 mb-5 border border-gray-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+              AI-native progressive delivery · 7-day free trial
+            </div>
+
+            <motion.h1
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+              className="text-[2.4rem] leading-[1.08] sm:text-5xl md:text-6xl font-bold tracking-tight mb-4"
+            >
+              Ship AI changes<br />
+              <span className="text-gray-400">without the risk.</span>
+            </motion.h1>
+
+            <motion.p
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+              className="text-base sm:text-lg text-gray-500 leading-relaxed mb-7 max-w-[480px]"
+            >
+              Canary deployments for LLM prompts and models. Repath splits traffic, scores every response with an AI judge, and rolls back automatically before your users notice.
+            </motion.p>
+
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.18, duration: 0.6 }}
+              className="flex flex-wrap gap-3 mb-6"
+            >
+              <Link href="/signup" className="inline-flex items-center gap-2 px-5 py-3 bg-[#0A0A0B] text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors">
+                Start free trial <ArrowRight className="w-4 h-4" />
+              </Link>
+              <a href="#pricing" className="inline-flex items-center gap-2 px-5 py-3 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
+                See pricing
+              </a>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3, duration: 0.5 }}
+              className="flex flex-wrap gap-x-4 gap-y-2"
+            >
+              {["No credit card", "7-day free trial", "Cancel anytime", "UPI & cards"].map((t) => (
+                <span key={t} className="flex items-center gap-1.5 text-xs text-gray-400">
+                  <Check className="w-3.5 h-3.5 text-gray-400" /> {t}
+                </span>
+              ))}
+            </motion.div>
           </div>
 
-          <motion.h1
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-            className="text-3xl sm:text-5xl md:text-6xl font-bold tracking-tight leading-[1.06] mb-5"
-          >
-            Ship AI changes<br />
-            <span className="text-gray-400">without the risk.</span>
-          </motion.h1>
+          {/* Right — animation: hidden on mobile (shown below), visible on desktop */}
+          <div className="hidden md:block relative flex-1 min-h-[500px]">
+            <HeroTrafficFlow />
+          </div>
 
-          <motion.p
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-            className="text-lg text-gray-500 leading-relaxed mb-8 max-w-[480px]"
-          >
-            Canary deployments for LLM prompts and models. Repath splits traffic, scores every response with an AI judge, and rolls back automatically before your users notice.
-          </motion.p>
-
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.18, duration: 0.6 }}
-            className="flex flex-wrap gap-3 mb-8"
-          >
-            <Link href="/signup" className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#0A0A0B] text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors">
-              Start free trial <ArrowRight className="w-4 h-4" />
-            </Link>
-            <a href="#pricing" className="inline-flex items-center gap-2 px-5 py-2.5 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
-              See pricing
-            </a>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.3, duration: 0.5 }}
-            className="flex flex-wrap gap-x-5 gap-y-2"
-          >
-            {["No credit card to start", "7-day free trial", "Cancel anytime", "UPI & cards accepted"].map((t) => (
-              <span key={t} className="flex items-center gap-1.5 text-xs text-gray-400">
-                <Check className="w-3.5 h-3.5 text-gray-400" /> {t}
-              </span>
-            ))}
-          </motion.div>
+          {/* Mobile-only animation — inline, scales to viewport */}
+          <div className="md:hidden w-full">
+            <HeroTrafficFlowMobile />
+          </div>
         </div>
       </section>
 
       {/* ══ CAPABILITIES MARQUEE ══════════════════════════════════════════════ */}
       <section className="border-t border-gray-100 py-8">
-        <div className="max-w-7xl mx-auto px-6">
+        <div className="max-w-7xl mx-auto px-5 sm:px-6">
           <div className="flex items-center gap-6 overflow-hidden">
             <span className="text-xs text-gray-400 uppercase tracking-widest whitespace-nowrap shrink-0">What we do</span>
             <div className="flex-1 overflow-hidden"><Marquee /></div>
@@ -480,7 +541,7 @@ export default function LandingPage() {
       </section>
 
       {/* ══ PLATFORM STATS ════════════════════════════════════════════════════ */}
-      <section className="max-w-7xl mx-auto px-6 py-24">
+      <section className="max-w-7xl mx-auto px-5 sm:px-6 py-12 sm:py-24">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -529,11 +590,11 @@ export default function LandingPage() {
       </section>
 
       {/* ══ TAB FEATURES ══════════════════════════════════════════════════════ */}
-      <section id="features" className="border-t border-gray-100 py-20 bg-white">
-        <div className="max-w-7xl mx-auto px-6">
+      <section id="features" className="border-t border-gray-100 py-12 sm:py-20 bg-white">
+        <div className="max-w-7xl mx-auto px-5 sm:px-6">
 
           {/* Tab bar — Together.ai style: 3 columns, underline active */}
-          <div className="grid grid-cols-3 border-b-2 border-gray-100 mb-14">
+          <div className="grid grid-cols-1 sm:grid-cols-3 border-b-2 border-gray-100 mb-10 sm:mb-14">
             {featureTabs.map((t) => {
               const active = activeTab === t.id;
               return (
@@ -610,7 +671,7 @@ export default function LandingPage() {
                   </div>
 
                   {/* Stats row */}
-                  <div className="grid grid-cols-4 divide-x divide-gray-100">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 divide-gray-100 gap-px sm:divide-x sm:gap-0">
                     {[
                       { label: "QUALITY SCORE", val: "0.87", sub: "was 0.91", valColor: "text-emerald-600" },
                       { label: "THRESHOLD",      val: "0.85", sub: "configured" },
@@ -808,7 +869,7 @@ export default function LandingPage() {
                   </div>
 
                   {/* Stats */}
-                  <div className="grid grid-cols-4 divide-x divide-gray-100">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 divide-gray-100 gap-px sm:divide-x sm:gap-0">
                     {[
                       { label: "QUALITY SCORE", val: "0.61", sub: "was 0.91", valColor: "text-red-500" },
                       { label: "THRESHOLD",      val: "0.85", sub: "configured" },
@@ -874,8 +935,8 @@ export default function LandingPage() {
       </section>
 
       {/* ══ PROBLEM (dark) ════════════════════════════════════════════════════ */}
-      <section className="py-24" style={{ background: C.dark }}>
-        <div className="max-w-7xl mx-auto px-6">
+      <section className="py-12 sm:py-24" style={{ background: C.dark }}>
+        <div className="max-w-7xl mx-auto px-5 sm:px-6">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -969,7 +1030,7 @@ export default function LandingPage() {
       </section>
 
       {/* ══ HOW IT WORKS ══════════════════════════════════════════════════════ */}
-      <section id="how-it-works" className="max-w-7xl mx-auto px-6 py-24">
+      <section id="how-it-works" className="max-w-7xl mx-auto px-5 sm:px-6 py-12 sm:py-24">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -1041,8 +1102,8 @@ export default function LandingPage() {
       </section>
 
       {/* ══ FEATURES GRID ═════════════════════════════════════════════════════ */}
-      <section className="border-t border-gray-100 py-24">
-        <div className="max-w-7xl mx-auto px-6">
+      <section className="border-t border-gray-100 py-12 sm:py-24">
+        <div className="max-w-7xl mx-auto px-5 sm:px-6">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -1079,8 +1140,8 @@ export default function LandingPage() {
       </section>
 
       {/* ══ PRICING ═══════════════════════════════════════════════════════════ */}
-      <section id="pricing" className="border-t border-gray-100 py-24">
-        <div className="max-w-7xl mx-auto px-6">
+      <section id="pricing" className="border-t border-gray-100 py-12 sm:py-24">
+        <div className="max-w-7xl mx-auto px-5 sm:px-6">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -1146,7 +1207,7 @@ export default function LandingPage() {
       </section>
 
       {/* ══ CTA ═══════════════════════════════════════════════════════════════ */}
-      <section className="border-t border-gray-100 py-24" style={{ background: C.dark }}>
+      <section className="border-t border-gray-100 py-12 sm:py-24" style={{ background: C.dark }}>
         <div className="max-w-3xl mx-auto px-6 text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
