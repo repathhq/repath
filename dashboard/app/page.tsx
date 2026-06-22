@@ -379,7 +379,7 @@ export default function LandingPage() {
         <nav className="max-w-7xl mx-auto px-6 h-[72px] flex items-center justify-between gap-6">
           <Link href="/" className="shrink-0 flex items-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/repath-logo.png?v=2" alt="Repath" style={{ height: 56, width: "auto", display: "block" }} />
+            <img src="/repath-logo.png?v=3" alt="Repath" style={{ height: 44, width: "auto", display: "block" }} />
           </Link>
 
           <div className="hidden md:flex items-center gap-0.5">
