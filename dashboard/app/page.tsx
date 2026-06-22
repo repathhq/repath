@@ -377,9 +377,9 @@ export default function LandingPage() {
       {/* ══ NAV ══════════════════════════════════════════════════════════════ */}
       <header className={`sticky top-0 z-50 bg-white transition-shadow duration-200 ${scrolled ? "shadow-[0_1px_0_0_rgba(0,0,0,0.08)]" : ""}`}>
         <nav className="max-w-7xl mx-auto px-6 h-[100px] flex items-center justify-between gap-6">
-          <Link href="/" className="shrink-0 flex items-center h-full">
+          <Link href="/" className="shrink-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/repath-logo.png" alt="Repath" style={{ height: 72, width: "auto", display: "block" }} />
+            <img src="/repath-logo.png" alt="Repath" style={{ height: 72, width: "auto" }} />
           </Link>
 
           <div className="hidden md:flex items-center gap-0.5">
