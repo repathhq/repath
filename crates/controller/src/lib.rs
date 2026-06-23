@@ -44,6 +44,7 @@
 
 pub mod decision;
 pub mod loop_runner;
+pub mod metrics;
 pub mod metrics_aggregator;
 pub mod policy;
 pub mod store;

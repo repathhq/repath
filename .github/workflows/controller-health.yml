@@ -1,0 +1,98 @@
+name: Controller Health Check
+
+on:
+  schedule:
+    # Every 5 minutes
+    - cron: "*/5 * * * *"
+  # Allow manual triggering for debugging
+  workflow_dispatch:
+
+# Only run on the real repo — forks and mirrors skip this entirely.
+# The check is inside the job rather than at the workflow level so that
+# workflow_dispatch still shows up in the UI on any fork (it just exits early).
+
+jobs:
+  health-check:
+    name: Check repath-controller status
+    runs-on: ubuntu-latest
+    if: github.repository == 'repath/repath'
+
+    permissions:
+      issues: write
+
+    steps:
+      - name: Install Fly CLI
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Check controller status
+        id: status
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          STATUS=$(flyctl status --app repath-controller 2>&1)
+          echo "status_output<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$STATUS" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+          if echo "$STATUS" | grep -q "started"; then
+            echo "healthy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "healthy=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open issue if controller is down
+        if: steps.status.outputs.healthy == 'false'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          EXISTING=$(gh issue list \
+            --repo "$GITHUB_REPOSITORY" \
+            --label "controller-down" \
+            --state open \
+            --json number \
+            --jq '.[0].number')
+
+          if [ -n "$EXISTING" ]; then
+            echo "Issue #$EXISTING already open — adding comment."
+            gh issue comment "$EXISTING" \
+              --repo "$GITHUB_REPOSITORY" \
+              --body "$(cat <<'BODY'
+          Still down at ${{ github.run_id }} ($(date -u +"%Y-%m-%dT%H:%M:%SZ")).
+
+          **flyctl status output:**
+          \`\`\`
+          ${{ steps.status.outputs.status_output }}
+          \`\`\`
+          BODY
+          )"
+          else
+            echo "No open issue found — creating one."
+            gh issue create \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "🚨 Controller down" \
+              --label "controller-down" \
+              --body "$(cat <<'BODY'
+          ## Controller health check failed
+
+          No machine in **started** state was found for `repath-controller`.
+
+          **Detected at:** $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          **Run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          **flyctl status output:**
+          \`\`\`
+          ${{ steps.status.outputs.status_output }}
+          \`\`\`
+
+          ### Recovery steps
+          1. `flyctl status --app repath-controller` — confirm current state
+          2. `flyctl logs --app repath-controller` — check for panic / OOM
+          3. `flyctl machine restart <id> --app repath-controller` — restart if stuck
+          4. If crash-looping, check `DATABASE_URL` secret and recent deploys
+          BODY
+          )"
+          fi
+
+      - name: Log healthy status
+        if: steps.status.outputs.healthy == 'true'
+        run: echo "Controller is healthy — at least one machine in started state."

@@ -9,6 +9,9 @@ context/
 # Environment
 .env
 .env.local
+.env.*.local
+*.env
+!.env.example
 
 # IDEs
 .vscode/

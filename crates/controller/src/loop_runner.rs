@@ -31,6 +31,7 @@
 
 use crate::{
     decision::{self, DecisionOutcome},
+    metrics::ControllerMetrics,
     metrics_aggregator::{self, AggregationResult},
     policy,
     store::{self, ActiveRolloutRow},
@@ -39,6 +40,7 @@ use chrono::Utc;
 use repath_common::types::RolloutPolicy;
 use repath_common::Result;
 use sqlx::PgPool;
+use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, error, info, warn};
 
@@ -52,6 +54,8 @@ pub struct ControllerConfig {
     pub confidence_level: f64,
     /// Rolling window for metric aggregation (minutes).
     pub metric_window_minutes: i32,
+    /// Prometheus metrics — incremented on every cycle and per decision.
+    pub metrics: Arc<ControllerMetrics>,
 }
 
 impl Default for ControllerConfig {
@@ -60,6 +64,7 @@ impl Default for ControllerConfig {
             decision_interval_secs: 30,
             confidence_level: 0.95,
             metric_window_minutes: 10,
+            metrics: Arc::new(ControllerMetrics::new()),
         }
     }
 }
@@ -84,24 +89,48 @@ pub async fn run(pool: PgPool, config: ControllerConfig) {
     loop {
         interval.tick().await;
 
-        if let Err(e) = run_once(&pool, &config).await {
-            // A single cycle failure (e.g., transient DB error) must not
-            // crash the controller. Log the error and continue to the next tick.
-            error!(error = %e, "Controller cycle failed — will retry next interval");
+        // Count every cycle attempt — including ones that error.
+        config.metrics.cycles_total.inc();
+
+        let timer = config.metrics.cycle_duration_seconds.start_timer();
+
+        match run_once(&pool, &config).await {
+            Ok(rollout_count) => {
+                // Successful cycle: record timing and update liveness signals.
+                timer.observe_duration();
+                config
+                    .metrics
+                    .last_cycle_timestamp
+                    .set(Utc::now().timestamp() as f64);
+                config
+                    .metrics
+                    .active_rollouts
+                    .set(rollout_count as f64);
+            }
+            Err(e) => {
+                // Discard the timer — we still want the duration recorded so
+                // slow failures show up in the histogram.
+                timer.observe_duration();
+                config.metrics.cycle_errors_total.inc();
+                // A single cycle failure (e.g., transient DB error) must not
+                // crash the controller. Log the error and continue to the next tick.
+                error!(error = %e, "Controller cycle failed — will retry next interval");
+            }
         }
     }
 }
 
 /// Run a single decision cycle across all active rollouts.
 ///
-/// Returns `Err` only on database failures that affect all rollouts.
-/// Per-rollout failures are logged and skipped.
-async fn run_once(pool: &PgPool, config: &ControllerConfig) -> Result<()> {
+/// Returns the number of active rollouts processed on success, or `Err` on
+/// database failures that affect all rollouts. Per-rollout failures are logged
+/// and skipped.
+async fn run_once(pool: &PgPool, config: &ControllerConfig) -> Result<usize> {
     let rollouts = store::fetch_active_rollouts(pool).await?;
 
     if rollouts.is_empty() {
         debug!("No active rollouts");
-        return Ok(());
+        return Ok(0);
     }
 
     info!(count = rollouts.len(), "Processing active rollouts");
@@ -119,14 +148,14 @@ async fn run_once(pool: &PgPool, config: &ControllerConfig) -> Result<()> {
         }
     }
 
-    Ok(())
+    Ok(rollouts.len())
 }
 
 /// Process a single rollout: start it if new, evaluate if active.
 async fn process_rollout(
     pool: &PgPool,
     rollout: &ActiveRolloutRow,
-    _config: &ControllerConfig,
+    config: &ControllerConfig,
 ) -> Result<()> {
     // Parse the policy from JSONB — if it's malformed, fail loudly
     let policy: RolloutPolicy =
@@ -204,7 +233,7 @@ async fn process_rollout(
     )
     .await?;
 
-    let metrics = match agg {
+    let rollout_metrics = match agg {
         AggregationResult::Ready(m) => m,
 
         AggregationResult::InsufficientData { have, need } => {
@@ -230,7 +259,7 @@ async fn process_rollout(
 
     // Evaluate policy
     let verdict = policy::evaluate(
-        &metrics,
+        &rollout_metrics,
         &policy,
         rollout.current_weight,
         step_target_weight,
@@ -246,30 +275,40 @@ async fn process_rollout(
         &rollout.name,
         rollout.current_weight,
         verdict,
-        &metrics,
+        &rollout_metrics,
     )
     .await?;
 
-    // Log outcome at the appropriate level
+    // Log outcome at the appropriate level and record decision metric.
     match &outcome {
         DecisionOutcome::RolledBack { reason, .. } => {
             error!(
                 rollout_id = %rollout.id,
                 rollout_name = %rollout.name,
                 reason = %reason,
-                candidate_quality = metrics.candidate.avg_quality,
-                candidate_errors = metrics.candidate.error_rate,
-                samples = metrics.candidate.sample_count,
+                candidate_quality = rollout_metrics.candidate.avg_quality,
+                candidate_errors = rollout_metrics.candidate.error_rate,
+                samples = rollout_metrics.candidate.sample_count,
                 "🚨 ROLLBACK: candidate rolled back to 0%"
             );
+            config
+                .metrics
+                .decisions_total
+                .with_label_values(&["rollback"])
+                .inc();
         }
         DecisionOutcome::Promoted { .. } => {
             info!(
                 rollout_id = %rollout.id,
                 rollout_name = %rollout.name,
-                candidate_quality = metrics.candidate.avg_quality,
+                candidate_quality = rollout_metrics.candidate.avg_quality,
                 "✅ PROMOTED: candidate at 100%"
             );
+            config
+                .metrics
+                .decisions_total
+                .with_label_values(&["promote"])
+                .inc();
         }
         DecisionOutcome::Advanced { new_weight, .. } => {
             info!(
@@ -277,9 +316,14 @@ async fn process_rollout(
                 rollout_name = %rollout.name,
                 old_weight = rollout.current_weight,
                 new_weight,
-                candidate_quality = metrics.candidate.avg_quality,
+                candidate_quality = rollout_metrics.candidate.avg_quality,
                 "↑ ADVANCED: candidate traffic increased"
             );
+            config
+                .metrics
+                .decisions_total
+                .with_label_values(&["advance"])
+                .inc();
         }
         DecisionOutcome::Held { reason, .. } => {
             debug!(
@@ -288,12 +332,22 @@ async fn process_rollout(
                 reason = %reason,
                 "— HOLD: no change this cycle"
             );
+            config
+                .metrics
+                .decisions_total
+                .with_label_values(&["hold"])
+                .inc();
         }
         DecisionOutcome::AlreadyActedOn { .. } => {
             debug!(
                 rollout_id = %rollout.id,
                 "State guard blocked double-application"
             );
+            config
+                .metrics
+                .decisions_total
+                .with_label_values(&["already_acted_on"])
+                .inc();
         }
     }
 

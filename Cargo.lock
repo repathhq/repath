@@ -2066,7 +2066,9 @@ name = "repath-controller"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "axum",
  "chrono",
+ "prometheus",
  "repath-common",
  "serde",
  "serde_json",
