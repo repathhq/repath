@@ -19,12 +19,12 @@
 //! `SET search_path`, so tests run in parallel without ever touching each
 //! other's rows.
 
+use repath_common::types::RolloutPolicy;
 use repath_controller::{
     metrics_aggregator::{self, AggregationResult, RolloutMetrics, VersionSnapshot},
     policy::{self, PolicyVerdict},
     store,
 };
-use repath_common::types::RolloutPolicy;
 use serde_json::json;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
@@ -88,9 +88,8 @@ impl TestDb {
     async fn secondary(&mut self) -> &PgPool {
         if self.secondary_pool.is_none() {
             let database_url = std::env::var("DATABASE_URL").unwrap();
-            let mut opts: sqlx::postgres::PgConnectOptions = database_url
-                .parse()
-                .expect("parse DATABASE_URL");
+            let mut opts: sqlx::postgres::PgConnectOptions =
+                database_url.parse().expect("parse DATABASE_URL");
             opts = opts.options([("search_path", self.schema.as_str())]);
             let pool = PgPool::connect_with(opts).await.expect("secondary pool");
             self.secondary_pool = Some(pool);
@@ -664,9 +663,7 @@ async fn test_unevaluated_requests_do_not_trigger_rollback() {
         .await
         .expect("aggregate_version_metrics");
 
-    let candidate_row = metrics_rows
-        .iter()
-        .find(|m| m.version_id == candidate_id);
+    let candidate_row = metrics_rows.iter().find(|m| m.version_id == candidate_id);
 
     // Either no row (INNER JOIN eliminated them all — correct) or a row with
     // sample_count == 0.  Either is safe: the controller will return
@@ -697,16 +694,25 @@ async fn test_apply_advance_updates_state_and_steps() {
     let pool = db.pool();
     let policy = standard_policy();
 
-    let (rollout_id, _, _) =
-        insert_rollout(pool, "advance-test", &policy, "canary", 0.10).await;
+    let (rollout_id, _, _) = insert_rollout(pool, "advance-test", &policy, "canary", 0.10).await;
     activate_step_1(pool, rollout_id).await;
 
-    let applied =
-        store::apply_advance(pool, rollout_id, 0.25, "canary", "gates passed in test", 0.10, json!({}))
-            .await
-            .expect("apply_advance");
+    let applied = store::apply_advance(
+        pool,
+        rollout_id,
+        0.25,
+        "canary",
+        "gates passed in test",
+        0.10,
+        json!({}),
+    )
+    .await
+    .expect("apply_advance");
 
-    assert!(applied, "apply_advance must return true on first application");
+    assert!(
+        applied,
+        "apply_advance must return true on first application"
+    );
 
     let row = sqlx::query("SELECT current_weight, state FROM rollouts WHERE id = $1")
         .bind(rollout_id)
@@ -731,7 +737,10 @@ async fn test_apply_advance_updates_state_and_steps() {
             .expect("fetch step 1")
             .get("status");
 
-    assert_eq!(step_status, "passed", "step 1 should be 'passed' after advance");
+    assert_eq!(
+        step_status, "passed",
+        "step 1 should be 'passed' after advance"
+    );
 }
 
 /// `apply_rollback` must set `state = 'rolled_back'` and mark every
@@ -749,10 +758,9 @@ async fn test_apply_rollback_marks_all_steps_failed() {
         insert_rollout(pool, "rollback-all-steps", &policy, "canary", 0.10).await;
     activate_step_1(pool, rollout_id).await;
 
-    let applied =
-        store::apply_rollback(pool, rollout_id, "test rollback", 0.10, json!({}))
-            .await
-            .expect("apply_rollback");
+    let applied = store::apply_rollback(pool, rollout_id, "test rollback", 0.10, json!({}))
+        .await
+        .expect("apply_rollback");
 
     assert!(applied, "apply_rollback must return true on first call");
 
@@ -807,17 +815,26 @@ async fn test_optimistic_locking_prevents_double_rollback() {
     let pool_b = db.secondary_pool.as_ref().unwrap().clone();
 
     let (res_a, res_b) = tokio::join!(
-        store::apply_rollback(&pool_a, rollout_id, "concurrent rollback A", 0.10, json!({})),
-        store::apply_rollback(&pool_b, rollout_id, "concurrent rollback B", 0.10, json!({})),
+        store::apply_rollback(
+            &pool_a,
+            rollout_id,
+            "concurrent rollback A",
+            0.10,
+            json!({})
+        ),
+        store::apply_rollback(
+            &pool_b,
+            rollout_id,
+            "concurrent rollback B",
+            0.10,
+            json!({})
+        ),
     );
 
     let applied_a = res_a.expect("apply_rollback A");
     let applied_b = res_b.expect("apply_rollback B");
 
-    assert!(
-        applied_a || applied_b,
-        "at least one rollback must succeed"
-    );
+    assert!(applied_a || applied_b, "at least one rollback must succeed");
     assert_ne!(
         applied_a, applied_b,
         "exactly one rollback should apply (A={applied_a}, B={applied_b})"
@@ -844,7 +861,10 @@ async fn test_start_rollout_transitions_created_to_canary() {
         .await
         .expect("start_rollout");
 
-    assert!(started, "start_rollout must return true for a 'created' rollout");
+    assert!(
+        started,
+        "start_rollout must return true for a 'created' rollout"
+    );
 
     let row = sqlx::query("SELECT state, current_weight FROM rollouts WHERE id = $1")
         .bind(rollout_id)
@@ -855,7 +875,10 @@ async fn test_start_rollout_transitions_created_to_canary() {
     let state: String = row.get("state");
     let weight: f64 = row.get("current_weight");
 
-    assert_eq!(state, "canary", "state should be 'canary' after start_rollout");
+    assert_eq!(
+        state, "canary",
+        "state should be 'canary' after start_rollout"
+    );
     assert!(
         weight > 0.0,
         "current_weight should be > 0 after start_rollout, got {weight}"
@@ -869,7 +892,10 @@ async fn test_start_rollout_transitions_created_to_canary() {
             .expect("fetch step 1")
             .get("status");
 
-    assert_eq!(step_status, "active", "step 1 should be 'active' after start_rollout");
+    assert_eq!(
+        step_status, "active",
+        "step 1 should be 'active' after start_rollout"
+    );
 
     let decision_count: i64 =
         sqlx::query("SELECT COUNT(*) AS n FROM decisions WHERE rollout_id = $1")
@@ -917,10 +943,15 @@ async fn test_policy_holds_when_min_samples_not_met() {
         insert_request_with_eval(pool, rollout_id, baseline_id, 0.92, 300).await;
     }
 
-    let result =
-        metrics_aggregator::aggregate(pool, rollout_id, baseline_id, candidate_id, policy.min_samples)
-            .await
-            .expect("aggregate");
+    let result = metrics_aggregator::aggregate(
+        pool,
+        rollout_id,
+        baseline_id,
+        candidate_id,
+        policy.min_samples,
+    )
+    .await
+    .expect("aggregate");
 
     match result {
         AggregationResult::InsufficientData { have, need } => {

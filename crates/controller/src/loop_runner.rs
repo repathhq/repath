@@ -102,10 +102,7 @@ pub async fn run(pool: PgPool, config: ControllerConfig) {
                     .metrics
                     .last_cycle_timestamp
                     .set(Utc::now().timestamp() as f64);
-                config
-                    .metrics
-                    .active_rollouts
-                    .set(rollout_count as f64);
+                config.metrics.active_rollouts.set(rollout_count as f64);
             }
             Err(e) => {
                 // Discard the timer — we still want the duration recorded so

@@ -58,9 +58,7 @@ async fn main() -> anyhow::Result<()> {
 
     info!(
         decision_interval_secs,
-        metric_window_minutes,
-        metrics_port,
-        "Starting Repath Controller"
+        metric_window_minutes, metrics_port, "Starting Repath Controller"
     );
 
     // Start the metrics+health HTTP server FIRST — before the DB connect.

@@ -185,10 +185,7 @@ pub async fn serve_metrics(port: u16, metrics: Arc<ControllerMetrics>) -> Result
                 }
             }),
         )
-        .route(
-            "/health",
-            get(|| async { Json(json!({"status": "ok"})) }),
-        );
+        .route("/health", get(|| async { Json(json!({"status": "ok"})) }));
 
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
@@ -255,11 +252,6 @@ mod tests {
             .find(|f| f.get_name() == "repath_controller_cycle_duration_seconds")
             .expect("cycle_duration_seconds should be registered");
 
-        assert_eq!(
-            family.get_metric()[0]
-                .get_histogram()
-                .get_sample_count(),
-            2
-        );
+        assert_eq!(family.get_metric()[0].get_histogram().get_sample_count(), 2);
     }
 }
