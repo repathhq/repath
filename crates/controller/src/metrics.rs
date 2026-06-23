@@ -61,6 +61,12 @@ impl std::fmt::Debug for ControllerMetrics {
     }
 }
 
+impl Default for ControllerMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ControllerMetrics {
     /// Create and register all metrics on a fresh local registry.
     ///
