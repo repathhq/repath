@@ -63,6 +63,19 @@ async fn main() -> anyhow::Result<()> {
         "Starting Repath Controller"
     );
 
+    // Start the metrics+health HTTP server FIRST — before the DB connect.
+    // This ensures Fly health checks pass during startup even if the DB
+    // takes a moment to connect. A startup health-check failure wastes a
+    // full deploy cycle.
+    let metrics = Arc::new(ControllerMetrics::new());
+
+    let metrics_for_server = metrics.clone();
+    tokio::spawn(async move {
+        if let Err(e) = serve_metrics(metrics_port, metrics_for_server).await {
+            tracing::error!(error = %e, port = metrics_port, "Metrics server failed");
+        }
+    });
+
     // Create database pool — controller only needs a small pool (1-2 conns)
     let pool = PgPoolOptions::new()
         .max_connections(3)
@@ -72,20 +85,6 @@ async fn main() -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to connect to database: {}", e))?;
 
     info!("Database connection established");
-
-    // Initialise metrics and start the metrics HTTP server in the background.
-    // The server runs for the lifetime of the process — we intentionally do not
-    // await its handle so a metrics server failure does not crash the controller.
-    let metrics = Arc::new(ControllerMetrics::new());
-
-    let metrics_for_server = metrics.clone();
-    tokio::spawn(async move {
-        if let Err(e) = serve_metrics(metrics_port, metrics_for_server).await {
-            // Log the error but do not panic — the controller can still run
-            // without metrics; losing observability is preferable to crashing.
-            tracing::error!(error = %e, port = metrics_port, "Metrics server failed");
-        }
-    });
 
     let config = ControllerConfig {
         decision_interval_secs,
