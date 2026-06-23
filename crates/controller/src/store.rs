@@ -83,7 +83,7 @@ pub async fn aggregate_version_metrics(
         r#"
         SELECT
             r.version_id,
-            COALESCE(AVG(e.overall_score), 0.0)                       AS avg_quality,
+            AVG(e.overall_score)                                       AS avg_quality,
             COALESCE(
                 PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY r.latency_ms),
                 0
@@ -93,12 +93,13 @@ pub async fn aggregate_version_metrics(
                     / NULLIF(COUNT(*), 0),
                 0.0
             )                                                          AS error_rate,
-            COUNT(*)                                                   AS sample_count
+            COUNT(e.id)                                                AS sample_count
         FROM requests r
-        LEFT JOIN evaluations e ON e.request_id = r.id
+        INNER JOIN evaluations e ON e.request_id = r.id
         WHERE r.rollout_id = $1
           AND r.created_at > NOW() - ($2 || ' minutes')::INTERVAL
         GROUP BY r.version_id
+        HAVING COUNT(e.id) > 0
         "#,
     )
     .bind(rollout_id)
