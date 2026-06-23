@@ -1,0 +1,20 @@
+# Repath Controller — Fly.io deployment config
+# Background worker: polls every 30s, makes advance/rollback decisions.
+# No HTTP service — DB + controller collocated for low latency.
+
+app = "repath-controller"
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile.controller"
+
+[env]
+  RUST_LOG = "info,repath_controller=debug"
+  REPATH_CONTROLLER_DECISION_INTERVAL_SECONDS = "30"
+
+# No [[services]] block — this is a worker with no inbound connections.
+# Fly keeps it running via restart policies.
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

@@ -114,21 +114,23 @@ pub async fn list_rollouts(State(state): State<AppState>) -> impl IntoResponse {
             r.created_at, r.updated_at, r.completed_at,
             bv.model AS baseline_model,
             cv.model AS candidate_model,
-            (
-                SELECT AVG(e.overall_score)
-                FROM evaluations e
-                JOIN requests req ON e.request_id = req.id
-                WHERE req.rollout_id = r.id
-                  AND req.version_id = r.candidate_version_id
-                  AND req.created_at > NOW() - INTERVAL '10 minutes'
+            COALESCE(
+                (SELECT AVG(e.overall_score) FROM evaluations e
+                 JOIN requests req ON e.request_id = req.id
+                 WHERE req.rollout_id = r.id AND req.version_id = r.candidate_version_id
+                   AND req.created_at > NOW() - INTERVAL '10 minutes'),
+                (SELECT AVG(e.overall_score) FROM evaluations e
+                 JOIN requests req ON e.request_id = req.id
+                 WHERE req.rollout_id = r.id AND req.version_id = r.candidate_version_id)
             ) AS avg_quality_candidate,
-            (
-                SELECT AVG(e.overall_score)
-                FROM evaluations e
-                JOIN requests req ON e.request_id = req.id
-                WHERE req.rollout_id = r.id
-                  AND req.version_id = r.baseline_version_id
-                  AND req.created_at > NOW() - INTERVAL '10 minutes'
+            COALESCE(
+                (SELECT AVG(e.overall_score) FROM evaluations e
+                 JOIN requests req ON e.request_id = req.id
+                 WHERE req.rollout_id = r.id AND req.version_id = r.baseline_version_id
+                   AND req.created_at > NOW() - INTERVAL '10 minutes'),
+                (SELECT AVG(e.overall_score) FROM evaluations e
+                 JOIN requests req ON e.request_id = req.id
+                 WHERE req.rollout_id = r.id AND req.version_id = r.baseline_version_id)
             ) AS avg_quality_baseline
         FROM rollouts r
         JOIN versions bv ON r.baseline_version_id = bv.id
@@ -184,28 +186,56 @@ pub async fn get_rollout(
             r.created_at, r.updated_at, r.completed_at,
             bv.model AS baseline_model, bv.prompt_template AS baseline_prompt,
             cv.model AS candidate_model, cv.prompt_template AS candidate_prompt,
-            (SELECT AVG(e.overall_score) FROM evaluations e
-             JOIN requests req ON e.request_id = req.id
-             WHERE req.rollout_id = r.id AND req.version_id = r.baseline_version_id
-               AND req.created_at > NOW() - INTERVAL '10 minutes')  AS avg_quality_baseline,
-            (SELECT AVG(e.overall_score) FROM evaluations e
-             JOIN requests req ON e.request_id = req.id
-             WHERE req.rollout_id = r.id AND req.version_id = r.candidate_version_id
-               AND req.created_at > NOW() - INTERVAL '10 minutes') AS avg_quality_candidate,
-            (SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY req.latency_ms)
-             FROM requests req WHERE req.rollout_id = r.id
-               AND req.version_id = r.baseline_version_id
-               AND req.created_at > NOW() - INTERVAL '10 minutes')::BIGINT AS p95_latency_baseline,
-            (SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY req.latency_ms)
-             FROM requests req WHERE req.rollout_id = r.id
-               AND req.version_id = r.candidate_version_id
-               AND req.created_at > NOW() - INTERVAL '10 minutes')::BIGINT AS p95_latency_candidate,
-            (SELECT COUNT(*) FROM requests req
-             WHERE req.rollout_id = r.id AND req.version_id = r.baseline_version_id
-               AND req.created_at > NOW() - INTERVAL '10 minutes') AS sample_count_baseline,
-            (SELECT COUNT(*) FROM requests req
-             WHERE req.rollout_id = r.id AND req.version_id = r.candidate_version_id
-               AND req.created_at > NOW() - INTERVAL '10 minutes') AS sample_count_candidate
+            COALESCE(
+                (SELECT AVG(e.overall_score) FROM evaluations e
+                 JOIN requests req ON e.request_id = req.id
+                 WHERE req.rollout_id = r.id AND req.version_id = r.baseline_version_id
+                   AND req.created_at > NOW() - INTERVAL '10 minutes'),
+                (SELECT AVG(e.overall_score) FROM evaluations e
+                 JOIN requests req ON e.request_id = req.id
+                 WHERE req.rollout_id = r.id AND req.version_id = r.baseline_version_id)
+            ) AS avg_quality_baseline,
+            COALESCE(
+                (SELECT AVG(e.overall_score) FROM evaluations e
+                 JOIN requests req ON e.request_id = req.id
+                 WHERE req.rollout_id = r.id AND req.version_id = r.candidate_version_id
+                   AND req.created_at > NOW() - INTERVAL '10 minutes'),
+                (SELECT AVG(e.overall_score) FROM evaluations e
+                 JOIN requests req ON e.request_id = req.id
+                 WHERE req.rollout_id = r.id AND req.version_id = r.candidate_version_id)
+            ) AS avg_quality_candidate,
+            COALESCE(
+                (SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY req.latency_ms)
+                 FROM requests req WHERE req.rollout_id = r.id
+                   AND req.version_id = r.baseline_version_id
+                   AND req.created_at > NOW() - INTERVAL '10 minutes'),
+                (SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY req.latency_ms)
+                 FROM requests req WHERE req.rollout_id = r.id
+                   AND req.version_id = r.baseline_version_id)
+            )::BIGINT AS p95_latency_baseline,
+            COALESCE(
+                (SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY req.latency_ms)
+                 FROM requests req WHERE req.rollout_id = r.id
+                   AND req.version_id = r.candidate_version_id
+                   AND req.created_at > NOW() - INTERVAL '10 minutes'),
+                (SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY req.latency_ms)
+                 FROM requests req WHERE req.rollout_id = r.id
+                   AND req.version_id = r.candidate_version_id)
+            )::BIGINT AS p95_latency_candidate,
+            COALESCE(
+                (SELECT COUNT(*) FROM requests req
+                 WHERE req.rollout_id = r.id AND req.version_id = r.baseline_version_id
+                   AND req.created_at > NOW() - INTERVAL '10 minutes'),
+                (SELECT COUNT(*) FROM requests req
+                 WHERE req.rollout_id = r.id AND req.version_id = r.baseline_version_id)
+            ) AS sample_count_baseline,
+            COALESCE(
+                (SELECT COUNT(*) FROM requests req
+                 WHERE req.rollout_id = r.id AND req.version_id = r.candidate_version_id
+                   AND req.created_at > NOW() - INTERVAL '10 minutes'),
+                (SELECT COUNT(*) FROM requests req
+                 WHERE req.rollout_id = r.id AND req.version_id = r.candidate_version_id)
+            ) AS sample_count_candidate
         FROM rollouts r
         JOIN versions bv ON r.baseline_version_id = bv.id
         JOIN versions cv ON r.candidate_version_id = cv.id

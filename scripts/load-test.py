@@ -214,10 +214,10 @@ def setup_db(db_url: str, openai_key: str, tenant: str) -> dict[str, str]:
             gate = f"quality >= {advance_thr} AND quality > {rollback_thr}"
             cur.execute("""
                 INSERT INTO rollout_steps
-                    (rollout_id, step_number, target_weight, gate_expression, status)
-                VALUES (%s, %s, %s, %s, %s)
+                    (rollout_id, step_number, target_weight, gate_expression, status, started_at)
+                VALUES (%s, %s, %s, %s, %s, CASE WHEN %s = 'active' THEN NOW() ELSE NULL END)
                 ON CONFLICT (rollout_id, step_number) DO NOTHING
-            """, (rollout_ids[slug], i + 1, pct, gate, step_status))
+            """, (rollout_ids[slug], i + 1, pct, gate, step_status, step_status))
 
     cur.close()
     conn.close()

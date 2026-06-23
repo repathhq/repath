@@ -147,6 +147,7 @@ impl RolloutState {
 
 /// Policy governing rollout decisions.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
 pub struct RolloutPolicy {
     /// Quality score must be >= this to advance to next step
     pub advance_threshold: f64,
