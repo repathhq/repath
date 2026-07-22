@@ -27,8 +27,14 @@ resource "aws_iam_role_policy_attachment" "ec2_ecr" {
 
 data "aws_iam_policy_document" "ec2_ssm_params" {
   statement {
-    actions   = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath"]
-    resources = ["arn:aws:ssm:${var.aws_region}:*:parameter/${var.project_name}/prod/*"]
+    # GetParametersByPath is checked against the bare path resource (no
+    # trailing /*); GetParameter/GetParameters need the wildcard for
+    # individual parameter names. Both forms are required.
+    actions = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath"]
+    resources = [
+      "arn:aws:ssm:${var.aws_region}:*:parameter/${var.project_name}/prod",
+      "arn:aws:ssm:${var.aws_region}:*:parameter/${var.project_name}/prod/*",
+    ]
   }
   statement {
     actions   = ["kms:Decrypt"]
