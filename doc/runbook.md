@@ -2,13 +2,19 @@
 
 Quick reference for on-call incidents. Fix first, understand later.
 
+All services run as Docker containers on a single EC2 host (`ap-south-1`).
+There is no SSH access — connect via SSM Session Manager (no key needed):
+```bash
+aws ssm start-session --target <instance-id>
+```
+
 ---
 
 ## 1. Controller is down / making no decisions
 
 **Check logs:**
 ```bash
-fly logs --app repath-controller --no-tail | grep ERROR
+docker logs repath-controller --tail 100 | grep ERROR
 ```
 
 **Check last decision cycle:**
@@ -19,7 +25,7 @@ If this is stale by more than 2× `REPATH_CONTROLLER_DECISION_INTERVAL_SECONDS`,
 
 **Restart:**
 ```bash
-fly machine restart --app repath-controller
+docker compose -f /opt/repath/docker-compose.prod.yml restart controller
 ```
 
 ---
@@ -50,20 +56,27 @@ Then verify the controller picks up the rollout on its next cycle.
 
 ## 3. Gateway unreachable from dashboard
 
-1. Check the env var on the Vercel deployment:
-   - Vercel dashboard → repath-dashboard → Settings → Environment Variables → `REPATH_GATEWAY_URL`
-   - Should be `https://repath-gateway.fly.dev`
+1. Check the env var on the Amplify deployment:
+   - Amplify console → repath-dashboard → Environment variables → `NEXT_PUBLIC_GATEWAY_URL`
+   - Should be `https://api.tryrepath.com`
 
 2. Probe the gateway directly:
    ```bash
-   curl https://repath-gateway.fly.dev/health
+   curl https://api.tryrepath.com/health
    ```
 
 3. If the gateway itself is down:
    ```bash
-   fly status --app repath-gateway
-   fly logs --app repath-gateway --no-tail | tail -30
-   fly machine restart --app repath-gateway
+   aws ssm start-session --target <instance-id>
+   docker ps -a
+   docker logs repath-gateway --tail 100
+   docker compose -f /opt/repath/docker-compose.prod.yml restart gateway
+   ```
+
+4. If Caddy (TLS termination) is the problem instead of the gateway container:
+   ```bash
+   systemctl status caddy
+   journalctl -u caddy --no-pager | tail -50
    ```
 
 ---
@@ -72,18 +85,18 @@ Then verify the controller picks up the rollout on its next cycle.
 
 **Check Redis queue depth:**
 ```bash
-redis-cli -u $REPATH_REDIS_URL XLEN repath:eval
+docker exec repath-redis redis-cli XLEN repath:eval
 ```
 Normal: < 1000. Concern: > 10 000. Crisis: growing unbounded.
 
 **Check evaluator logs:**
 ```bash
-fly logs --app repath-evaluator --no-tail | tail -50
+docker logs repath-evaluator --tail 100
 ```
 
-**Scale up if needed:**
+**Scale up if needed** (run a second evaluator container manually — the compose file only defines one by default):
 ```bash
-fly scale count 2 --app repath-evaluator
+docker compose -f /opt/repath/docker-compose.prod.yml up -d --scale evaluator=2
 ```
 Scale back down once the queue drains.
 
@@ -91,21 +104,29 @@ Scale back down once the queue drains.
 
 ## 5. Deploy procedure
 
-**Always use the deploy script — never deploy services out of order.**
+Deploys happen automatically via GitHub Actions on push to `main` (see
+`.github/workflows/ci.yml`), which builds images, pushes to ECR, and runs
+`scripts/deploy-aws.sh` on the host via SSM.
 
+**Manual redeploy** (from the EC2 host, or via SSM `send-command`):
 ```bash
-./scripts/deploy-cloud.sh
+curl -fsSL https://raw.githubusercontent.com/repathhq/repath/main/scripts/deploy-aws.sh | bash
 ```
 
-Deploy order is: **controller → gateway → evaluator**. Deploying gateway before controller risks decisions being made against stale routing logic.
-
-**Rollback a single service:**
+**Rollback a single service** — redeploy with a specific previous image tag
+(tags are the git commit SHA; find one with `docker images` or in ECR):
 ```bash
-# List recent releases
-fly releases --app repath-gateway
-
-# Roll back to a specific image
-fly deploy --image <prev-image> --app repath-gateway
+IMAGE_TAG=<previous-sha> curl -fsSL https://raw.githubusercontent.com/repathhq/repath/main/scripts/deploy-aws.sh | bash
 ```
 
-Replace `repath-gateway` with `repath-controller` or `repath-evaluator` as needed.
+---
+
+## 6. Secrets
+
+All production secrets live in AWS SSM Parameter Store under `/repath/prod/*`
+(SecureString). Rotate a value with:
+```bash
+aws ssm put-parameter --name /repath/prod/OPENAI_API_KEY --type SecureString --value '<new-value>' --overwrite
+```
+Then redeploy (step 5) so the running containers pick it up — SSM values are
+read once at deploy time into `.env`, not polled live.

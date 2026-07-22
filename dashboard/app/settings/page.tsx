@@ -307,13 +307,13 @@ export default function SettingsPage() {
             <div>
               <Section title="Gateway" desc="Your unique Repath gateway URL. Point your app here.">
                 <Field label="Gateway URL" hint="Use this as base_url in your OpenAI client.">
-                  <CopyField value="https://repath-gateway.fly.dev/v1" />
+                  <CopyField value="https://api.tryrepath.com/v1" />
                 </Field>
                 <Field label="Health check">
                   <div className="flex items-center gap-3">
-                    <a href="https://repath-gateway.fly.dev/health" target="_blank" rel="noopener noreferrer"
+                    <a href="https://api.tryrepath.com/health" target="_blank" rel="noopener noreferrer"
                       className="flex items-center gap-1.5 text-[13px] text-violet-600 hover:underline font-medium">
-                      https://repath-gateway.fly.dev/health <ExternalLink className="w-3.5 h-3.5" />
+                      https://api.tryrepath.com/health <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                     <span className="flex items-center gap-1.5 text-[12px] text-emerald-600 font-medium">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Operational
@@ -321,7 +321,7 @@ export default function SettingsPage() {
                   </div>
                 </Field>
                 <Field label="Region">
-                  <span className="text-[14px] text-gray-700 font-medium">Singapore (sin) — ap-southeast-1</span>
+                  <span className="text-[14px] text-gray-700 font-medium">Mumbai — ap-south-1</span>
                 </Field>
                 <Field label="Request timeout" hint="Max seconds to wait for provider response.">
                   <div className="flex items-center gap-2">

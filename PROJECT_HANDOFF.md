@@ -447,12 +447,16 @@ wrk -t4 -c100 -d30s --latency http://localhost:8080/v1/chat/completions
 docker compose up
 ```
 
-### Production (Fly.io)
+### Production (AWS)
+
+Gateway/controller/evaluator run as Docker containers on a single EC2 host
+provisioned by Terraform (`infra/`); the dashboard runs on AWS Amplify.
+Deploys happen via GitHub Actions on push to `main` — see
+`.github/workflows/ci.yml`, `scripts/deploy-aws.sh`, and `doc/runbook.md`.
 
 ```bash
-fly launch
-fly deploy
-fly secrets set OPENAI_API_KEY=sk-...
+cd infra && terraform apply
+aws ssm put-parameter --name /repath/prod/OPENAI_API_KEY --type SecureString --value sk-... --overwrite
 ```
 
 ### Kubernetes (V3)

@@ -20,6 +20,10 @@ context/
 *.swo
 *~
 
+# Claude Code local state (worktrees can contain stale copies of old,
+# already-redacted secrets — never let this get committed)
+.claude/
+
 # macOS
 .DS_Store
 
@@ -52,10 +56,14 @@ env/
 # Docker
 docker-compose.override.yml
 
-# Terraform (if used for infrastructure)
+# Terraform
 *.tfstate
 *.tfstate.backup
 .terraform/
+*.tfvars
+*.tfvars.json
+tfplan
+*.tfplan
 
 # Temporary files
 tmp/
