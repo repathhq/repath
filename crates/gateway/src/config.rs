@@ -214,6 +214,11 @@ mod tests {
 
     #[test]
     fn test_load_config_with_defaults() {
+        // Holds ENV_MUTEX too: without it this races with the
+        // apply_env_overrides tests below, which briefly set
+        // REPATH_SERVER_PORT to an invalid value on another thread.
+        let _guard = ENV_MUTEX.lock().unwrap();
+
         // Test that config loading doesn't panic with minimal environment
         std::env::remove_var("REPATH_CONFIG_PATH");
         std::env::set_var("REPATH_DATABASE_URL", "postgres://test:test@localhost/test");
