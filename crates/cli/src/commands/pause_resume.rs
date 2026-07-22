@@ -9,11 +9,19 @@ pub async fn pause(pool: &PgPool, id_or_name: &str) -> Result<()> {
     let (rollout_id, name, state) = fetch_basics(pool, id_or_name).await?;
 
     if state == "paused" {
-        println!("{} Rollout '{}' is already paused.", "✓".green(), name.bold());
+        println!(
+            "{} Rollout '{}' is already paused.",
+            "✓".green(),
+            name.bold()
+        );
         return Ok(());
     }
     if matches!(state.as_str(), "promoted" | "rolled_back") {
-        anyhow::bail!("Rollout '{}' is {}. Only active rollouts can be paused.", name, state);
+        anyhow::bail!(
+            "Rollout '{}' is {}. Only active rollouts can be paused.",
+            name,
+            state
+        );
     }
 
     sqlx::query(
@@ -47,7 +55,11 @@ pub async fn resume(pool: &PgPool, id_or_name: &str) -> Result<()> {
     let (rollout_id, name, state) = fetch_basics(pool, id_or_name).await?;
 
     if state != "paused" {
-        anyhow::bail!("Rollout '{}' is not paused (current state: {}).", name, state);
+        anyhow::bail!(
+            "Rollout '{}' is not paused (current state: {}).",
+            name,
+            state
+        );
     }
 
     sqlx::query(

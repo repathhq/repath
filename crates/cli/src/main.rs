@@ -204,10 +204,7 @@ async fn run_watch_loop(pool: &sqlx::PgPool, id_or_name: &str) -> anyhow::Result
 
         commands::status(pool, id_or_name).await?;
 
-        println!(
-            "\n  {} Refreshing every 5s — Ctrl-C to stop",
-            "⏱".dimmed()
-        );
+        println!("\n  {} Refreshing every 5s — Ctrl-C to stop", "⏱".dimmed());
 
         tokio::select! {
             _ = tokio::time::sleep(Duration::from_secs(5)) => {}
