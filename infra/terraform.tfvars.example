@@ -1,0 +1,5 @@
+openai_api_key       = "sk-..."
+razorpay_key_id      = "rzp_test_..."
+razorpay_key_secret  = "..."
+razorpay_live_key    = "rzp_live_..."
+razorpay_live_secret = "..."

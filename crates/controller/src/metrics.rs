@@ -13,8 +13,8 @@
 //! # Endpoints
 //!
 //! ```text
-//! GET /metrics  → Prometheus text format (scraped by Prometheus / Fly metrics)
-//! GET /health   → {"status":"ok"}        (used by Fly health checks)
+//! GET /metrics  → Prometheus text format (scraped by Prometheus)
+//! GET /health   → {"status":"ok"}        (used by docker HEALTHCHECK)
 //! ```
 
 use axum::{routing::get, Json, Router};
@@ -160,7 +160,7 @@ impl ControllerMetrics {
 ///
 /// Runs as a separate HTTP server so the metrics port can be firewalled
 /// from public traffic while keeping the health check reachable by the
-/// platform (Fly.io).
+/// container runtime (docker HEALTHCHECK on port 9091).
 ///
 /// ```text
 /// GET /metrics  → Prometheus text format
