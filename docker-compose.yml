@@ -119,10 +119,12 @@ services:
       target: dashboard
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
-        NEXT_PUBLIC_API_TOKEN: ${REPATH_API_TOKEN}
     container_name: repath-dashboard
     environment:
       NODE_ENV: production
+      REPATH_API_TOKEN: ${REPATH_API_TOKEN}
+      REPATH_GATEWAY_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production-32chars}
     ports:
       - "3000:3000"
     depends_on:

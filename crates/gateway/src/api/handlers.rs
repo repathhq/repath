@@ -235,7 +235,25 @@ pub async fn get_rollout(
                    AND req.created_at > NOW() - INTERVAL '10 minutes'),
                 (SELECT COUNT(*) FROM requests req
                  WHERE req.rollout_id = r.id AND req.version_id = r.candidate_version_id)
-            ) AS sample_count_candidate
+            ) AS sample_count_candidate,
+            COALESCE(
+                (SELECT SUM(CASE WHEN req.status_code >= 400 THEN 1 ELSE 0 END)::FLOAT / NULLIF(COUNT(*), 0)
+                 FROM requests req WHERE req.rollout_id = r.id
+                   AND req.version_id = r.baseline_version_id
+                   AND req.created_at > NOW() - INTERVAL '10 minutes'),
+                (SELECT SUM(CASE WHEN req.status_code >= 400 THEN 1 ELSE 0 END)::FLOAT / NULLIF(COUNT(*), 0)
+                 FROM requests req WHERE req.rollout_id = r.id
+                   AND req.version_id = r.baseline_version_id)
+            ) AS error_rate_baseline,
+            COALESCE(
+                (SELECT SUM(CASE WHEN req.status_code >= 400 THEN 1 ELSE 0 END)::FLOAT / NULLIF(COUNT(*), 0)
+                 FROM requests req WHERE req.rollout_id = r.id
+                   AND req.version_id = r.candidate_version_id
+                   AND req.created_at > NOW() - INTERVAL '10 minutes'),
+                (SELECT SUM(CASE WHEN req.status_code >= 400 THEN 1 ELSE 0 END)::FLOAT / NULLIF(COUNT(*), 0)
+                 FROM requests req WHERE req.rollout_id = r.id
+                   AND req.version_id = r.candidate_version_id)
+            ) AS error_rate_candidate
         FROM rollouts r
         JOIN versions bv ON r.baseline_version_id = bv.id
         JOIN versions cv ON r.candidate_version_id = cv.id
@@ -266,8 +284,8 @@ pub async fn get_rollout(
                 avg_quality_candidate: r.get("avg_quality_candidate"),
                 p95_latency_baseline: r.get("p95_latency_baseline"),
                 p95_latency_candidate: r.get("p95_latency_candidate"),
-                error_rate_baseline: None,
-                error_rate_candidate: None,
+                error_rate_baseline: r.get("error_rate_baseline"),
+                error_rate_candidate: r.get("error_rate_candidate"),
                 sample_count_baseline: r.get("sample_count_baseline"),
                 sample_count_candidate: r.get("sample_count_candidate"),
                 created_at: r.get("created_at"),

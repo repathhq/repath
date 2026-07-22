@@ -4,8 +4,11 @@
 //! repath rollout create   -f rollout.yaml   Create and start a new rollout
 //! repath rollout list                        List all rollouts
 //! repath rollout status   <id-or-name>       Detailed rollout status
+//! repath rollout status   <id-or-name> --watch  Live-updating status
 //! repath rollout promote  <id-or-name>       Force-promote candidate to 100%
 //! repath rollout rollback <id-or-name>       Force-rollback to baseline
+//! repath rollout pause    <id-or-name>       Pause controller decisions
+//! repath rollout resume   <id-or-name>       Resume a paused rollout
 //! repath rollout history  <id-or-name>       Decision audit log
 //! ```
 //!
@@ -77,6 +80,9 @@ enum RolloutAction {
         /// Rollout ID or name
         #[arg(value_name = "ID_OR_NAME")]
         id_or_name: String,
+        /// Refresh every 5 seconds (live view)
+        #[arg(long)]
+        watch: bool,
     },
     /// Force-promote the candidate to 100% traffic
     Promote {
@@ -86,6 +92,18 @@ enum RolloutAction {
     },
     /// Force-rollback to 100% baseline immediately
     Rollback {
+        /// Rollout ID or name
+        #[arg(value_name = "ID_OR_NAME")]
+        id_or_name: String,
+    },
+    /// Pause controller decisions for a rollout
+    Pause {
+        /// Rollout ID or name
+        #[arg(value_name = "ID_OR_NAME")]
+        id_or_name: String,
+    },
+    /// Resume a paused rollout
+    Resume {
         /// Rollout ID or name
         #[arg(value_name = "ID_OR_NAME")]
         id_or_name: String,
@@ -146,9 +164,17 @@ async fn main() {
         Commands::Rollout { action } => match action {
             RolloutAction::Create { file } => commands::create(&pool, file).await,
             RolloutAction::List => commands::list(&pool).await,
-            RolloutAction::Status { id_or_name } => commands::status(&pool, &id_or_name).await,
+            RolloutAction::Status { id_or_name, watch } => {
+                if watch {
+                    run_watch_loop(&pool, &id_or_name).await
+                } else {
+                    commands::status(&pool, &id_or_name).await
+                }
+            }
             RolloutAction::Promote { id_or_name } => commands::promote(&pool, &id_or_name).await,
             RolloutAction::Rollback { id_or_name } => commands::rollback(&pool, &id_or_name).await,
+            RolloutAction::Pause { id_or_name } => commands::pause(&pool, &id_or_name).await,
+            RolloutAction::Resume { id_or_name } => commands::resume(&pool, &id_or_name).await,
             RolloutAction::History { id_or_name } => commands::history(&pool, &id_or_name).await,
         },
     };
@@ -159,4 +185,38 @@ async fn main() {
         eprintln!("{} {}", "error:".red().bold(), e);
         std::process::exit(1);
     }
+}
+
+/// Run status in a loop, clearing the terminal every 5 seconds.
+/// Ctrl-C exits cleanly.
+async fn run_watch_loop(pool: &sqlx::PgPool, id_or_name: &str) -> anyhow::Result<()> {
+    use colored::Colorize;
+
+    println!(
+        "{} Watching '{}' — press Ctrl-C to stop",
+        "→".cyan().bold(),
+        id_or_name.bold()
+    );
+
+    loop {
+        // Clear terminal (works on UNIX and Windows terminals)
+        print!("\x1B[2J\x1B[1;1H");
+
+        commands::status(pool, id_or_name).await?;
+
+        println!(
+            "\n  {} Refreshing every 5s — Ctrl-C to stop",
+            "⏱".dimmed()
+        );
+
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::from_secs(5)) => {}
+            _ = tokio::signal::ctrl_c() => {
+                println!("\n{}", "Stopped.".dimmed());
+                break;
+            }
+        }
+    }
+
+    Ok(())
 }
