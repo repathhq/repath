@@ -5,11 +5,12 @@
 //! types from `repath-common` here because the API shape is deliberately
 //! different (richer, flatter, API-consumer-friendly).
 
-use crate::AppState;
+use crate::{tenant::AuthContext, AppState};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Json},
+    Extension,
 };
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -104,9 +105,25 @@ struct SystemHealth {
     active_rollouts: i64,
 }
 
+/// Resolve a rollout by id-or-name, scoped to a tenant.
+///
+/// `$2` is the tenant filter: NULL for an admin caller (no scoping), otherwise
+/// the tenant id. Every handler that reaches a rollout goes through this shape,
+/// so the scoping rule lives in exactly one place.
+///
+/// Cross-tenant access returns 404 rather than 403 — telling an attacker that a
+/// rollout exists but belongs to someone else leaks the existence of other
+/// customers' resources and lets ids be enumerated.
+const SELECT_ROLLOUT_ID_SCOPED: &str = "SELECT id FROM rollouts \
+     WHERE (id::text = $1 OR name = $1) AND ($2::text IS NULL OR tenant_id = $2) LIMIT 1";
+
 // ── Handlers ───────────────────────────────────────────────────────────────
 
-pub async fn list_rollouts(State(state): State<AppState>) -> impl IntoResponse {
+pub async fn list_rollouts(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+) -> impl IntoResponse {
+    let tenant = auth.tenant_filter();
     let rows = sqlx::query(
         r#"
         SELECT
@@ -135,6 +152,7 @@ pub async fn list_rollouts(State(state): State<AppState>) -> impl IntoResponse {
         FROM rollouts r
         JOIN versions bv ON r.baseline_version_id = bv.id
         JOIN versions cv ON r.candidate_version_id = cv.id
+        WHERE ($1::text IS NULL OR r.tenant_id = $1)
         ORDER BY
             CASE r.state
                 WHEN 'canary'  THEN 1
@@ -147,6 +165,7 @@ pub async fn list_rollouts(State(state): State<AppState>) -> impl IntoResponse {
         LIMIT 50
         "#,
     )
+    .bind(tenant)
     .fetch_all(&state.db_pool)
     .await;
 
@@ -176,6 +195,7 @@ pub async fn list_rollouts(State(state): State<AppState>) -> impl IntoResponse {
 
 pub async fn get_rollout(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
     let row = sqlx::query(
@@ -257,11 +277,13 @@ pub async fn get_rollout(
         FROM rollouts r
         JOIN versions bv ON r.baseline_version_id = bv.id
         JOIN versions cv ON r.candidate_version_id = cv.id
-        WHERE r.id::text = $1 OR r.name = $1
+        WHERE (r.id::text = $1 OR r.name = $1)
+          AND ($2::text IS NULL OR r.tenant_id = $2)
         LIMIT 1
         "#,
     )
     .bind(&id)
+    .bind(auth.tenant_filter())
     .fetch_optional(&state.db_pool)
     .await;
 
@@ -301,13 +323,16 @@ pub async fn get_rollout(
 
 pub async fn get_rollout_metrics(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
     // Get the rollout ID first
     let rollout_id_row = sqlx::query(
-        "SELECT id, baseline_version_id, candidate_version_id FROM rollouts WHERE id::text = $1 OR name = $1 LIMIT 1",
+        "SELECT id, baseline_version_id, candidate_version_id FROM rollouts \
+         WHERE (id::text = $1 OR name = $1) AND ($2::text IS NULL OR tenant_id = $2) LIMIT 1",
     )
     .bind(&id)
+    .bind(auth.tenant_filter())
     .fetch_optional(&state.db_pool)
     .await;
 
@@ -376,13 +401,14 @@ pub async fn get_rollout_metrics(
 
 pub async fn get_rollout_steps(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    let rollout_id_row =
-        sqlx::query("SELECT id FROM rollouts WHERE id::text = $1 OR name = $1 LIMIT 1")
-            .bind(&id)
-            .fetch_optional(&state.db_pool)
-            .await;
+    let rollout_id_row = sqlx::query(SELECT_ROLLOUT_ID_SCOPED)
+        .bind(&id)
+        .bind(auth.tenant_filter())
+        .fetch_optional(&state.db_pool)
+        .await;
 
     let rollout_id: Uuid = match rollout_id_row {
         Ok(Some(r)) => r.get("id"),
@@ -425,13 +451,14 @@ pub async fn get_rollout_steps(
 
 pub async fn get_rollout_decisions(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    let rollout_id_row =
-        sqlx::query("SELECT id FROM rollouts WHERE id::text = $1 OR name = $1 LIMIT 1")
-            .bind(&id)
-            .fetch_optional(&state.db_pool)
-            .await;
+    let rollout_id_row = sqlx::query(SELECT_ROLLOUT_ID_SCOPED)
+        .bind(&id)
+        .bind(auth.tenant_filter())
+        .fetch_optional(&state.db_pool)
+        .await;
 
     let rollout_id: Uuid = match rollout_id_row {
         Ok(Some(r)) => r.get("id"),
@@ -534,9 +561,10 @@ pub async fn system_health(State(state): State<AppState>) -> impl IntoResponse {
 
 pub async fn promote_rollout(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    match apply_manual_action(&state.db_pool, &id, "promote").await {
+    match apply_manual_action(&state.db_pool, &id, "promote", auth.tenant_filter()).await {
         Ok(msg) => Json(json!({ "message": msg })).into_response(),
         Err(e) => api_error(e.0, e.1),
     }
@@ -544,9 +572,10 @@ pub async fn promote_rollout(
 
 pub async fn rollback_rollout(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    match apply_manual_action(&state.db_pool, &id, "rollback").await {
+    match apply_manual_action(&state.db_pool, &id, "rollback", auth.tenant_filter()).await {
         Ok(msg) => Json(json!({ "message": msg })).into_response(),
         Err(e) => api_error(e.0, e.1),
     }
@@ -556,14 +585,19 @@ async fn apply_manual_action(
     pool: &sqlx::PgPool,
     id: &str,
     action: &str,
+    tenant: Option<&str>,
 ) -> Result<String, (StatusCode, String)> {
     use sqlx::Row;
 
-    // Resolve rollout
+    // Resolve rollout. The tenant predicate lives here rather than on the
+    // UPDATE below: a caller who cannot resolve the rollout never reaches the
+    // mutation, and gets the same 404 as for a genuinely missing id.
     let row = sqlx::query(
-        "SELECT id, state, current_weight FROM rollouts WHERE id::text = $1 OR name = $1 LIMIT 1",
+        "SELECT id, state, current_weight FROM rollouts \
+         WHERE (id::text = $1 OR name = $1) AND ($2::text IS NULL OR tenant_id = $2) LIMIT 1",
     )
     .bind(id)
+    .bind(tenant)
     .fetch_optional(pool)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
@@ -616,7 +650,116 @@ async fn apply_manual_action(
 
             Ok("Rolled back to baseline".into())
         }
+        "pause" => {
+            if state == "paused" {
+                return Ok("Already paused".into());
+            }
+            if !matches!(state.as_str(), "canary" | "shadow" | "created") {
+                return Err((
+                    StatusCode::CONFLICT,
+                    format!("Cannot pause a rollout that is {state}."),
+                ));
+            }
+            sqlx::query(
+                "UPDATE rollouts SET state='paused', updated_at=NOW() \
+                 WHERE id=$1 AND state IN ('canary','shadow','created')",
+            )
+            .bind(rollout_id)
+            .execute(pool)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+            record_decision(
+                pool,
+                rollout_id,
+                "pause",
+                "Manually paused",
+                current_weight,
+                current_weight,
+            )
+            .await?;
+            Ok("Paused — the controller will stop making decisions for this rollout".into())
+        }
+        "resume" => {
+            if state != "paused" {
+                return Err((
+                    StatusCode::CONFLICT,
+                    format!(
+                        "Cannot resume a rollout that is {state} — only paused rollouts resume."
+                    ),
+                ));
+            }
+            sqlx::query(
+                "UPDATE rollouts SET state='canary', updated_at=NOW() WHERE id=$1 AND state='paused'",
+            )
+            .bind(rollout_id)
+            .execute(pool)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+            record_decision(
+                pool,
+                rollout_id,
+                "resume",
+                "Manually resumed",
+                current_weight,
+                current_weight,
+            )
+            .await?;
+            Ok("Resumed — the controller will evaluate this rollout on its next cycle".into())
+        }
         _ => Err((StatusCode::BAD_REQUEST, "Unknown action".into())),
+    }
+}
+
+/// Append a row to the decision audit log.
+///
+/// Every state change a human makes is recorded alongside the controller's own
+/// decisions, so the audit trail explains the full history of a rollout rather
+/// than only the automated part.
+async fn record_decision(
+    pool: &sqlx::PgPool,
+    rollout_id: Uuid,
+    action: &str,
+    reason: &str,
+    previous_weight: f64,
+    new_weight: f64,
+) -> Result<(), (StatusCode, String)> {
+    sqlx::query(
+        "INSERT INTO decisions (id,rollout_id,action,reason,previous_weight,new_weight,triggered_by,created_at) \
+         VALUES ($1,$2,$3,$4,$5,$6,'manual',NOW())",
+    )
+    .bind(Uuid::new_v4())
+    .bind(rollout_id)
+    .bind(action)
+    .bind(reason)
+    .bind(previous_weight)
+    .bind(new_weight)
+    .execute(pool)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(())
+}
+
+pub async fn pause_rollout(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    match apply_manual_action(&state.db_pool, &id, "pause", auth.tenant_filter()).await {
+        Ok(msg) => Json(json!({ "message": msg })).into_response(),
+        Err(e) => api_error(e.0, e.1),
+    }
+}
+
+pub async fn resume_rollout(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    match apply_manual_action(&state.db_pool, &id, "resume", auth.tenant_filter()).await {
+        Ok(msg) => Json(json!({ "message": msg })).into_response(),
+        Err(e) => api_error(e.0, e.1),
     }
 }
 
@@ -625,12 +768,14 @@ async fn apply_manual_action(
 /// Versions are left intact (they may be shared).
 pub async fn delete_rollout(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
     use sqlx::Row;
 
-    let row = sqlx::query("SELECT id FROM rollouts WHERE id::text = $1 OR name = $1 LIMIT 1")
+    let row = sqlx::query(SELECT_ROLLOUT_ID_SCOPED)
         .bind(&id)
+        .bind(auth.tenant_filter())
         .fetch_optional(&state.db_pool)
         .await;
 

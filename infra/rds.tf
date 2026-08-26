@@ -17,6 +17,12 @@ resource "aws_db_instance" "postgres" {
   allocated_storage = var.db_allocated_storage
   storage_type      = "gp3"
 
+  # Encryption at rest cannot be enabled on an existing instance — changing
+  # this forces replacement. Keep it true from here on; migrating an instance
+  # that already holds customer data means snapshot -> copy-with-encryption ->
+  # restore, which is downtime.
+  storage_encrypted = true
+
   db_name  = "repath"
   username = "repath"
   password = random_password.db.result
@@ -26,7 +32,8 @@ resource "aws_db_instance" "postgres" {
   publicly_accessible    = false
   multi_az               = false
 
-  backup_retention_period = 1
+  # Automated backups are free up to the size of the database.
+  backup_retention_period = 7
   skip_final_snapshot     = true
   deletion_protection     = false
   apply_immediately       = true

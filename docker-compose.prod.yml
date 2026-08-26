@@ -55,6 +55,9 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      # Gateway owns schema migrations — don't query before it has run them.
+      gateway:
+        condition: service_healthy
     networks:
       - repath
     restart: unless-stopped
@@ -71,6 +74,10 @@ services:
       RUST_LOG: info
     ports:
       - "127.0.0.1:9091:9091"
+    depends_on:
+      # Gateway owns schema migrations — don't query before it has run them.
+      gateway:
+        condition: service_healthy
     networks:
       - repath
     restart: unless-stopped

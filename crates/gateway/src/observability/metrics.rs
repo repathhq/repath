@@ -38,6 +38,12 @@ pub struct Metrics {
     pub upstream_errors_total: Counter,
 }
 
+impl Default for Metrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Metrics {
     /// Create and register all metrics.
     ///

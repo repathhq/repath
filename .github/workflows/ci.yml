@@ -60,9 +60,21 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      # The tenant-isolation suite builds a real AppState, which requires a
+      # Redis handle even though those handlers never touch it.
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
 
     env:
       DATABASE_URL: postgres://repath:repath@localhost:5432/repath_test
+      REPATH_TEST_REDIS_URL: redis://localhost:6379
 
     steps:
       - uses: actions/checkout@v4
@@ -74,7 +86,14 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Run tests (4 threads, real Postgres)
-        run: cargo test --all -- --test-threads=4
+        run: cargo test --all --features repath-gateway/test-support -- --test-threads=4
+
+      # Called out as its own step so a failure here is unmistakable in the
+      # CI summary. These tests are the guarantee that one customer cannot
+      # read, promote, roll back or delete another customer's rollouts.
+      # If this step fails, tenant data is exposed — do not merge.
+      - name: Tenant isolation (security-critical)
+        run: cargo test -p repath-gateway --features test-support --test tenant_isolation
 
   # ── 3. Rust release build + artifact upload (main only) ──────────────────────
   rust-build:

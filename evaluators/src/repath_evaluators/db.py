@@ -66,6 +66,41 @@ async def insert_evaluation(
     )
 
 
+async def record_eval_usage(pool: asyncpg.Pool, tenant_id: str | None) -> None:
+    """Charge one LLM-judge evaluation against a tenant's monthly quota.
+
+    Called only for `llm_judge` evaluations — programmatic scoring costs us
+    nothing and is unmetered, matching what the pricing page promises.
+
+    The month rolls over lazily: rather than running a scheduled job to reset
+    every tenant on the 1st, each write checks whether `quota_reset_at` has
+    passed and resets in the same statement. That keeps the counter correct
+    even if no scheduler ever runs.
+
+    Usage metering must never break evaluation, so failures here are logged by
+    the caller and swallowed — an unbilled evaluation is far better than a
+    rollout decision that never gets its quality signal.
+    """
+    if not tenant_id:
+        return
+
+    await pool.execute(
+        """
+        UPDATE tenants
+           SET evals_used_this_month =
+                   CASE WHEN quota_reset_at <= NOW() THEN 1
+                        ELSE evals_used_this_month + 1 END,
+               quota_reset_at =
+                   CASE WHEN quota_reset_at <= NOW()
+                        THEN date_trunc('month', NOW()) + INTERVAL '1 month'
+                        ELSE quota_reset_at END,
+               updated_at = NOW()
+         WHERE id = $1
+        """,
+        tenant_id,
+    )
+
+
 async def create_pool(database_url: str) -> asyncpg.Pool:
     """Create an asyncpg connection pool with production-grade settings.
 

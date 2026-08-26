@@ -162,14 +162,13 @@ fn apply_env_overrides(config: &mut ServerConfig) -> Result<()> {
 ///
 /// # Examples
 ///
+/// ```text
+/// sanitize_connection_string("postgres://user:pass@localhost:5432/db")
+///     == "postgres://***:***@localhost:5432/db"
 /// ```
-/// use repath_gateway::config::sanitize_connection_string;
 ///
-/// assert_eq!(
-///     sanitize_connection_string("postgres://user:pass@localhost:5432/db"),
-///     "postgres://***:***@localhost:5432/db"
-/// );
-/// ```
+/// (Shown as text rather than a doctest because this function is private to
+/// the crate; the behaviour is covered by the unit tests below.)
 fn sanitize_connection_string(url: &str) -> String {
     // Parse URL and replace credentials
     if let Some(at_pos) = url.find('@') {

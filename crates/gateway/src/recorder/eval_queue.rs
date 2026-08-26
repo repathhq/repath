@@ -14,6 +14,7 @@
 //! response_text   string       (full assistant reply)
 //! model           string
 //! latency_ms      u32 as string
+//! tenant_id       string       (for per-tenant usage metering)
 //! ```
 //!
 //! We use Redis Streams (not Pub/Sub) because:
@@ -45,6 +46,11 @@ pub async fn publish_eval_job(
         None => return Ok(()), // No rollout context — nothing to evaluate
     };
 
+    // Quota is enforced here, at the single point where paid work is queued.
+    if !record.eligible_for_eval {
+        return Ok(());
+    }
+
     redis::cmd("XADD")
         .arg(EVAL_STREAM)
         .arg("MAXLEN")
@@ -65,6 +71,10 @@ pub async fn publish_eval_job(
         .arg(&record.model)
         .arg("latency_ms")
         .arg(record.latency_ms.to_string())
+        // Carried so the evaluator can meter the judge call against the right
+        // tenant — that is where the paid work actually happens.
+        .arg("tenant_id")
+        .arg(&record.tenant_id)
         .query_async::<String>(redis)
         .await
         .map_err(|e| Error::Internal {

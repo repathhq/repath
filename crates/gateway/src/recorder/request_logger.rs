@@ -26,11 +26,11 @@ pub async fn insert_request(pool: &PgPool, record: &RecordRequest) -> Result<()>
         INSERT INTO requests (
             id, rollout_id, version_id, model,
             input_tokens, output_tokens, latency_ms,
-            status_code, error, session_id
+            status_code, error, session_id, tenant_id
         ) VALUES (
             $1, $2, $3, $4,
             $5, $6, $7,
-            $8, $9, $10
+            $8, $9, $10, $11
         )
         "#,
     )
@@ -44,6 +44,7 @@ pub async fn insert_request(pool: &PgPool, record: &RecordRequest) -> Result<()>
     .bind(record.status_code as i32)
     .bind(&record.error)
     .bind(&record.session_id)
+    .bind(&record.tenant_id)
     .execute(pool)
     .await
     .map_err(|e| Error::Database {

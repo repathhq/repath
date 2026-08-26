@@ -50,6 +50,15 @@ const CHANNEL_CAPACITY: usize = 1024;
 #[derive(Debug)]
 pub struct RecordRequest {
     pub request_id: Uuid,
+    /// Which tenant this request belongs to. Written to `requests.tenant_id`
+    /// and used for per-tenant usage metering — the column existed from the
+    /// start but was never populated, so all billing data was silently empty.
+    pub tenant_id: String,
+    /// Whether this request may consume a paid LLM-judge evaluation.
+    /// False once the tenant is over its monthly quota — the request is still
+    /// recorded (so latency and error-rate gates keep working), but no judge
+    /// job is enqueued.
+    pub eligible_for_eval: bool,
     pub rollout_id: Option<Uuid>,
     pub version_id: Uuid,
     pub model: String,

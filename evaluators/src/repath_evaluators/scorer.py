@@ -63,6 +63,10 @@ class EvalJob:
     response_text: str
     model: str
     latency_ms: int
+    # Which tenant to meter a paid judge call against. Optional so that
+    # entries written by an older gateway (before metering existed) still
+    # parse rather than crashing the worker on deploy.
+    tenant_id: str | None = None
     # status_code is not in the stream (the recorder only pushes on success)
     # We default to 200 here; programmatic evaluator will catch 5xx if they appear.
     status_code: int = 200
@@ -78,6 +82,7 @@ class EvalJob:
             response_text=fields.get("response_text", ""),
             model=fields.get("model", ""),
             latency_ms=int(fields.get("latency_ms", "0")),
+            tenant_id=fields.get("tenant_id") or None,
         )
 
     def extract_user_message(self) -> str:

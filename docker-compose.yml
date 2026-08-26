@@ -11,7 +11,10 @@ services:
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d:ro
+      # NOTE: migrations are NOT mounted as init scripts any more. The gateway
+      # applies them at startup (see crates/gateway/src/db/migrate.rs) so dev
+      # and production use the same path. If you have an old volume created
+      # under the previous scheme, run `docker compose down -v` once.
     ports:
       - "${POSTGRES_PORT:-5433}:5432"
     healthcheck:
@@ -84,6 +87,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      # Gateway owns schema migrations — don't query before it has run them.
+      gateway:
+        condition: service_healthy
     networks:
       - repath
     restart: unless-stopped
@@ -103,6 +109,9 @@ services:
       RUST_LOG: ${RUST_LOG:-info}
     depends_on:
       postgres:
+        condition: service_healthy
+      # Gateway owns schema migrations — don't query before it has run them.
+      gateway:
         condition: service_healthy
     networks:
       - repath

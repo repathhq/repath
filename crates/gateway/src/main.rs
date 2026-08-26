@@ -1,97 +1,18 @@
-//! Repath Gateway
+//! Repath Gateway binary.
 //!
-//! A high-performance reverse proxy for LLM API requests that enables progressive delivery
-//! (canary deployments, shadow testing, automated quality evaluation, instant rollback).
-//!
-//! # Architecture
-//!
-//! The gateway is a single-binary Rust application built on Tokio and Axum that:
-//! 1. Accepts OpenAI-compatible API requests
-//! 2. Routes traffic between baseline and candidate versions (weighted)
-//! 3. Proxies requests to upstream providers (OpenAI, Anthropic, etc.)
-//! 4. Records request/response metadata asynchronously
-//! 5. Enqueues evaluation jobs to Redis Streams
-//! 6. Exposes Prometheus metrics for observability
-//!
-//! # Performance Characteristics
-//!
-//! - Proxy overhead: < 2ms P99 (measured)
-//! - Throughput: > 50K req/s per instance (load tested)
-//! - Memory: < 100MB baseline (RSS)
-//! - Streaming: Zero-copy SSE passthrough (no buffering)
+//! Thin wrapper around the `repath_gateway` library: wire up tracing,
+//! build the application state, and serve until shutdown. All logic lives
+//! in the library so it can be tested directly.
 
-use repath_common::{config::ServerConfig, Error, Result};
+use repath_common::{Error, Result};
+use repath_gateway::{
+    circuit_breaker, config, db, observability, proxy, recorder, router, server, tenant, AppState,
+};
 use std::sync::Arc;
 use tokio::signal;
 use tracing::{error, info};
 
-mod api;
-mod auth;
-mod circuit_breaker;
-mod config;
-mod db;
-mod observability;
-mod proxy;
-mod recorder;
-mod router;
-mod server;
-
-use crate::observability::init_tracing;
-
-/// Application state shared across all request handlers.
-///
-/// Clone cost is intentionally O(1): every field is either a pool/handle with
-/// internal Arc, or an Arc itself. No deep copies happen on clone.
-///
-/// # Concurrency design
-///
-/// - `db_pool`: sqlx manages a pool of connections; calling .acquire() is
-///   non-blocking (async). No mutex needed.
-///
-/// - `redis`: ConnectionManager holds a single multiplexed connection with
-///   auto-reconnect. Multiplexed means concurrent callers pipeline their
-///   commands on one TCP conn without any locking on our side.
-///
-/// - `http_client`: reqwest::Client is internally Arc-based and maintains its
-///   own connection pool. Cloning is a reference count increment.
-///
-/// - `config`: Arc<ServerConfig> — immutable after startup. Zero-cost reads,
-///   no synchronization ever needed.
-///
-/// - `metrics`: Arc<Metrics> — prometheus counters/histograms use atomic ops
-///   internally. No external locking needed.
-///
-/// - `record_tx`: mpsc::Sender — fire-and-forget channel to a background
-///   recorder task. Hot path posts to the channel and returns immediately.
-///   Back-pressure: bounded channel; if recorder falls behind, send() returns
-///   Err which we log and discard (request is not affected).
-///
-/// - `rollout_cache`: ArcSwap<Option<ActiveRollout>> — the single most
-///   important concurrency choice in this codebase. Every incoming request
-///   reads the active rollout to decide routing. ArcSwap gives lock-free reads
-///   via a single atomic pointer load. The controller writes at most once per
-///   30 seconds — the swap is instantaneous and never blocks any reader.
-///   An Arc<RwLock<>> would be wrong here: at 50K req/s even a 1µs read-lock
-///   acquisition adds measurable contention when writers occasionally swap.
-#[derive(Clone)]
-pub struct AppState {
-    pub db_pool: sqlx::PgPool,
-    pub redis: redis::aio::ConnectionManager,
-    pub http_client: reqwest::Client,
-    pub config: Arc<ServerConfig>,
-    pub metrics: Arc<observability::Metrics>,
-    /// Sender half of the bounded channel to the background recorder task.
-    /// Bounded at RECORDER_CHANNEL_CAPACITY so a slow DB can't OOM the process.
-    pub record_tx: tokio::sync::mpsc::Sender<recorder::RecordRequest>,
-    /// Lock-free cache of the currently active rollout.
-    /// Reads happen on every proxied request; writes happen ~once/30s from
-    /// the controller. ArcSwap gives O(1) lock-free reads.
-    pub rollout_cache: Arc<arc_swap::ArcSwap<router::RolloutCache>>,
-    /// Per-tenant circuit breaker — ensures Repath is never a bottleneck.
-    pub circuit_breaker: circuit_breaker::CircuitBreakerRegistry,
-    /// Rolling error rate per provider URL — feeds provider health dashboard.
-    pub provider_health: proxy::failover::ProviderHealthRegistry,
-}
+use repath_gateway::observability::init_tracing;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -138,6 +59,13 @@ async fn main() -> Result<()> {
     })?;
 
     info!("Database connection verified");
+
+    // Bring the schema up to date before anything reads or writes it.
+    // Aborts startup on failure — see db::migrate for why.
+    db::run_migrations(&db_pool).await.map_err(|e| {
+        error!("Database migration failed: {}", e);
+        e
+    })?;
 
     // Initialize Redis connection manager.
     //
@@ -186,6 +114,13 @@ async fn main() -> Result<()> {
         router::RolloutCache::empty(),
     ));
 
+    // Initialize tenant cache and spawn its refresher.
+    let tenant_cache = Arc::new(arc_swap::ArcSwap::from_pointee(tenant::TenantCache::empty()));
+    let tenant_refresh_handle = tokio::spawn(tenant::run_tenant_cache_refresher(
+        db_pool.clone(),
+        tenant_cache.clone(),
+    ));
+
     // Spawn background rollout cache refresher.
     // Polls the DB every 5 seconds and swaps the cache atomically.
     // This decouples every request handler from direct DB reads for routing.
@@ -205,6 +140,7 @@ async fn main() -> Result<()> {
         rollout_cache,
         circuit_breaker: circuit_breaker::CircuitBreakerRegistry::new(),
         provider_health: proxy::failover::ProviderHealthRegistry::new(),
+        tenant_cache,
     };
 
     // Create Axum server
@@ -298,6 +234,7 @@ async fn main() -> Result<()> {
     info!("Initiating graceful shutdown...");
 
     cache_refresh_handle.abort();
+    tenant_refresh_handle.abort();
     info!("Rollout cache refresher stopped");
 
     // Drop the sender to signal the recorder channel is closed

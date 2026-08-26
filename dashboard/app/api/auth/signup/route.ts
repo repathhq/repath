@@ -52,7 +52,15 @@ export async function POST(req: NextRequest) {
     plan: tenant.plan ?? "trial",
   });
 
-  const response = NextResponse.json({ ok: true, tenantId: tenant.id });
+  // The gateway mints the tenant's API key during creation and returns the
+  // plaintext exactly once — it stores only a hash. Hand it straight to the
+  // client so onboarding can show it; it can never be recovered later, only
+  // regenerated.
+  const response = NextResponse.json({
+    ok: true,
+    tenantId: tenant.id,
+    apiKey: tenant.api_key ?? null,
+  });
   response.cookies.set({ ...cookieOptions(), value: token });
   return response;
 }

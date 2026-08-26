@@ -6,6 +6,10 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 
+[lib]
+name = "repath_gateway"
+path = "src/lib.rs"
+
 [[bin]]
 name = "repath-gateway"
 path = "src/main.rs"
@@ -65,5 +69,10 @@ arc-swap = { workspace = true }
 ring = { workspace = true }
 base64 = { workspace = true }
 
+[features]
+# Exposes `test_support` helpers to integration tests in tests/.
+test-support = []
+
 [dev-dependencies]
 mockall = "0.13"
+arc-swap = { workspace = true }

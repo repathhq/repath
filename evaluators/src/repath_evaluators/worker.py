@@ -51,7 +51,7 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 
 from . import logging_setup
 from .config import settings
-from .db import create_pool, insert_evaluation
+from .db import create_pool, insert_evaluation, record_eval_usage
 from .evaluators.llm_judge import LlmJudgeEvaluator
 from .evaluators.programmatic import ProgrammaticEvaluator
 from .scorer import EvalJob, Scorer
@@ -239,6 +239,20 @@ class Worker:
 
         # ACK only after successful DB write
         await self._ack(entry_id)
+
+        # Meter the paid work. Only llm_judge costs money — programmatic
+        # scoring is unmetered. Metering must never fail an evaluation that
+        # already succeeded, so errors are logged and swallowed.
+        if result.evaluator_type == "llm_judge":
+            try:
+                await record_eval_usage(self._db, job.tenant_id)
+            except Exception as exc:
+                log.warning(
+                    "Failed to record eval usage (evaluation still counted)",
+                    request_id=request_id,
+                    tenant_id=job.tenant_id,
+                    error=str(exc),
+                )
 
         latency_ms = int(time.monotonic() * 1000) - start_ms
         self._messages_processed += 1

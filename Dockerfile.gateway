@@ -5,6 +5,8 @@ WORKDIR /app
 ARG CACHEBUST=1
 COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
+# sqlx::migrate! embeds these into the binary at compile time.
+COPY migrations/ migrations/
 RUN cargo build --release --bin repath-gateway
 
 FROM debian:bookworm-slim

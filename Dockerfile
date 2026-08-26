@@ -14,6 +14,8 @@ RUN apt-get update && apt-get install -y pkg-config libssl-dev ca-certificates &
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
+# sqlx::migrate! embeds these into the gateway binary at compile time.
+COPY migrations/ migrations/
 RUN cargo build --release --bin repath-gateway --bin repath-controller --bin repath
 
 # ── Gateway runtime ────────────────────────────────────────────────────────────

@@ -66,9 +66,19 @@ resource "aws_instance" "app" {
   root_block_device {
     volume_type = "gp3"
     volume_size = 20
+    encrypted   = true
   }
 
   tags = { Name = "${var.project_name}-app" }
+
+  lifecycle {
+    # The AMI data source tracks "latest AL2023", which Amazon republishes
+    # every few weeks. Without this, an unrelated `terraform apply` would
+    # silently destroy and recreate the host — new instance id, new GitHub
+    # secret, lost container state. Rebuild the host deliberately (taint it)
+    # rather than as a side effect of some other change.
+    ignore_changes = [ami]
+  }
 }
 
 resource "aws_eip" "app" {

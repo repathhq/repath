@@ -10,11 +10,12 @@
 //! In production, Clerk and payment webhooks also send signed payloads —
 //! we verify signatures in the webhook handlers.
 
-use crate::AppState;
+use crate::{tenant::AuthContext, AppState};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    response::{IntoResponse, Json},
+    response::{IntoResponse, Json, Response},
+    Extension,
 };
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -42,6 +43,9 @@ struct TenantResponse {
     evals_used_this_month: i32,
     active: bool,
     gateway_url: String,
+    /// First few characters of the tenant's API key, e.g. "rp_live_a1b2".
+    /// Enough to recognise which key is in use; never enough to use it.
+    api_key_prefix: Option<String>,
     created_at: DateTime<Utc>,
 }
 
@@ -52,14 +56,111 @@ pub struct UpgradePlanRequest {
     pub payment_provider: String, // "razorpay" | "paddle"
 }
 
+/// POST /api/v1/cloud/tenants/:id/api-key/rotate
+///
+/// Issue a new API key and invalidate the old one immediately. Used when a key
+/// is leaked, or when the user never saved the one shown at signup.
+///
+/// The new plaintext is returned once and never stored. Rotation takes effect
+/// on the next tenant-cache refresh (≤5s) for cached lookups, and immediately
+/// for anything that falls through to the database.
+pub async fn rotate_api_key(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    if let Some(resp) = reject_cross_tenant(&auth, &id) {
+        return resp;
+    }
+
+    let key = crate::tenant::generate_key();
+
+    let result = sqlx::query(
+        r#"
+        UPDATE tenants
+           SET api_key_hash = $2, api_key_prefix = $3,
+               api_key_created_at = NOW(), updated_at = NOW()
+         WHERE id = $1 AND active = TRUE
+        RETURNING id
+        "#,
+    )
+    .bind(&id)
+    .bind(&key.hash)
+    .bind(&key.prefix)
+    .fetch_optional(&state.db_pool)
+    .await;
+
+    match result {
+        Ok(Some(_)) => {
+            tracing::info!(tenant_id = %id, "API key rotated");
+            Json(json!({
+                "api_key": key.raw,
+                "api_key_prefix": key.prefix,
+                "note": "Store this now — it is shown once and cannot be recovered. The previous key no longer works."
+            }))
+            .into_response()
+        }
+        Ok(None) => cloud_error(StatusCode::NOT_FOUND, format!("Tenant not found: {id}")),
+        Err(e) => cloud_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+// ── Authorisation guard ─────────────────────────────────────────────────────
+
+/// Returns a rejection response if the caller may not act on this tenant.
+///
+/// Admins (the global operator token, used by the dashboard's own signup and
+/// billing server routes) may act on any tenant. A caller holding a tenant API
+/// key may act only on itself — without this, any customer could read, upgrade,
+/// or delete any other customer's account just by putting their id in the URL.
+///
+/// Returns 404 rather than 403 on mismatch so tenant ids cannot be probed.
+fn reject_cross_tenant(auth: &AuthContext, target_id: &str) -> Option<Response> {
+    match auth {
+        AuthContext::Admin => None,
+        AuthContext::Tenant(t) if t.id == target_id => None,
+        AuthContext::Tenant(t) => {
+            tracing::warn!(
+                caller = %t.id,
+                target = %target_id,
+                "Blocked cross-tenant account access"
+            );
+            Some(cloud_error(
+                StatusCode::NOT_FOUND,
+                format!("Tenant not found: {target_id}"),
+            ))
+        }
+    }
+}
+
+/// Returns a rejection response unless the caller is the global operator.
+fn reject_non_admin(auth: &AuthContext) -> Option<Response> {
+    match auth {
+        AuthContext::Admin => None,
+        AuthContext::Tenant(t) => {
+            tracing::warn!(caller = %t.id, "Blocked tenant call to an admin-only endpoint");
+            Some(cloud_error(
+                StatusCode::FORBIDDEN,
+                "This endpoint requires operator credentials".into(),
+            ))
+        }
+    }
+}
+
 // ── Handlers ────────────────────────────────────────────────────────────────
 
 /// GET /api/v1/cloud/tenants/by-email/:email
 /// Used by the login API route to look up a tenant by email.
 pub async fn get_tenant_by_email(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Path(email): Path<String>,
 ) -> impl IntoResponse {
+    // Returns a password hash — operator credentials only. The dashboard's
+    // login route calls this server-side with the admin token.
+    if let Some(resp) = reject_non_admin(&auth) {
+        return resp;
+    }
     let result = sqlx::query(
         r#"
         SELECT id, name, email, plan, password_hash, trial_ends_at,
@@ -93,21 +194,34 @@ pub async fn get_tenant_by_email(
 /// Called by Clerk webhook (user.created) via cloud dashboard backend.
 pub async fn create_tenant(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Json(body): Json<CreateTenantRequest>,
 ) -> impl IntoResponse {
+    // Signup is driven by the dashboard server-side with the admin token.
+    if let Some(resp) = reject_non_admin(&auth) {
+        return resp;
+    }
+
     let trial_ends_at = Utc::now() + Duration::days(7);
     let gateway_url = build_gateway_url(&body.id);
 
+    // Mint the tenant's API key here. The plaintext is returned exactly once,
+    // in this response, and never stored — only its SHA-256 hash goes to the
+    // database, so a dump yields nothing usable.
+    let key = crate::tenant::generate_key();
+
     let result = sqlx::query(
         r#"
-        INSERT INTO tenants (id, name, email, plan, trial_ends_at, eval_quota_monthly, active, password_hash)
-        VALUES ($1, $2, $3, 'trial', $4, 1000, true, $5)
+        INSERT INTO tenants (id, name, email, plan, trial_ends_at, eval_quota_monthly, active,
+                             password_hash, api_key_hash, api_key_prefix, api_key_created_at)
+        VALUES ($1, $2, $3, 'trial', $4, 1000, true, $5, $6, $7, NOW())
         ON CONFLICT (id) DO UPDATE SET
             name          = EXCLUDED.name,
             email         = EXCLUDED.email,
             password_hash = COALESCE(EXCLUDED.password_hash, tenants.password_hash)
         RETURNING id, name, email, plan, trial_ends_at, eval_quota_monthly,
-                  evals_used_this_month, active, created_at
+                  evals_used_this_month, active, created_at, api_key_prefix,
+                  (xmax = 0) AS is_new
         "#,
     )
     .bind(&body.id)
@@ -115,6 +229,8 @@ pub async fn create_tenant(
     .bind(&body.email)
     .bind(trial_ends_at)
     .bind(&body.password_hash)
+    .bind(&key.hash)
+    .bind(&key.prefix)
     .fetch_one(&state.db_pool)
     .await;
 
@@ -130,9 +246,20 @@ pub async fn create_tenant(
                 evals_used_this_month: row.get("evals_used_this_month"),
                 active: row.get("active"),
                 gateway_url,
+                api_key_prefix: row.try_get("api_key_prefix").ok().flatten(),
                 created_at: row.get("created_at"),
             };
-            (StatusCode::CREATED, Json(json!(tenant))).into_response()
+            // `xmax = 0` is true only for a freshly inserted row, so a repeat
+            // signup for an existing id does not leak a key that does not match
+            // the stored hash.
+            let is_new: bool = row.try_get("is_new").unwrap_or(false);
+            let mut payload = json!(tenant);
+            if is_new {
+                payload["api_key"] = json!(key.raw);
+                payload["api_key_note"] =
+                    json!("Store this now — it is shown once and cannot be recovered.");
+            }
+            (StatusCode::CREATED, Json(payload)).into_response()
         }
         Err(e) => cloud_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
@@ -141,12 +268,16 @@ pub async fn create_tenant(
 /// GET /api/v1/cloud/tenants/:id
 pub async fn get_tenant(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
+    if let Some(resp) = reject_cross_tenant(&auth, &id) {
+        return resp;
+    }
     let result = sqlx::query(
         r#"
         SELECT id, name, email, plan, trial_ends_at, eval_quota_monthly,
-               evals_used_this_month, active, created_at
+               evals_used_this_month, active, created_at, api_key_prefix
         FROM tenants WHERE id = $1
         "#,
     )
@@ -166,6 +297,7 @@ pub async fn get_tenant(
                 evals_used_this_month: row.get("evals_used_this_month"),
                 active: row.get("active"),
                 gateway_url: build_gateway_url(&row.get::<String, _>("id")),
+                api_key_prefix: row.try_get("api_key_prefix").ok().flatten(),
                 created_at: row.get("created_at"),
             };
             Json(json!(tenant)).into_response()
@@ -179,9 +311,17 @@ pub async fn get_tenant(
 /// Called after successful payment to activate paid plan.
 pub async fn upgrade_tenant(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
     Json(body): Json<UpgradePlanRequest>,
 ) -> impl IntoResponse {
+    // Plan changes follow a verified payment, so only the operator token (used
+    // by the billing routes and payment webhooks) may call this. A tenant must
+    // not be able to upgrade itself for free.
+    if let Some(resp) = reject_non_admin(&auth) {
+        return resp;
+    }
+
     let quota = plan_quota(&body.plan);
     if quota == 0 {
         return cloud_error(
@@ -224,7 +364,14 @@ pub async fn upgrade_tenant(
 
 /// GET /api/v1/cloud/tenants/:id/usage
 /// Current month evaluation usage for billing display.
-pub async fn get_usage(State(state): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
+pub async fn get_usage(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    if let Some(resp) = reject_cross_tenant(&auth, &id) {
+        return resp;
+    }
     let result = sqlx::query(
         r#"
         SELECT
@@ -275,8 +422,12 @@ pub async fn get_usage(State(state): State<AppState>, Path(id): Path<String>) ->
 /// Permanently deactivates a tenant account and marks all data for deletion.
 pub async fn delete_tenant(
     State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
+    if let Some(resp) = reject_cross_tenant(&auth, &id) {
+        return resp;
+    }
     // Soft-delete: set active=false and clear sensitive data.
     // Actual data purge happens via background cleanup job.
     let result = sqlx::query(

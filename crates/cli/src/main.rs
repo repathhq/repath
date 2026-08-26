@@ -9,24 +9,32 @@
 //! repath rollout rollback <id-or-name>       Force-rollback to baseline
 //! repath rollout pause    <id-or-name>       Pause controller decisions
 //! repath rollout resume   <id-or-name>       Resume a paused rollout
+//! repath rollout delete   <id-or-name>       Delete a rollout
 //! repath rollout history  <id-or-name>       Decision audit log
 //! ```
 //!
 //! # Connection
 //!
-//! The CLI connects directly to PostgreSQL — no running gateway needed.
-//! This is the same pattern as `kubectl` (connects to API server directly)
-//! and `flyctl` (connects to Fly's API directly).
+//! The CLI talks to the Repath management API over HTTP, the same interface the
+//! dashboard uses. It previously connected straight to PostgreSQL, which meant
+//! it only worked for someone with database access — in a hosted deployment the
+//! database is private, so customers could not use it at all.
 //!
-//! Database URL is read from: REPATH_DATABASE_URL env var, or --database-url flag.
+//! ```text
+//! REPATH_API_URL   Gateway base URL   (default: http://localhost:8080)
+//! REPATH_API_KEY   Your API key       (dashboard → Settings → API key)
+//! ```
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use sqlx::postgres::PgPoolOptions;
 use std::time::Duration;
 
+mod api_types;
+mod client;
 mod commands;
 mod display;
+
+use client::Client;
 
 #[derive(Parser)]
 #[command(
@@ -36,15 +44,18 @@ mod display;
     propagate_version = true,
 )]
 struct Cli {
-    /// PostgreSQL connection string.
-    /// Defaults to REPATH_DATABASE_URL environment variable.
+    /// Repath gateway base URL. Defaults to REPATH_API_URL, then localhost.
+    #[arg(long, env = "REPATH_API_URL", global = true)]
+    api_url: Option<String>,
+
+    /// Repath API key. Defaults to the REPATH_API_KEY environment variable.
     #[arg(
         long,
-        env = "REPATH_DATABASE_URL",
+        env = "REPATH_API_KEY",
         global = true,
-        hide_env_values = true, // Don't print the URL (contains password)
+        hide_env_values = true, // never echo a credential
     )]
-    database_url: Option<String>,
+    api_key: Option<String>,
 
     #[command(subcommand)]
     command: Commands,
@@ -108,6 +119,12 @@ enum RolloutAction {
         #[arg(value_name = "ID_OR_NAME")]
         id_or_name: String,
     },
+    /// Delete a rollout and its recorded requests
+    Delete {
+        /// Rollout ID or name
+        #[arg(value_name = "ID_OR_NAME")]
+        id_or_name: String,
+    },
     /// Show the decision audit history for a rollout
     History {
         /// Rollout ID or name
@@ -130,31 +147,10 @@ async fn main() {
         return;
     }
 
-    let db_url = match cli.database_url {
-        Some(url) => url,
-        None => {
-            eprintln!("{} No database URL provided.", "error:".red().bold());
-            eprintln!(
-                "{}",
-                "Set REPATH_DATABASE_URL or pass --database-url <URL>".dimmed()
-            );
-            std::process::exit(1);
-        }
-    };
-
-    let pool = match PgPoolOptions::new()
-        .max_connections(2)
-        .acquire_timeout(Duration::from_secs(5))
-        .connect(&db_url)
-        .await
-    {
-        Ok(p) => p,
+    let client = match Client::new(cli.api_url, cli.api_key) {
+        Ok(c) => c,
         Err(e) => {
             eprintln!("{} {}", "error:".red().bold(), e);
-            eprintln!(
-                "{}",
-                "Check that REPATH_DATABASE_URL is set and the database is reachable.".dimmed()
-            );
             std::process::exit(1);
         }
     };
@@ -162,24 +158,25 @@ async fn main() {
     let result = match cli.command {
         Commands::Serve { .. } => unreachable!("handled above"),
         Commands::Rollout { action } => match action {
-            RolloutAction::Create { file } => commands::create(&pool, file).await,
-            RolloutAction::List => commands::list(&pool).await,
+            RolloutAction::Create { file } => commands::create(&client, file).await,
+            RolloutAction::List => commands::list(&client).await,
             RolloutAction::Status { id_or_name, watch } => {
                 if watch {
-                    run_watch_loop(&pool, &id_or_name).await
+                    run_watch_loop(&client, &id_or_name).await
                 } else {
-                    commands::status(&pool, &id_or_name).await
+                    commands::status(&client, &id_or_name).await
                 }
             }
-            RolloutAction::Promote { id_or_name } => commands::promote(&pool, &id_or_name).await,
-            RolloutAction::Rollback { id_or_name } => commands::rollback(&pool, &id_or_name).await,
-            RolloutAction::Pause { id_or_name } => commands::pause(&pool, &id_or_name).await,
-            RolloutAction::Resume { id_or_name } => commands::resume(&pool, &id_or_name).await,
-            RolloutAction::History { id_or_name } => commands::history(&pool, &id_or_name).await,
+            RolloutAction::Promote { id_or_name } => commands::promote(&client, &id_or_name).await,
+            RolloutAction::Rollback { id_or_name } => {
+                commands::rollback(&client, &id_or_name).await
+            }
+            RolloutAction::Pause { id_or_name } => commands::pause(&client, &id_or_name).await,
+            RolloutAction::Resume { id_or_name } => commands::resume(&client, &id_or_name).await,
+            RolloutAction::Delete { id_or_name } => commands::delete(&client, &id_or_name).await,
+            RolloutAction::History { id_or_name } => commands::history(&client, &id_or_name).await,
         },
     };
-
-    pool.close().await;
 
     if let Err(e) = result {
         eprintln!("{} {}", "error:".red().bold(), e);
@@ -189,7 +186,7 @@ async fn main() {
 
 /// Run status in a loop, clearing the terminal every 5 seconds.
 /// Ctrl-C exits cleanly.
-async fn run_watch_loop(pool: &sqlx::PgPool, id_or_name: &str) -> anyhow::Result<()> {
+async fn run_watch_loop(client: &Client, id_or_name: &str) -> anyhow::Result<()> {
     use colored::Colorize;
 
     println!(
@@ -202,7 +199,7 @@ async fn run_watch_loop(pool: &sqlx::PgPool, id_or_name: &str) -> anyhow::Result
         // Clear terminal (works on UNIX and Windows terminals)
         print!("\x1B[2J\x1B[1;1H");
 
-        commands::status(pool, id_or_name).await?;
+        commands::status(client, id_or_name).await?;
 
         println!("\n  {} Refreshing every 5s — Ctrl-C to stop", "⏱".dimmed());
 

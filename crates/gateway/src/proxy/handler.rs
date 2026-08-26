@@ -31,6 +31,7 @@ use crate::{
     },
     recorder::RecordRequest,
     router::{select_version, ActiveRollout, VersionAssignment},
+    tenant::{AuthContext, TenantInfo},
     AppState,
 };
 use axum::{
@@ -42,9 +43,10 @@ use axum::{
 use bytes::Bytes;
 use futures::StreamExt;
 use repath_common::{Error, Result};
+use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::mpsc;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// HTTP headers that must not be forwarded to the upstream provider.
@@ -88,8 +90,29 @@ pub async fn handle_proxy(State(state): State<AppState>, req: Request<Body>) -> 
     let span = tracing::Span::current();
     span.record("request_id", request_id.to_string());
 
-    // Extract tenant ID early for circuit breaker check.
-    let tenant_id = extract_tenant_id(req.headers());
+    // Identity comes from the AuthContext that resolve_proxy_auth inserted
+    // after verifying the caller's API key. It is never read from a
+    // client-supplied header — that was the tenant-spoofing hole.
+    let auth = req
+        .extensions()
+        .get::<AuthContext>()
+        .cloned()
+        .unwrap_or_else(|| {
+            // Unreachable in the wired router: the middleware always inserts a
+            // context or short-circuits with 401. Failing closed to an
+            // unentitled placeholder means a future routing mistake degrades to
+            // plain passthrough rather than silently serving another tenant.
+            error!("Proxy handler reached with no AuthContext — check router wiring");
+            AuthContext::Tenant(Arc::new(TenantInfo {
+                id: String::new(),
+                plan: "unknown".into(),
+                active: false,
+                trial_ends_at: None,
+                eval_quota_monthly: 0,
+                evals_used_this_month: 0,
+            }))
+        });
+    let tenant_id = auth.owning_tenant().to_string();
 
     // Circuit breaker: if open, return bypass response immediately.
     // The client SDK sees X-Repath-Bypass: true and calls the provider directly.
@@ -99,7 +122,7 @@ pub async fn handle_proxy(State(state): State<AppState>, req: Request<Body>) -> 
         return bypass_response(request_id);
     }
 
-    match proxy_inner(state.clone(), req, request_id, &tenant_id).await {
+    match proxy_inner(state.clone(), req, request_id, &auth).await {
         Ok(response) => {
             state.circuit_breaker.record_success(&tenant_id);
             response
@@ -120,7 +143,7 @@ async fn proxy_inner(
     state: AppState,
     req: Request<Body>,
     request_id: Uuid,
-    _tenant_id: &str,
+    auth: &AuthContext,
 ) -> Result<Response<Body>> {
     let span = tracing::Span::current();
 
@@ -138,7 +161,19 @@ async fn proxy_inner(
     // ── Version selection (lock-free ArcSwap read) ────────────────────────
     let cache = state.rollout_cache.load();
     let session_id = extract_session_id(&parts.headers);
-    let tenant_id_for_routing = extract_tenant_id(&parts.headers);
+    let tenant_id_for_routing = auth.owning_tenant().to_string();
+
+    // A lapsed trial or deactivated account stops the paid work, not the
+    // customer's application: skip rollout routing entirely and proxy straight
+    // through to their provider. Their app keeps serving; they just stop
+    // getting canary behaviour until they upgrade.
+    let entitled = auth.tenant().map(|t| t.is_entitled()).unwrap_or(true);
+    if !entitled {
+        debug!(
+            tenant_id = %tenant_id_for_routing,
+            "Tenant not entitled — passing through without rollout routing"
+        );
+    }
 
     // Pick the rollout for this tenant. If the request carries
     // X-Repath-Rollout header, honour it; otherwise use the first active
@@ -150,14 +185,18 @@ async fn proxy_inner(
         .and_then(|v| v.to_str().ok())
         .and_then(|s| uuid::Uuid::parse_str(s).ok());
 
-    let active_rollout = requested_rollout_id
-        .and_then(|rid| {
-            cache
-                .all_for(&tenant_id_for_routing)
-                .iter()
-                .find(|r| r.rollout_id == rid)
-        })
-        .or_else(|| cache.active_for(&tenant_id_for_routing));
+    let active_rollout = if !entitled {
+        None
+    } else {
+        requested_rollout_id
+            .and_then(|rid| {
+                cache
+                    .all_for(&tenant_id_for_routing)
+                    .iter()
+                    .find(|r| r.rollout_id == rid)
+            })
+            .or_else(|| cache.active_for(&tenant_id_for_routing))
+    };
 
     let (version, rollout_id) = match active_rollout {
         Some(rollout) => {
@@ -288,8 +327,21 @@ async fn proxy_inner(
     span.record("latency_ms", latency_ms);
 
     // ── Fire-and-forget recording ─────────────────────────────────────────
+    // Over-quota tenants keep getting routed and proxied — only the paid
+    // LLM-judge scoring stops, which is exactly what the pricing page
+    // promises. `eligible_for_eval` carries that decision to the recorder.
+    let eligible_for_eval = auth.tenant().map(|t| t.has_eval_quota()).unwrap_or(true);
+    if !eligible_for_eval {
+        debug!(
+            tenant_id = %tenant_id_for_routing,
+            "Eval quota exhausted — recording request without enqueuing judge job"
+        );
+    }
+
     let record = RecordRequest {
         request_id,
+        tenant_id: tenant_id_for_routing.clone(),
+        eligible_for_eval,
         rollout_id,
         version_id: version.version_id,
         model: version.model.clone(),
@@ -717,14 +769,6 @@ fn extract_session_id(headers: &HeaderMap) -> Option<String> {
 
 /// Extract tenant ID from request headers.
 /// Cloud: set via X-Repath-Tenant-Id. Self-hosted: always "default".
-fn extract_tenant_id(headers: &HeaderMap) -> String {
-    headers
-        .get("x-repath-tenant-id")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("default")
-        .to_string()
-}
-
 /// Bypass response — tells the client SDK to call the provider directly.
 ///
 /// The gateway returns HTTP 503 with X-Repath-Bypass: true.

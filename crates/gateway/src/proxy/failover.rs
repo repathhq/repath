@@ -13,7 +13,7 @@
 //! # Failover chain configuration
 //!
 //! Set in the tenant's account settings or per-rollout:
-//! ```
+//! ```text
 //! primary:   openai/gpt-4o
 //! fallback:  anthropic/claude-3-5-sonnet
 //! fallback2: openrouter  (catches everything)
