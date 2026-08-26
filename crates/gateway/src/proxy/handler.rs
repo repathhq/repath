@@ -343,7 +343,8 @@ async fn proxy_inner(
         tenant_id: tenant_id_for_routing.clone(),
         eligible_for_eval,
         rollout_id,
-        version_id: version.version_id,
+        // Only attribute a version when a rollout actually chose one.
+        version_id: rollout_id.map(|_| version.version_id),
         model: version.model.clone(),
         input_tokens: stream_result.input_tokens,
         output_tokens: stream_result.output_tokens,
@@ -768,7 +769,7 @@ fn extract_session_id(headers: &HeaderMap) -> Option<String> {
 }
 
 /// Extract tenant ID from request headers.
-/// Cloud: set via X-Repath-Tenant-Id. Self-hosted: always "default".
+/// Cloud: derived from the verified X-Repath-Key. Self-hosted: always "default".
 /// Bypass response — tells the client SDK to call the provider directly.
 ///
 /// The gateway returns HTTP 503 with X-Repath-Bypass: true.

@@ -60,7 +60,10 @@ pub struct RecordRequest {
     /// job is enqueued.
     pub eligible_for_eval: bool,
     pub rollout_id: Option<Uuid>,
-    pub version_id: Uuid,
+    /// The version that served this request, or `None` when it was proxied
+    /// without an active rollout. A nil-UUID sentinel used to be written here
+    /// instead, which violated the foreign key and silently discarded the row.
+    pub version_id: Option<Uuid>,
     pub model: String,
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,

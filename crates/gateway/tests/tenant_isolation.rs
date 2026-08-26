@@ -169,7 +169,9 @@ async fn create_schema(pool: &PgPool) {
         r#"CREATE TABLE requests (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             rollout_id UUID REFERENCES rollouts(id) ON DELETE SET NULL,
-            version_id UUID NOT NULL REFERENCES versions(id),
+            -- Nullable: a request proxied without an active rollout has no
+            -- version. See migration 006.
+            version_id UUID REFERENCES versions(id),
             tenant_id VARCHAR(64),
             model VARCHAR(255) NOT NULL,
             input_tokens INTEGER,
@@ -630,4 +632,132 @@ async fn invalid_and_tampered_keys_resolve_to_nothing() {
             "key '{bogus}' must not authenticate"
         );
     }
+}
+
+// ── Router wiring ───────────────────────────────────────────────────────────
+
+/// Build the real production router, middleware and all.
+///
+/// The tests above deliberately inject a pre-resolved `AuthContext` and skip
+/// the auth layer, so they cannot catch a mistake in how that layer is
+/// attached. A misplaced `route_layer` once made the gateway panic on startup
+/// with every unit and integration test green — this exercises the same call
+/// `main` makes.
+#[tokio::test]
+async fn production_router_builds() {
+    if skip_without_db() {
+        return;
+    }
+    let db = TestDb::new().await;
+    let state = test_state(&db).await;
+
+    let router = repath_gateway::server::create_server(state);
+
+    // Health is unauthenticated, so a 200 here proves the router assembled
+    // and can actually serve.
+    let res = router
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("health request");
+    assert_eq!(res.status(), StatusCode::OK);
+}
+
+/// In cloud mode a proxy request with no key must be rejected outright.
+#[tokio::test]
+async fn proxy_requires_a_key_in_cloud_mode() {
+    if skip_without_db() {
+        return;
+    }
+    let db = TestDb::new().await;
+    let state = test_state(&db).await;
+
+    // SAFETY: single-threaded test process for env mutation; the value is
+    // restored below so neighbouring tests are unaffected.
+    std::env::set_var("REPATH_CLOUD_MODE", "true");
+
+    let router = repath_gateway::server::create_server(state);
+    let res = router
+        .oneshot(
+            Request::builder()
+                .uri("/v1/chat/completions")
+                .method("POST")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("proxy request");
+
+    std::env::remove_var("REPATH_CLOUD_MODE");
+
+    assert_eq!(
+        res.status(),
+        StatusCode::UNAUTHORIZED,
+        "an unauthenticated proxy call must not reach the handler in cloud mode"
+    );
+}
+
+/// An invalid key must be rejected regardless of mode.
+#[tokio::test]
+async fn proxy_rejects_an_invalid_key() {
+    if skip_without_db() {
+        return;
+    }
+    let db = TestDb::new().await;
+    let state = test_state(&db).await;
+
+    let router = repath_gateway::server::create_server(state);
+    let res = router
+        .oneshot(
+            Request::builder()
+                .uri("/v1/chat/completions")
+                .method("POST")
+                .header("x-repath-key", "rp_live_not_a_real_key")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .expect("proxy request");
+
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+}
+
+// ── Usage metering ──────────────────────────────────────────────────────────
+
+/// A request proxied without an active rollout must still be recorded.
+///
+/// `requests.version_id` was NOT NULL with a foreign key, and the gateway wrote
+/// a nil-UUID sentinel when no rollout applied. The recorder skipped those rows
+/// rather than fail the insert, so pass-through traffic — the majority of most
+/// tenants' traffic — was never metered and nothing ever reported it.
+#[tokio::test]
+async fn requests_without_a_rollout_are_still_recorded() {
+    if skip_without_db() {
+        return;
+    }
+    let db = TestDb::new().await;
+    let (tenant, _) = seed_tenant(db.pool(), "ten_alpha").await;
+
+    // Mirrors exactly what the recorder writes for a pass-through request.
+    sqlx::query(
+        "INSERT INTO requests (rollout_id, version_id, tenant_id, model, latency_ms, status_code)
+         VALUES (NULL, NULL, $1, 'gpt-4o-mini', 42, 200)",
+    )
+    .bind(&tenant)
+    .execute(db.pool())
+    .await
+    .expect("a request with no rollout and no version must insert");
+
+    let n: i64 = sqlx::query("SELECT COUNT(*) AS n FROM requests WHERE tenant_id = $1")
+        .bind(&tenant)
+        .fetch_one(db.pool())
+        .await
+        .unwrap()
+        .get("n");
+
+    assert_eq!(n, 1, "pass-through traffic must be metered to its tenant");
 }

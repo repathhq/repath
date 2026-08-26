@@ -642,7 +642,7 @@ fn build_gateway_url(_tenant_id: &str) -> String {
     format!("https://{}/v1", domain)
     // In production with subdomain routing:
     // format!("https://gw-{}.{}/v1", tenant_id, domain)
-    // For now, tenant_id is passed as X-Repath-Tenant-Id header
+    // Tenant identity comes from the verified API key, not the URL
     // This avoids needing wildcard SSL certs at launch
 }
 

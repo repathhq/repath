@@ -4,7 +4,14 @@ import { verifySession } from "@/lib/auth";
 const PROTECTED = ["/rollouts", "/billing", "/settings", "/onboarding"];
 const AUTH_PAGES = ["/login", "/signup"];
 
-export async function middleware(req: NextRequest) {
+/**
+ * Route guard for authenticated pages.
+ *
+ * Named `proxy` rather than `middleware`: Next.js 16 deprecated the
+ * `middleware` filename and export in favour of `proxy`, to make the network
+ * boundary explicit. Behaviour is unchanged.
+ */
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   const isProtected = PROTECTED.some(p => pathname === p || pathname.startsWith(p + "/"));

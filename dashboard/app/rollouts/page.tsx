@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRollouts, useSystemHealth } from "@/lib/hooks";
 import StateBadge from "@/components/StateBadge";
 import { cn, formatRelative, formatScore } from "@/lib/utils";
-import { AlertCircle, ChevronRight, GitBranch, RefreshCw } from "lucide-react";
+import { AlertCircle, ChevronRight, GitBranch, Plus, RefreshCw } from "lucide-react";
 
 export default function RolloutsPage() {
   const { data, loading, error, refresh } = useRollouts();
@@ -33,6 +33,13 @@ export default function RolloutsPage() {
             <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.8} />
             Refresh
           </button>
+          <Link
+            href="/rollouts/new"
+            className="flex items-center gap-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 px-3 py-1.5 text-[12.5px] font-medium text-white transition-all shadow-sm"
+          >
+            <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+            New rollout
+          </Link>
         </div>
       </div>
       <div className="p-6 sm:p-8 max-w-[1100px] mx-auto">
@@ -63,9 +70,21 @@ export default function RolloutsPage() {
           <p className="mb-6 max-w-[360px] text-[13px] text-gray-500">
             Point your app at Repath, then create a rollout to progressively deploy AI changes with automatic quality gates.
           </p>
-          <a href="/onboarding" className="inline-flex items-center gap-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white px-5 py-2.5 text-[13px] font-medium transition-all shadow-sm">
-            View setup guide
-          </a>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/rollouts/new"
+              className="inline-flex items-center gap-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white px-5 py-2.5 text-[13px] font-medium transition-all shadow-sm"
+            >
+              <Plus className="h-4 w-4" strokeWidth={2} />
+              Create your first rollout
+            </Link>
+            <a
+              href="/onboarding"
+              className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-5 py-2.5 text-[13px] font-medium text-gray-700 hover:border-gray-300 transition-all shadow-sm"
+            >
+              Setup guide
+            </a>
+          </div>
         </div>
       )}
 

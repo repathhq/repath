@@ -192,7 +192,7 @@ export default function DocsPage() {
           <p className="text-[14px] text-gray-600 mb-2">
             After signing up at <Link href="/signup" className="text-violet-600 hover:underline">tryrepath.com/signup</Link>, your dashboard shows your unique gateway URL:
           </p>
-          <Code lang="text">{`https://gw.cloud.tryrepath.com/v1`}</Code>
+          <Code lang="text">{`https://api.tryrepath.com/v1`}</Code>
 
           <H3>2. Change one line in your app</H3>
           <Code lang="python">{`from openai import OpenAI
@@ -203,15 +203,15 @@ client = OpenAI(api_key="sk-...")
 # After — that's the entire integration
 client = OpenAI(
     api_key="sk-...",
-    base_url="https://gw.cloud.tryrepath.com/v1",
-    default_headers={"X-Repath-Tenant-Id": "ten_YOUR_ID"}
+    base_url="https://api.tryrepath.com/v1",
+    default_headers={"X-Repath-Key": "rp_live_YOUR_KEY"}
 )`}</Code>
           <Code lang="typescript">{`import OpenAI from "openai";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-  baseURL: "https://gw.cloud.tryrepath.com/v1",
-  defaultHeaders: { "X-Repath-Tenant-Id": "ten_YOUR_ID" },
+  baseURL: "https://api.tryrepath.com/v1",
+  defaultHeaders: { "X-Repath-Key": "rp_live_YOUR_KEY" },
 });`}</Code>
           <Note type="info">
             Repath is a fully OpenAI-compatible proxy. Streaming, function calling, embeddings — everything works unchanged. Only the base URL changes.
@@ -279,11 +279,11 @@ spec:
               </thead>
               <tbody>
                 {[
-                  ["OpenAI", "https://gw.cloud.tryrepath.com/v1", "Drop-in replacement"],
-                  ["Anthropic", "https://gw.cloud.tryrepath.com/v1", "Request translation automatic"],
-                  ["Google Gemini", "https://gw.cloud.tryrepath.com/v1", "Via OpenAI-compat endpoint"],
-                  ["OpenRouter", "https://gw.cloud.tryrepath.com/v1", "Auto-failover hub"],
-                  ["Any OpenAI-compat", "https://gw.cloud.tryrepath.com/v1", "Works with any compatible API"],
+                  ["OpenAI", "https://api.tryrepath.com/v1", "Drop-in replacement"],
+                  ["Anthropic", "https://api.tryrepath.com/v1", "Request translation automatic"],
+                  ["Google Gemini", "https://api.tryrepath.com/v1", "Via OpenAI-compat endpoint"],
+                  ["OpenRouter", "https://api.tryrepath.com/v1", "Auto-failover hub"],
+                  ["Any OpenAI-compat", "https://api.tryrepath.com/v1", "Works with any compatible API"],
                 ].map(([p, u, n]) => (
                   <tr key={p} className="hover:bg-gray-50">
                     <td className="px-4 py-2.5 border border-gray-200 font-medium text-gray-800">{p}</td>
@@ -521,7 +521,7 @@ Example:
           </p>
           <Code lang="bash">{`# Get decision history for a rollout
 curl -H "Authorization: Bearer $REPATH_API_TOKEN" \\
-  https://gw.cloud.tryrepath.com/api/v1/rollouts/MY_ROLLOUT_ID/decisions`}</Code>
+  https://api.tryrepath.com/api/v1/rollouts/MY_ROLLOUT_ID/decisions`}</Code>
           <Code lang="json">{`{
   "decisions": [
     {
@@ -547,7 +547,7 @@ curl -H "Authorization: Bearer $REPATH_API_TOKEN" \\
             When a provider returns 5xx errors or times out, Repath automatically retries once (after 300ms) then switches to the next provider in your fallback chain. Your app never sees the outage.
           </p>
           <Note type="success">
-            <strong>Zero downtime guarantee:</strong> If all configured providers fail, Repath returns <code>X-Repath-Bypass: true</code> so your SDK can call the provider directly. Repath is never a single point of failure.
+            <strong>Fail-open by design:</strong> if Repath is unhealthy it returns <code>X-Repath-Bypass: true</code> with a 503, rather than silently degrading your traffic. Handling that header to retry directly against your provider is a few lines in your client — a drop-in wrapper is on the roadmap.
           </Note>
 
           <H2 id="failover-config">Failover Configuration</H2>
@@ -579,7 +579,7 @@ curl -H "Authorization: Bearer $REPATH_API_TOKEN" \\
             All management API endpoints require a Bearer token. Get yours from the dashboard under Settings → API Token.
           </p>
           <Code lang="bash">{`curl -H "Authorization: Bearer $REPATH_API_TOKEN" \\
-  https://gw.cloud.tryrepath.com/api/v1/system/health`}</Code>
+  https://api.tryrepath.com/api/v1/system/health`}</Code>
           <Note type="warning">
             The proxy endpoint (<code>/v1/*</code>) does NOT require the API token — it uses your LLM provider key passed through from the request.
           </Note>

@@ -84,6 +84,47 @@ export interface DecisionInfo {
   created_at: string;
 }
 
+/**
+ * Shape accepted by POST /api/v1/rollouts.
+ *
+ * Mirrors the rollout YAML so the same config works from the dashboard, the
+ * CLI and a raw API call. `apiVersion` and `kind` are carried for that parity
+ * even though the endpoint could infer them.
+ */
+export interface RolloutConfigInput {
+  apiVersion: "repath/v1";
+  kind: "Rollout";
+  metadata: { name: string; labels?: Record<string, string> };
+  spec: {
+    baseline: VersionInput;
+    candidate: VersionInput;
+    strategy: {
+      type: "canary" | "shadow" | "blue_green";
+      steps: Array<{
+        weight: number;
+        duration?: string;
+        gate?: Record<string, string>;
+      }>;
+      rollback: { trigger: Record<string, string>; action: string };
+    };
+  };
+}
+
+export interface VersionInput {
+  provider: string;
+  model: string;
+  prompt: { system?: string };
+  parameters: { temperature?: number; max_tokens?: number };
+}
+
+export interface CreatedRollout {
+  id: string;
+  name: string;
+  state: string;
+  steps: number;
+  message: string;
+}
+
 export interface SystemHealth {
   status: string;
   database: string;
@@ -102,6 +143,21 @@ async function postApi(path: string): Promise<{ message: string }> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error((body as { error?: { message?: string } })?.error?.message ?? `API error ${res.status}`);
+  }
+  return res.json();
+}
+
+async function postJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${PROXY}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(
+      (err as { error?: { message?: string } })?.error?.message ?? `API error ${res.status}`
+    );
   }
   return res.json();
 }
@@ -125,8 +181,12 @@ export const api = {
     metrics: (id: string) => fetchApi<{ metrics: MetricPoint[] }>(`/rollouts/${id}/metrics`),
     steps: (id: string) => fetchApi<{ steps: StepInfo[] }>(`/rollouts/${id}/steps`),
     decisions: (id: string) => fetchApi<{ decisions: DecisionInfo[] }>(`/rollouts/${id}/decisions`),
+    create: (config: RolloutConfigInput) =>
+      postJson<CreatedRollout>("/rollouts", config),
     promote: (id: string) => postApi(`/rollouts/${id}/promote`),
     rollback: (id: string) => postApi(`/rollouts/${id}/rollback`),
+    pause: (id: string) => postApi(`/rollouts/${id}/pause`),
+    resume: (id: string) => postApi(`/rollouts/${id}/resume`),
     delete: (id: string) => deleteApi(`/rollouts/${id}`),
   },
   system: {

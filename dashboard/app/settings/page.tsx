@@ -18,6 +18,8 @@ interface UserData {
   usage_percent: number;
   trial_active: boolean;
   trial_ends_at: string | null;
+  /** Prefix of the active API key, e.g. "rp_live_a1b2". Never the full key. */
+  api_key_prefix?: string | null;
 }
 
 function Section({ title, desc, children }: { title: string; desc?: string; children: React.ReactNode }) {
@@ -86,6 +88,91 @@ function CopyField({ value }: { value: string }) {
       >
         {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4 text-gray-400" />}
       </button>
+    </div>
+  );
+}
+
+/**
+ * Shows which API key is active, and rotates it on request.
+ *
+ * The key itself cannot be displayed: only its SHA-256 hash is stored, so the
+ * plaintext exists exactly once — in the response that created it. Rotating is
+ * the only way to recover from a lost key, and it immediately invalidates the
+ * previous one.
+ */
+function ApiKeyField({ tenantId, prefix }: { tenantId?: string; prefix?: string | null }) {
+  const [newKey, setNewKey] = useState<string | null>(null);
+  const [rotating, setRotating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+
+  async function rotate() {
+    if (!tenantId) return;
+    setRotating(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/gateway/cloud/tenants/${tenantId}/api-key/rotate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error?.message ?? "Could not rotate the key.");
+      setNewKey(body.api_key);
+      setConfirming(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not rotate the key.");
+    } finally {
+      setRotating(false);
+    }
+  }
+
+  if (newKey) {
+    return (
+      <div className="flex flex-col gap-2 max-w-md">
+        <CopyField value={newKey} />
+        <p className="text-[12px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          Copy this now — it is shown once and cannot be recovered. Your previous key stopped
+          working immediately.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2 max-w-md">
+      <div className="flex items-center gap-2">
+        <code className="flex-1 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-[13px] font-mono text-gray-500">
+          {prefix ? `${prefix}${"•".repeat(16)}` : "No key issued yet"}
+        </code>
+      </div>
+      {error && <p className="text-[12px] text-red-600">{error}</p>}
+      {confirming ? (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={rotate}
+            disabled={rotating}
+            className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-[12.5px] font-medium disabled:opacity-50"
+          >
+            {rotating ? "Rotating…" : "Yes, rotate it"}
+          </button>
+          <button
+            onClick={() => setConfirming(false)}
+            className="px-3 py-1.5 text-[12.5px] text-gray-600 hover:text-gray-900"
+          >
+            Cancel
+          </button>
+          <span className="text-[12px] text-gray-500">
+            Anything using the old key will stop working.
+          </span>
+        </div>
+      ) : (
+        <button
+          onClick={() => setConfirming(true)}
+          className="self-start flex items-center gap-1.5 text-[12.5px] text-violet-600 hover:text-violet-700 font-medium"
+        >
+          <RefreshCw className="w-3.5 h-3.5" /> Rotate key
+        </button>
+      )}
     </div>
   );
 }
@@ -274,7 +361,7 @@ export default function SettingsPage() {
                     </button>
                   </div>
                 </Field>
-                <Field label="Tenant ID" hint="Pass as X-Repath-Tenant-Id header.">
+                <Field label="Tenant ID" hint="Your account identifier. Authenticate with the API key above, not this.">
                   <CopyField value={session?.tenantId ?? "—"} />
                 </Field>
               </Section>
@@ -308,6 +395,12 @@ export default function SettingsPage() {
               <Section title="Gateway" desc="Your unique Repath gateway URL. Point your app here.">
                 <Field label="Gateway URL" hint="Use this as base_url in your OpenAI client.">
                   <CopyField value="https://api.tryrepath.com/v1" />
+                </Field>
+                <Field
+                  label="Repath API key"
+                  hint="Send as the X-Repath-Key header. Your provider key stays in Authorization — we never store it."
+                >
+                  <ApiKeyField tenantId={session?.tenantId} prefix={usage?.api_key_prefix} />
                 </Field>
                 <Field label="Health check">
                   <div className="flex items-center gap-3">

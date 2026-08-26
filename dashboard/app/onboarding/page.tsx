@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useState } from "react";
 import { Check, Copy, ArrowRight, ExternalLink, Terminal, Plug, Eye, Rocket } from "lucide-react";
 
-const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL ?? "https://gw.cloud.repath.dev";
+const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL ?? "https://api.tryrepath.com";
 
 const steps = [
   {
@@ -21,7 +21,7 @@ const steps = [
     icon: Terminal,
     title: "Change one line in your app",
     description: "Replace your OpenAI base URL. Everything else stays the same — models, API keys, streaming.",
-    code: `from openai import OpenAI\n\nclient = OpenAI(\n    api_key="sk-...",  # Your OpenAI key (unchanged)\n    base_url="${GATEWAY_URL}/v1",\n    default_headers={\n        "X-Repath-Tenant-Id": "YOUR_TENANT_ID"\n    }\n)`,
+    code: `from openai import OpenAI\n\nclient = OpenAI(\n    api_key="sk-...",  # Your OpenAI key (unchanged)\n    base_url="${GATEWAY_URL}/v1",\n    default_headers={\n        "X-Repath-Key": "rp_live_YOUR_KEY"\n    }\n)`,
     lang: "python",
   },
   {

@@ -7,12 +7,14 @@ cd "$(dirname "$0")/.."
 : "${REPATH_GATEWAY_URL:?set REPATH_GATEWAY_URL, e.g. https://api.tryrepath.com}"
 : "${REPATH_TENANT:?set REPATH_TENANT}"
 : "${REPATH_API_TOKEN:?set REPATH_API_TOKEN}"
+: "${REPATH_API_KEY:?set REPATH_API_KEY (your Repath API key, from the dashboard)}"
 : "${OPENAI_API_KEY:?set OPENAI_API_KEY}"
 : "${REPATH_DATABASE_URL:?set REPATH_DATABASE_URL}"
 
 python3 scripts/load-test.py \
   --gateway "$REPATH_GATEWAY_URL" \
   --tenant  "$REPATH_TENANT" \
+  --api-key "$REPATH_API_KEY" \
   --token   "$REPATH_API_TOKEN" \
   --openai  "$OPENAI_API_KEY" \
   --gemini  "${GEMINI_API_KEY:-}" \

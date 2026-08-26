@@ -57,22 +57,28 @@ pub fn create_server(state: AppState) -> Router {
         .allow_methods(Any)
         .allow_headers(Any);
 
+    // OpenAI-compatible proxy surface (catch-all under /v1).
+    //
+    // Identity is resolved from a verified X-Repath-Key before the handler
+    // runs — never from a client-supplied tenant id.
+    //
+    // The auth layer is attached to a Router rather than chained onto the
+    // MethodRouter: `route_layer` on a Router applies to the routes already
+    // declared on it, and axum panics at startup if it has none.
+    let proxy_router = Router::new()
+        .route("/v1/*path", any(handle_proxy))
+        .route_layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::tenant::resolve_proxy_auth,
+        ));
+
     Router::new()
         // Health and readiness probes
         .route("/health", get(health_handler))
         .route("/ready", get(readiness_handler))
         // Management API for dashboard and CLI
         .nest("/api/v1", crate::api::api_router(state.clone()))
-        // OpenAI-compatible proxy surface (catch-all under /v1).
-        // Identity is resolved from a verified X-Repath-Key before the handler
-        // runs — never from a client-supplied tenant id.
-        .route(
-            "/v1/*path",
-            any(handle_proxy).route_layer(axum::middleware::from_fn_with_state(
-                state.clone(),
-                crate::tenant::resolve_proxy_auth,
-            )),
-        )
+        .merge(proxy_router)
         // State shared across all handlers
         .with_state(state)
         // Middleware (applied to all routes)

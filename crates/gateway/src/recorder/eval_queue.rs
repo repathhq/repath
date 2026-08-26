@@ -62,7 +62,8 @@ pub async fn publish_eval_job(
         .arg("rollout_id")
         .arg(rollout_id)
         .arg("version_id")
-        .arg(record.version_id.to_string())
+        // A rollout is present (checked above), so a version always is too.
+        .arg(record.version_id.unwrap_or_default().to_string())
         .arg("request_body")
         .arg(&record.request_body_json)
         .arg("response_text")

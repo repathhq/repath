@@ -8,19 +8,17 @@
 use super::RecordRequest;
 use repath_common::{Error, Result};
 use sqlx::PgPool;
-use uuid::Uuid;
 
 /// Insert a completed request record into the `requests` table.
 ///
 /// Called exclusively from the background recorder task — never the hot path.
-/// Skips requests with no version_id (pass-through calls with no active rollout).
+///
+/// Every proxied request is recorded, including pass-through calls with no
+/// active rollout: those carry `version_id = NULL`. This function used to skip
+/// them and return `Ok(())`, because the column was NOT NULL and a nil-UUID
+/// sentinel violated its foreign key — which meant the bulk of traffic was
+/// never metered and no error was ever surfaced. See migration 006.
 pub async fn insert_request(pool: &PgPool, record: &RecordRequest) -> Result<()> {
-    // version_id is Uuid::nil() when no rollout is active — skip those,
-    // since the FK constraint requires a real row in the versions table.
-    if record.version_id == Uuid::nil() {
-        return Ok(());
-    }
-
     sqlx::query(
         r#"
         INSERT INTO requests (

@@ -10,6 +10,7 @@ Usage:
     python scripts/load-test.py \
         --gateway https://repath-gateway.fly.dev \
         --tenant  ten_794cb1ec \
+        --api-key rp_live_... \
         --token   3f6fb762... \
         --openai  sk-proj-... \
         --gemini  AIzaSy... \
@@ -228,7 +229,7 @@ def setup_db(db_url: str, openai_key: str, tenant: str) -> dict[str, str]:
 async def send_request(
     client: httpx.AsyncClient,
     gateway: str,
-    tenant: str,
+    api_key: str,
     openai_key: str,
     gemini_key: str,
     feature: dict,
@@ -245,7 +246,7 @@ async def send_request(
     headers = {
         "Content-Type":       "application/json",
         "Authorization":      f"Bearer {openai_key}",
-        "X-Repath-Tenant-Id": tenant,
+        "X-Repath-Key": api_key,
         "X-Repath-Rollout":   rollout_id,
     }
 
@@ -354,7 +355,7 @@ def render(duration: int) -> Table:
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
-async def run(gateway: str, tenant: str, token: str, openai_key: str, gemini_key: str, db_url: str, duration: int):
+async def run(gateway: str, tenant: str, api_key: str, token: str, openai_key: str, gemini_key: str, db_url: str, duration: int):
     console.print(Panel.fit(
         f"[bold green]Repath Load Test — Job Board Simulation[/bold green]\n\n"
         f"Gateway  : [cyan]{gateway}[/cyan]\n"
@@ -395,7 +396,7 @@ async def run(gateway: str, tenant: str, token: str, openai_key: str, gemini_key
                 rid = rollout_ids[feature["id"]]
 
                 asyncio.create_task(send_request(
-                    client, gateway, tenant, openai_key, gemini_key, feature, rid
+                    client, gateway, api_key, openai_key, gemini_key, feature, rid
                 ))
 
                 live.update(render(duration))
@@ -421,7 +422,8 @@ async def run(gateway: str, tenant: str, token: str, openai_key: str, gemini_key
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--gateway",  required=True)
-    p.add_argument("--tenant",   required=True)
+    p.add_argument("--tenant",   required=True, help="Tenant id that owns the rollout rows")
+    p.add_argument("--api-key",  required=True, help="Repath API key (X-Repath-Key) for the proxy")
     p.add_argument("--token",    required=True)
     p.add_argument("--openai",   required=True)
     p.add_argument("--gemini",   default="")
@@ -432,6 +434,7 @@ def main():
     asyncio.run(run(
         gateway=args.gateway,
         tenant=args.tenant,
+        api_key=args.api_key,
         token=args.token,
         openai_key=args.openai,
         gemini_key=args.gemini,

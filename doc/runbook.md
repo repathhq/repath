@@ -121,7 +121,31 @@ IMAGE_TAG=<previous-sha> curl -fsSL https://raw.githubusercontent.com/repathhq/r
 
 ---
 
-## 6. Secrets
+## 6. Tenant API keys
+
+Each tenant authenticates with its own key. Only a SHA-256 hash is stored, so a
+lost key cannot be recovered — it can only be rotated, which invalidates the
+old one immediately.
+
+**Rotate for a customer** (they can also do this themselves in Settings):
+```bash
+curl -X POST https://api.tryrepath.com/api/v1/cloud/tenants/<tenant-id>/api-key/rotate \
+  -H "Authorization: Bearer $REPATH_API_TOKEN"
+```
+
+**"My key stopped working"** — check in order:
+1. Was it rotated? `SELECT api_key_prefix, api_key_created_at FROM tenants WHERE id = '<id>';`
+2. Is the account active? `SELECT active, plan, trial_ends_at FROM tenants WHERE id = '<id>';`
+3. Cached rotation takes up to 5s to propagate; a fresh key works immediately
+   via the database fallback.
+
+**"I'm getting 401 on /v1 but my OpenAI key is fine"** — the Repath key goes in
+`X-Repath-Key`. `Authorization` is reserved for their provider key, which we
+forward upstream untouched.
+
+---
+
+## 7. Secrets
 
 All production secrets live in AWS SSM Parameter Store under `/repath/prod/*`
 (SecureString). Rotate a value with:
