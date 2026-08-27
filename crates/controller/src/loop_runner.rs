@@ -56,6 +56,9 @@ pub struct ControllerConfig {
     pub metric_window_minutes: i32,
     /// Prometheus metrics — incremented on every cycle and per decision.
     pub metrics: Arc<ControllerMetrics>,
+    /// Shared HTTP client for outbound notifications. Held here rather than
+    /// built per delivery so connections are pooled and reused.
+    pub http_client: reqwest::Client,
 }
 
 impl Default for ControllerConfig {
@@ -65,6 +68,7 @@ impl Default for ControllerConfig {
             confidence_level: 0.95,
             metric_window_minutes: 10,
             metrics: Arc::new(ControllerMetrics::new()),
+            http_client: reqwest::Client::new(),
         }
     }
 }
@@ -276,6 +280,10 @@ async fn process_rollout(
     )
     .await?;
 
+    // Tell the customer. Detached inside dispatch_event, so a slow or broken
+    // webhook endpoint can never delay or fail a rollout decision.
+    notify_outcome(pool, config, rollout, &outcome, &rollout_metrics);
+
     // Log outcome at the appropriate level and record decision metric.
     match &outcome {
         DecisionOutcome::RolledBack { reason, .. } => {
@@ -372,3 +380,69 @@ async fn fetch_version_ids(pool: &PgPool, rollout_id: Uuid) -> Result<(Uuid, Uui
 }
 
 use uuid::Uuid;
+
+/// Send a webhook/Slack notification for a decision the controller just made.
+///
+/// Only events a person might act on are sent — a `Hold` is the controller
+/// working normally and would be pure noise.
+fn notify_outcome(
+    pool: &PgPool,
+    config: &ControllerConfig,
+    rollout: &store::ActiveRolloutRow,
+    outcome: &DecisionOutcome,
+    metrics: &metrics_aggregator::RolloutMetrics,
+) {
+    use repath_common::notify::{dispatch_event, Event, EventKind};
+
+    // A rollout with no tenant predates multi-tenancy; there is nobody to notify.
+    let Some(tenant_id) = rollout.tenant_id.clone() else {
+        return;
+    };
+
+    let (kind, detail) = match outcome {
+        DecisionOutcome::RolledBack { reason, .. } => (
+            EventKind::Rollback,
+            format!(
+                "Traffic returned to the baseline. {reason} \
+                 Candidate quality {:.2} across {} samples.",
+                metrics.candidate.avg_quality, metrics.candidate.sample_count
+            ),
+        ),
+        DecisionOutcome::Promoted { .. } => (
+            EventKind::Promote,
+            format!(
+                "The candidate now serves all traffic. Final quality {:.2} across {} samples.",
+                metrics.candidate.avg_quality, metrics.candidate.sample_count
+            ),
+        ),
+        DecisionOutcome::Advanced { new_weight, .. } => (
+            EventKind::Advance,
+            format!(
+                "Candidate traffic increased to {:.0}%. Quality {:.2} across {} samples.",
+                new_weight * 100.0,
+                metrics.candidate.avg_quality,
+                metrics.candidate.sample_count
+            ),
+        ),
+        // Holding steady and already-acted-on are not news.
+        _ => return,
+    };
+
+    dispatch_event(
+        pool.clone(),
+        config.http_client.clone(),
+        Event {
+            kind,
+            tenant_id,
+            rollout_id: Some(rollout.id),
+            rollout_name: rollout.name.clone(),
+            detail,
+            context: serde_json::json!({
+                "candidate_quality": metrics.candidate.avg_quality,
+                "baseline_quality": metrics.baseline.avg_quality,
+                "candidate_error_rate": metrics.candidate.error_rate,
+                "samples": metrics.candidate.sample_count,
+            }),
+        },
+    );
+}

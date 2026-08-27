@@ -11,8 +11,8 @@ pub use rules::{
     estimate_tokens, Action, Condition, Field, Operator, RequestFacts, RoutingRule, RulesCache,
 };
 
-use crate::crypto;
 use arc_swap::ArcSwap;
+use repath_common::crypto;
 use serde_json::Value;
 use sqlx::{PgPool, Row};
 use std::collections::HashMap;

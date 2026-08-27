@@ -89,6 +89,7 @@ async fn main() -> anyhow::Result<()> {
         confidence_level: 0.95,
         metric_window_minutes,
         metrics,
+        http_client: reqwest::Client::new(),
     };
 
     // Run the decision loop — returns only on task abort (shutdown)

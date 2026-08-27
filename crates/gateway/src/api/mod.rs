@@ -110,6 +110,29 @@ fn core_routes() -> Router<AppState> {
             axum::routing::put(settings::update_rule).delete(settings::delete_rule),
         )
         .route("/routing/test", post(settings::test_rules))
+        // ── Webhooks ─────────────────────────────────────────────────────
+        .route(
+            "/settings/webhooks",
+            get(settings::list_webhooks).post(settings::create_webhook),
+        )
+        .route(
+            "/settings/webhooks/:id",
+            axum::routing::delete(settings::delete_webhook),
+        )
+        .route(
+            "/settings/webhooks/:id/deliveries",
+            get(settings::webhook_deliveries),
+        )
+        .route("/settings/webhooks/:id/test", post(settings::test_webhook))
+        // ── Notifications & gateway options ──────────────────────────────
+        .route(
+            "/settings/notifications",
+            get(settings::get_notifications).put(settings::save_notifications),
+        )
+        .route(
+            "/settings/gateway",
+            get(settings::get_gateway_settings).put(settings::save_gateway_settings),
+        )
         .route("/system/health", get(handlers::system_health))
         .route("/system/providers", get(handlers::provider_health))
 }

@@ -35,7 +35,6 @@ use std::sync::Arc;
 pub mod api;
 pub mod circuit_breaker;
 pub mod config;
-pub mod crypto;
 pub mod db;
 pub mod observability;
 pub mod proxy;

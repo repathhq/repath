@@ -23,6 +23,15 @@ sqlx = { workspace = true }
 # Validation
 validator = { version = "0.18", features = ["derive"] }
 
+# Outbound delivery for webhooks and Slack
+reqwest = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+# AES-GCM for tenant secrets, HMAC for webhook signatures
+ring = { workspace = true }
+base64 = { workspace = true }
+
 # Utilities
 strum = { version = "0.26", features = ["derive"] }
 strum_macros = "0.26"

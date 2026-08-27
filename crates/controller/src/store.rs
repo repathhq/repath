@@ -17,6 +17,9 @@ use uuid::Uuid;
 pub struct ActiveRolloutRow {
     pub id: Uuid,
     pub name: String,
+    /// Owning tenant. Needed to route notifications to the right customer;
+    /// NULL only for rows predating multi-tenancy.
+    pub tenant_id: Option<String>,
     pub state: String,
     pub current_weight: f64,
     /// JSON-serialised RolloutPolicy
@@ -39,7 +42,7 @@ pub struct VersionMetrics {
 pub async fn fetch_active_rollouts(pool: &PgPool) -> Result<Vec<ActiveRolloutRow>> {
     let rows = sqlx::query(
         r#"
-        SELECT id, name, state, current_weight, policy, strategy
+        SELECT id, name, tenant_id, state, current_weight, policy, strategy
         FROM rollouts
         WHERE state IN ('created', 'shadow', 'canary')
         ORDER BY created_at ASC
@@ -58,6 +61,7 @@ pub async fn fetch_active_rollouts(pool: &PgPool) -> Result<Vec<ActiveRolloutRow
             Ok(ActiveRolloutRow {
                 id: r.get("id"),
                 name: r.get("name"),
+                tenant_id: r.get("tenant_id"),
                 state: r.get("state"),
                 current_weight: r.get("current_weight"),
                 policy_json: r.get("policy"),

@@ -10,13 +10,14 @@
 //! before storage and never returned. Reads give a masked hint instead, which
 //! is enough to recognise a value without revealing it.
 
-use crate::{crypto, routing, tenant::AuthContext, AppState};
+use crate::{routing, tenant::AuthContext, AppState};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Json, Response},
     Extension,
 };
+use repath_common::crypto;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::Row;
@@ -738,5 +739,507 @@ mod tests {
         assert!(validate_rule(&r)
             .unwrap_err()
             .contains("provider and model"));
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Webhooks
+// ════════════════════════════════════════════════════════════════════════════
+
+#[derive(Serialize)]
+struct WebhookView {
+    id: Uuid,
+    url: String,
+    events: Vec<String>,
+    enabled: bool,
+    created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Deserialize)]
+pub struct SaveWebhook {
+    pub url: String,
+    #[serde(default)]
+    pub events: Vec<String>,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+/// GET /api/v1/settings/webhooks
+pub async fn list_webhooks(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+) -> Response {
+    let rows = sqlx::query(
+        "SELECT id, url, events, enabled, created_at FROM webhooks
+          WHERE tenant_id = $1 ORDER BY created_at DESC",
+    )
+    .bind(auth.owning_tenant())
+    .fetch_all(&state.db_pool)
+    .await;
+
+    match rows {
+        Ok(rows) => {
+            let hooks: Vec<WebhookView> = rows
+                .iter()
+                .map(|r| WebhookView {
+                    id: r.get("id"),
+                    url: r.get("url"),
+                    events: r.get("events"),
+                    enabled: r.get("enabled"),
+                    created_at: r.get("created_at"),
+                })
+                .collect();
+            Json(json!({ "webhooks": hooks })).into_response()
+        }
+        Err(e) => db_err(e),
+    }
+}
+
+/// POST /api/v1/settings/webhooks
+///
+/// Returns the signing secret exactly once. It is stored encrypted and never
+/// shown again — the receiver needs it to verify `X-Repath-Signature`.
+pub async fn create_webhook(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Json(body): Json<SaveWebhook>,
+) -> Response {
+    if let Some(resp) = require_encryption() {
+        return resp;
+    }
+
+    let url = body.url.trim();
+    if let Err(message) = validate_webhook_url(url) {
+        return err(StatusCode::BAD_REQUEST, message);
+    }
+
+    let events = if body.events.is_empty() {
+        vec![
+            "rollback".to_string(),
+            "advance".to_string(),
+            "promote".to_string(),
+            "provider_outage".to_string(),
+        ]
+    } else {
+        match normalise_events(&body.events) {
+            Ok(e) => e,
+            Err(message) => return err(StatusCode::BAD_REQUEST, message),
+        }
+    };
+
+    // 32 bytes of entropy, same shape as an API key.
+    let secret = crate::tenant::generate_key()
+        .raw
+        .replace("rp_live_", "whsec_");
+    let sealed = match crypto::encrypt(&secret) {
+        Ok(s) => s,
+        Err(_) => {
+            return err(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Could not securely store the signing secret.",
+            )
+        }
+    };
+
+    let result = sqlx::query(
+        "INSERT INTO webhooks (tenant_id, url, secret_sealed, events, enabled)
+         VALUES ($1, $2, $3, $4, $5) RETURNING id",
+    )
+    .bind(auth.owning_tenant())
+    .bind(url)
+    .bind(&sealed)
+    .bind(&events)
+    .bind(body.enabled)
+    .fetch_one(&state.db_pool)
+    .await;
+
+    match result {
+        Ok(row) => {
+            let id: Uuid = row.get("id");
+            (
+                StatusCode::CREATED,
+                Json(json!({
+                    "id": id,
+                    "url": url,
+                    "events": events,
+                    "signing_secret": secret,
+                    "note": "Store this secret now — it is shown once. Use it to verify the X-Repath-Signature header.",
+                })),
+            )
+                .into_response()
+        }
+        Err(e) => db_err(e),
+    }
+}
+
+/// DELETE /api/v1/settings/webhooks/:id
+pub async fn delete_webhook(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(id): Path<Uuid>,
+) -> Response {
+    let result = sqlx::query("DELETE FROM webhooks WHERE id = $1 AND tenant_id = $2 RETURNING id")
+        .bind(id)
+        .bind(auth.owning_tenant())
+        .fetch_optional(&state.db_pool)
+        .await;
+
+    match result {
+        Ok(Some(_)) => Json(json!({ "deleted": true })).into_response(),
+        Ok(None) => err(StatusCode::NOT_FOUND, "Webhook not found."),
+        Err(e) => db_err(e),
+    }
+}
+
+/// GET /api/v1/settings/webhooks/:id/deliveries
+///
+/// Recent attempts, so a customer can diagnose "it stopped arriving" without
+/// asking us.
+pub async fn webhook_deliveries(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(id): Path<Uuid>,
+) -> Response {
+    // Join through webhooks so one tenant cannot read another's delivery log
+    // by guessing a webhook id.
+    let rows = sqlx::query(
+        "SELECT d.event, d.status_code, d.error, d.attempts, d.delivered_at, d.created_at
+           FROM webhook_deliveries d
+           JOIN webhooks w ON w.id = d.webhook_id
+          WHERE d.webhook_id = $1 AND w.tenant_id = $2
+          ORDER BY d.created_at DESC LIMIT 50",
+    )
+    .bind(id)
+    .bind(auth.owning_tenant())
+    .fetch_all(&state.db_pool)
+    .await;
+
+    match rows {
+        Ok(rows) => {
+            let deliveries: Vec<Value> = rows
+                .iter()
+                .map(|r| {
+                    json!({
+                        "event": r.get::<String, _>("event"),
+                        "status_code": r.get::<Option<i32>, _>("status_code"),
+                        "error": r.get::<Option<String>, _>("error"),
+                        "attempts": r.get::<i32, _>("attempts"),
+                        "delivered": r.get::<Option<chrono::DateTime<chrono::Utc>>, _>("delivered_at").is_some(),
+                        "created_at": r.get::<chrono::DateTime<chrono::Utc>, _>("created_at"),
+                    })
+                })
+                .collect();
+            Json(json!({ "deliveries": deliveries })).into_response()
+        }
+        Err(e) => db_err(e),
+    }
+}
+
+/// POST /api/v1/settings/webhooks/:id/test
+///
+/// Send a sample payload now. Configuring a webhook and waiting for a real
+/// rollback to find out whether it works is a bad way to learn.
+pub async fn test_webhook(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(id): Path<Uuid>,
+) -> Response {
+    let exists = sqlx::query("SELECT id FROM webhooks WHERE id = $1 AND tenant_id = $2")
+        .bind(id)
+        .bind(auth.owning_tenant())
+        .fetch_optional(&state.db_pool)
+        .await;
+
+    match exists {
+        Ok(Some(_)) => {
+            repath_common::notify::dispatch_event(
+                state.db_pool.clone(),
+                state.http_client.clone(),
+                repath_common::notify::Event {
+                    kind: repath_common::notify::EventKind::Rollback,
+                    tenant_id: auth.owning_tenant().to_string(),
+                    rollout_id: None,
+                    rollout_name: "test-rollout".into(),
+                    detail: "This is a test delivery from Repath. No rollout was affected.".into(),
+                    context: json!({ "test": true }),
+                },
+            );
+            Json(json!({
+                "message": "Test event sent. Check the delivery log in a few seconds."
+            }))
+            .into_response()
+        }
+        Ok(None) => err(StatusCode::NOT_FOUND, "Webhook not found."),
+        Err(e) => db_err(e),
+    }
+}
+
+fn validate_webhook_url(url: &str) -> Result<(), String> {
+    if url.is_empty() {
+        return Err("Enter the URL Repath should POST to.".into());
+    }
+    let is_local = url.starts_with("http://localhost") || url.starts_with("http://127.0.0.1");
+    if !url.starts_with("https://") && !is_local {
+        return Err(
+            "Webhook URLs must use HTTPS — these payloads describe production deployments. \
+             (http://localhost is allowed for local testing.)"
+                .into(),
+        );
+    }
+    if url.len() > 2000 {
+        return Err("That URL is implausibly long.".into());
+    }
+    Ok(())
+}
+
+fn normalise_events(events: &[String]) -> Result<Vec<String>, String> {
+    let mut out = Vec::with_capacity(events.len());
+    for e in events {
+        let e = e.trim().to_ascii_lowercase();
+        if repath_common::notify::EventKind::parse(&e).is_none() {
+            return Err(format!(
+                "Unknown event '{e}'. Supported: rollback, advance, promote, provider_outage."
+            ));
+        }
+        if !out.contains(&e) {
+            out.push(e);
+        }
+    }
+    if out.is_empty() {
+        return Err("Subscribe to at least one event.".into());
+    }
+    Ok(out)
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Notification settings
+// ════════════════════════════════════════════════════════════════════════════
+
+#[derive(Deserialize)]
+pub struct SaveNotifications {
+    #[serde(default = "default_true")]
+    pub email_enabled: bool,
+    #[serde(default)]
+    pub email_address: Option<String>,
+    #[serde(default)]
+    pub slack_enabled: bool,
+    /// Omitted to keep the stored URL; empty string to clear it.
+    #[serde(default)]
+    pub slack_webhook_url: Option<String>,
+    #[serde(default)]
+    pub events: Vec<String>,
+}
+
+/// GET /api/v1/settings/notifications
+pub async fn get_notifications(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+) -> Response {
+    let row = sqlx::query(
+        "SELECT email_enabled, email_address, slack_enabled,
+                slack_url_sealed IS NOT NULL AS slack_configured, events
+           FROM notification_settings WHERE tenant_id = $1",
+    )
+    .bind(auth.owning_tenant())
+    .fetch_optional(&state.db_pool)
+    .await;
+
+    match row {
+        Ok(Some(r)) => Json(json!({
+            "email_enabled": r.get::<bool, _>("email_enabled"),
+            "email_address": r.get::<Option<String>, _>("email_address"),
+            "slack_enabled": r.get::<bool, _>("slack_enabled"),
+            "slack_configured": r.get::<bool, _>("slack_configured"),
+            "events": r.get::<Vec<String>, _>("events"),
+        }))
+        .into_response(),
+        // No row yet — report the defaults the schema would apply.
+        Ok(None) => Json(json!({
+            "email_enabled": true,
+            "email_address": null,
+            "slack_enabled": false,
+            "slack_configured": false,
+            "events": ["rollback", "provider_outage"],
+        }))
+        .into_response(),
+        Err(e) => db_err(e),
+    }
+}
+
+/// PUT /api/v1/settings/notifications
+pub async fn save_notifications(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Json(body): Json<SaveNotifications>,
+) -> Response {
+    let tenant = auth.owning_tenant();
+
+    let events = if body.events.is_empty() {
+        vec!["rollback".to_string(), "provider_outage".to_string()]
+    } else {
+        match normalise_events(&body.events) {
+            Ok(e) => e,
+            Err(message) => return err(StatusCode::BAD_REQUEST, message),
+        }
+    };
+
+    if let Some(ref email) = body.email_address {
+        if !email.trim().is_empty() && !email.contains('@') {
+            return err(
+                StatusCode::BAD_REQUEST,
+                "That does not look like an email address.",
+            );
+        }
+    }
+
+    // Three cases: a new URL to seal, an explicit clear, or leave as-is.
+    let slack_sealed: Option<Option<String>> = match body.slack_webhook_url.as_deref() {
+        None => None,
+        Some("") => Some(None),
+        Some(url) => {
+            if !url.starts_with("https://hooks.slack.com/") {
+                return err(
+                    StatusCode::BAD_REQUEST,
+                    "That is not a Slack incoming-webhook URL — they start with \
+                     https://hooks.slack.com/",
+                );
+            }
+            if let Some(resp) = require_encryption() {
+                return resp;
+            }
+            match crypto::encrypt(url) {
+                Ok(s) => Some(Some(s)),
+                Err(_) => {
+                    return err(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Could not securely store the Slack URL.",
+                    )
+                }
+            }
+        }
+    };
+
+    let result = match slack_sealed {
+        Some(sealed) => {
+            sqlx::query(
+                "INSERT INTO notification_settings
+                     (tenant_id, email_enabled, email_address, slack_enabled, slack_url_sealed, events, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                 ON CONFLICT (tenant_id) DO UPDATE SET
+                     email_enabled = EXCLUDED.email_enabled,
+                     email_address = EXCLUDED.email_address,
+                     slack_enabled = EXCLUDED.slack_enabled,
+                     slack_url_sealed = EXCLUDED.slack_url_sealed,
+                     events = EXCLUDED.events,
+                     updated_at = NOW()",
+            )
+            .bind(tenant)
+            .bind(body.email_enabled)
+            .bind(body.email_address.as_deref().map(str::trim))
+            .bind(body.slack_enabled)
+            .bind(sealed)
+            .bind(&events)
+            .execute(&state.db_pool)
+            .await
+        }
+        None => {
+            sqlx::query(
+                "INSERT INTO notification_settings
+                     (tenant_id, email_enabled, email_address, slack_enabled, events, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, NOW())
+                 ON CONFLICT (tenant_id) DO UPDATE SET
+                     email_enabled = EXCLUDED.email_enabled,
+                     email_address = EXCLUDED.email_address,
+                     slack_enabled = EXCLUDED.slack_enabled,
+                     events = EXCLUDED.events,
+                     updated_at = NOW()",
+            )
+            .bind(tenant)
+            .bind(body.email_enabled)
+            .bind(body.email_address.as_deref().map(str::trim))
+            .bind(body.slack_enabled)
+            .bind(&events)
+            .execute(&state.db_pool)
+            .await
+        }
+    };
+
+    match result {
+        Ok(_) => Json(json!({ "message": "Notification preferences saved." })).into_response(),
+        Err(e) => db_err(e),
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Gateway options
+// ════════════════════════════════════════════════════════════════════════════
+
+#[derive(Deserialize)]
+pub struct SaveGateway {
+    pub request_timeout_seconds: Option<i32>,
+    pub eval_sample_rate: Option<f64>,
+}
+
+/// GET /api/v1/settings/gateway
+pub async fn get_gateway_settings(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+) -> Response {
+    let row =
+        sqlx::query("SELECT request_timeout_seconds, eval_sample_rate FROM tenants WHERE id = $1")
+            .bind(auth.owning_tenant())
+            .fetch_optional(&state.db_pool)
+            .await;
+
+    match row {
+        Ok(Some(r)) => Json(json!({
+            "request_timeout_seconds": r.get::<i32, _>("request_timeout_seconds"),
+            "eval_sample_rate": r.get::<f64, _>("eval_sample_rate"),
+        }))
+        .into_response(),
+        Ok(None) => err(StatusCode::NOT_FOUND, "Tenant not found."),
+        Err(e) => db_err(e),
+    }
+}
+
+/// PUT /api/v1/settings/gateway
+pub async fn save_gateway_settings(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Json(body): Json<SaveGateway>,
+) -> Response {
+    if let Some(t) = body.request_timeout_seconds {
+        if !(5..=600).contains(&t) {
+            return err(
+                StatusCode::BAD_REQUEST,
+                "Request timeout must be between 5 and 600 seconds.",
+            );
+        }
+    }
+    if let Some(r) = body.eval_sample_rate {
+        if !(0.0..=1.0).contains(&r) {
+            return err(
+                StatusCode::BAD_REQUEST,
+                "Sample rate is a fraction between 0 and 1 — 0.25 means a quarter of requests.",
+            );
+        }
+    }
+
+    let result = sqlx::query(
+        "UPDATE tenants
+            SET request_timeout_seconds = COALESCE($2, request_timeout_seconds),
+                eval_sample_rate        = COALESCE($3, eval_sample_rate),
+                updated_at = NOW()
+          WHERE id = $1",
+    )
+    .bind(auth.owning_tenant())
+    .bind(body.request_timeout_seconds)
+    .bind(body.eval_sample_rate)
+    .execute(&state.db_pool)
+    .await;
+
+    match result {
+        Ok(_) => Json(json!({ "message": "Gateway settings saved." })).into_response(),
+        Err(e) => db_err(e),
     }
 }

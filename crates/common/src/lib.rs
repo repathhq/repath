@@ -6,7 +6,9 @@
 //! It is deliberately kept free of infrastructure concerns (no database, no HTTP, no async runtime).
 
 pub mod config;
+pub mod crypto;
 pub mod error;
+pub mod notify;
 pub mod types;
 
 pub use error::{Error, Result};
