@@ -38,6 +38,51 @@ function usePolling<T>(
   return { data, loading, error, refresh: fetch };
 }
 
+/**
+ * One-shot fetch with a manual `refresh`, for resources that change only when
+ * the user changes them — routing rules, provider keys, webhooks. Polling
+ * those would be pointless traffic.
+ *
+ * The fetcher is held in a ref so callers can pass an inline closure without
+ * re-triggering the effect on every render, and the dependency list stays an
+ * array literal.
+ */
+export function useResource<T>(fetcher: () => Promise<T>): {
+  data: T | null;
+  loading: boolean;
+  error: Error | null;
+  refresh: () => Promise<void>;
+} {
+  const [data, setData] = useState<T | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  // Keep the latest fetcher without making it a dependency. Assigned inside an
+  // effect rather than during render — writing a ref while rendering is not
+  // safe under concurrent rendering.
+  const fetcherRef = useRef(fetcher);
+  useEffect(() => {
+    fetcherRef.current = fetcher;
+  }, [fetcher]);
+
+  const refresh = useCallback(async () => {
+    try {
+      setData(await fetcherRef.current());
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e : new Error(String(e)));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return { data, loading, error, refresh };
+}
+
 export function useRollouts() {
   return usePolling(() => api.rollouts.list(), 3_000);
 }

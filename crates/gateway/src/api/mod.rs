@@ -130,6 +130,10 @@ fn core_routes() -> Router<AppState> {
             get(settings::get_notifications).put(settings::save_notifications),
         )
         .route(
+            "/settings/profile",
+            axum::routing::put(settings::save_profile),
+        )
+        .route(
             "/settings/gateway",
             get(settings::get_gateway_settings).put(settings::save_gateway_settings),
         )

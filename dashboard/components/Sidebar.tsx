@@ -5,7 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
-  GitBranch, CreditCard, Settings, Menu, X,
+  GitBranch, CreditCard, Settings, Menu, X, Zap,
   HelpCircle, ExternalLink, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,7 @@ import ProviderHealth from "@/components/ProviderHealth";
 
 const nav = [
   { href: "/rollouts",  label: "Rollouts",  icon: GitBranch },
+  { href: "/routing",   label: "Routing",   icon: Zap },
   { href: "/billing",   label: "Billing",   icon: CreditCard },
   { href: "/settings",  label: "Settings",  icon: Settings },
 ];

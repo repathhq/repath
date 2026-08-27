@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySession } from "@/lib/auth";
 
-const PROTECTED = ["/rollouts", "/billing", "/settings", "/onboarding"];
+const PROTECTED = ["/rollouts", "/routing", "/billing", "/settings", "/onboarding"];
 const AUTH_PAGES = ["/login", "/signup"];
 
 /**
@@ -40,6 +40,7 @@ export async function proxy(req: NextRequest) {
 export const config = {
   matcher: [
     "/rollouts/:path*",
+    "/routing/:path*",
     "/billing/:path*",
     "/settings/:path*",
     "/onboarding/:path*",

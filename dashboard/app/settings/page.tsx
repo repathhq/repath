@@ -8,6 +8,10 @@ import {
   CreditCard, Globe, Webhook, Eye, EyeOff, Loader2
 } from "lucide-react";
 
+import ProviderKeys from "@/components/settings/ProviderKeys";
+import Webhooks from "@/components/settings/Webhooks";
+import Notifications from "@/components/settings/Notifications";
+
 const FONT = { fontFamily: "'Inter', system-ui, sans-serif" };
 const SAVE_BTN = "px-4 py-2 bg-violet-600 text-white text-[13px] font-semibold rounded-lg hover:bg-violet-700 transition-colors shadow-sm disabled:opacity-50";
 
@@ -238,6 +242,109 @@ export default function SettingsPage() {
       .catch(() => {});
   }, []);
 
+  // ── Profile ───────────────────────────────────────────────────────────
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  async function saveProfile() {
+    setSavingProfile(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/gateway/settings/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: profileName, email: profileEmail }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error?.message ?? "Could not save your profile.");
+      setMessage({ type: "success", text: "Profile saved." });
+    } catch (e) {
+      setMessage({
+        type: "error",
+        text: e instanceof Error ? e.message : "Could not save your profile.",
+      });
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
+  // ── Password ──────────────────────────────────────────────────────────
+  const [currentPw, setCurrentPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [savingPw, setSavingPw] = useState(false);
+
+  async function changePassword() {
+    setMessage(null);
+
+    // Check the confirmation here so the user is told immediately, rather
+    // than after a round trip that was never going to succeed.
+    if (newPw !== confirmPw) {
+      setMessage({ type: "error", text: "The two new passwords do not match." });
+      return;
+    }
+
+    setSavingPw(true);
+    try {
+      const res = await fetch("/api/account/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ current_password: currentPw, new_password: newPw }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error?.message ?? "Could not update your password.");
+      setCurrentPw("");
+      setNewPw("");
+      setConfirmPw("");
+      setMessage({ type: "success", text: "Password updated." });
+    } catch (e) {
+      setMessage({
+        type: "error",
+        text: e instanceof Error ? e.message : "Could not update your password.",
+      });
+    } finally {
+      setSavingPw(false);
+    }
+  }
+
+  // ── Gateway options ───────────────────────────────────────────────────
+  const [gwTimeout, setGwTimeout] = useState(60);
+  const [gwSampleRate, setGwSampleRate] = useState(1);
+  const [savingGateway, setSavingGateway] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/gateway/settings/gateway")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d) {
+          setGwTimeout(d.request_timeout_seconds);
+          setGwSampleRate(d.eval_sample_rate);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  async function saveGateway() {
+    setSavingGateway(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/gateway/settings/gateway", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          request_timeout_seconds: gwTimeout,
+          eval_sample_rate: gwSampleRate,
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error?.message ?? "Could not save.");
+      setMessage({ type: "success", text: "Gateway settings saved." });
+    } catch (e) {
+      setMessage({ type: "error", text: e instanceof Error ? e.message : "Could not save." });
+    } finally {
+      setSavingGateway(false);
+    }
+  }
+
   const handleDeleteAccount = async () => {
     if (deleteConfirm !== "delete my account") return;
 
@@ -306,86 +413,44 @@ export default function SettingsPage() {
           {/* ── PROFILE ── */}
           {active === "profile" && (
             <div>
-              <Section title="Profile" desc="Your personal information and display settings.">
+              <Section title="Profile" desc="Your account details.">
                 <Field label="Full name">
                   <Input value={profileName} onChange={setProfileName} placeholder="Your name" />
                 </Field>
-                <Field label="Email address" hint="Used for billing and alerts.">
+                <Field label="Email address" hint="Used for sign-in, billing and alerts.">
                   <Input value={profileEmail} onChange={setProfileEmail} type="email" placeholder="you@company.com" />
-                </Field>
-                <Field label="Company" hint="Optional.">
-                  <Input placeholder="Your company name" />
-                </Field>
-                <Field label="Time zone">
-                  <select className="px-3 py-2 rounded-lg border border-gray-200 text-[14px] text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white max-w-sm w-full">
-                    <option>Asia/Kolkata (IST, UTC+5:30)</option>
-                    <option>America/New_York (EST, UTC-5)</option>
-                    <option>Europe/London (GMT, UTC+0)</option>
-                    <option>Asia/Singapore (SGT, UTC+8)</option>
-                  </select>
                 </Field>
               </Section>
               <button
                 className={SAVE_BTN}
-                onClick={() => setMessage({ type: "success", text: "Profile saved." })}
+                disabled={savingProfile}
+                onClick={saveProfile}
               >
-                Save changes
+                {savingProfile ? "Saving…" : "Save changes"}
               </button>
             </div>
           )}
 
-          {/* ── API KEYS ── */}
           {active === "api" && (
             <div>
-              <Section title="API Keys" desc="Use these to authenticate with the Repath management API.">
-                <Field label="API Token" hint="Keep this secret. Rotate if compromised.">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2 max-w-sm">
-                      <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50">
-                        <code className="text-[13px] font-mono text-gray-700 truncate flex-1">
-                          {showSecret ? "3f6fb762c63146ad52cb80a..." : "repath_••••••••••••••••••••"}
-                        </code>
-                        <button onClick={() => setShowSecret(!showSecret)} className="text-gray-400 hover:text-gray-700">
-                          {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                      <button
-                        onClick={() => navigator.clipboard.writeText("3f6fb762c63146ad52cb80a09b262dbbf52b88ddb33633ada05426b16128365b")}
-                        className="p-2 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
-                      >
-                        <Copy className="w-4 h-4 text-gray-400" />
-                      </button>
-                    </div>
-                    <button className="flex items-center gap-1.5 text-[13px] text-amber-600 hover:text-amber-700 font-medium">
-                      <RefreshCw className="w-3.5 h-3.5" /> Rotate token
-                    </button>
-                  </div>
+              <Section title="Repath API key" desc="Authenticates your app and the CLI with Repath.">
+                <Field
+                  label="API key"
+                  hint="Send as the X-Repath-Key header. Your provider key stays in Authorization."
+                >
+                  <ApiKeyField tenantId={session?.tenantId} prefix={usage?.api_key_prefix} />
                 </Field>
-                <Field label="Tenant ID" hint="Your account identifier. Authenticate with the API key above, not this.">
+                <Field label="Tenant ID" hint="Your account identifier. Authenticate with the key above, not this.">
                   <CopyField value={session?.tenantId ?? "—"} />
                 </Field>
               </Section>
 
-              <Section title="Provider API Keys" desc="Keys used by Repath to call LLM providers on your behalf.">
-                <Field label="OpenAI API Key">
-                  <input type="password" placeholder="sk-proj-..."
-                    className="w-full max-w-sm px-3 py-2 rounded-lg border border-gray-200 text-[14px] text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white" />
-                </Field>
-                <Field label="Anthropic API Key">
-                  <input type="password" placeholder="sk-ant-..."
-                    className="px-3 py-2 rounded-lg border border-gray-200 text-[14px] text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white max-w-sm w-full" />
-                </Field>
-                <Field label="OpenRouter API Key" hint="Used as last-resort fallback if primary providers are down.">
-                  <input type="password" placeholder="sk-or-v1-..."
-                    className="px-3 py-2 rounded-lg border border-gray-200 text-[14px] text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white max-w-sm w-full" />
-                </Field>
-              </Section>
-              <button
-                className={SAVE_BTN}
-                onClick={() => setMessage({ type: "success", text: "API keys saved." })}
+              <Section
+                title="Provider API keys"
+                desc="Used only when Repath calls a provider on your behalf — failover, or a routing rule."
               >
-                Save keys
-              </button>
+                <ProviderKeys />
+              </Section>
             </div>
           )}
 
@@ -416,146 +481,94 @@ export default function SettingsPage() {
                 <Field label="Region">
                   <span className="text-[14px] text-gray-700 font-medium">Mumbai — ap-south-1</span>
                 </Field>
-                <Field label="Request timeout" hint="Max seconds to wait for provider response.">
+                <Field label="Request timeout" hint="How long to wait for a provider before giving up.">
                   <div className="flex items-center gap-2">
-                    <input type="number" defaultValue={60} className="w-24 px-3 py-2 rounded-lg border border-gray-200 text-[14px] text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white" />
+                    <input
+                      type="number"
+                      min={5}
+                      max={600}
+                      value={gwTimeout}
+                      onChange={(e) => setGwTimeout(Number(e.target.value))}
+                      className="w-24 px-3 py-2 rounded-lg border border-gray-200 text-[14px] text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white"
+                    />
                     <span className="text-[13px] text-gray-500">seconds</span>
                   </div>
                 </Field>
-                <Field label="Controller interval" hint="How often the controller checks metrics.">
+                <Field
+                  label="Evaluation sample rate"
+                  hint="Fraction of requests scored by the LLM judge. Lower this to stay inside quota on high-volume traffic."
+                >
                   <div className="flex items-center gap-2">
-                    <input type="number" defaultValue={30} className="w-24 px-3 py-2 rounded-lg border border-gray-200 text-[14px] text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white" />
-                    <span className="text-[13px] text-gray-500">seconds</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={gwSampleRate}
+                      onChange={(e) => setGwSampleRate(Number(e.target.value))}
+                      className="w-24 px-3 py-2 rounded-lg border border-gray-200 text-[14px] text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white"
+                    />
+                    <span className="text-[13px] text-gray-500">
+                      {Math.round(gwSampleRate * 100)}% of requests
+                    </span>
                   </div>
                 </Field>
               </Section>
-              <button
-                className={SAVE_BTN}
-                onClick={() => setMessage({ type: "success", text: "Gateway settings saved." })}
-              >
-                Save gateway settings
+              <button className={SAVE_BTN} disabled={savingGateway} onClick={saveGateway}>
+                {savingGateway ? "Saving…" : "Save gateway settings"}
               </button>
             </div>
           )}
 
           {/* ── NOTIFICATIONS ── */}
           {active === "notifications" && (
-            <div>
-              <Section title="Email Notifications" desc="Choose which events trigger email alerts.">
-                {[
-                  { label: "Rollback triggered",    hint: "When auto-rollback fires due to quality drop.", default: true },
-                  { label: "Rollout promoted",       hint: "When a rollout reaches 100% successfully.",    default: true },
-                  { label: "Rollout advanced",       hint: "When traffic advances to the next step.",      default: false },
-                  { label: "Provider outage",        hint: "When a provider returns errors > 20%.",        default: true },
-                  { label: "Trial expiring",         hint: "3 days before your trial ends.",               default: true },
-                  { label: "Weekly summary",         hint: "Weekly digest of rollout activity.",           default: false },
-                ].map(item => (
-                  <Field key={item.label} label={item.label} hint={item.hint}>
-                    <Toggle defaultChecked={item.default} />
-                  </Field>
-                ))}
-              </Section>
-
-              <Section title="Slack Notifications" desc="Send alerts to a Slack channel.">
-                <Field label="Webhook URL">
-                  <input type="url" placeholder="https://hooks.slack.com/services/..."
-                    className="px-3 py-2 rounded-lg border border-gray-200 text-[14px] text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white max-w-sm w-full" />
-                </Field>
-                <Field label="Alert channel">
-                  <Input placeholder="#ai-deployments" />
-                </Field>
-              </Section>
-              <button
-                className={SAVE_BTN}
-                onClick={() => setMessage({ type: "success", text: "Notification preferences saved." })}
-              >
-                Save notifications
-              </button>
-            </div>
+            <Section
+              title="Notifications"
+              desc="Where Repath tells you something needs attention."
+            >
+              <Notifications />
+            </Section>
           )}
 
-          {/* ── WEBHOOKS ── */}
           {active === "webhooks" && (
-            <div>
-              <Section title="Webhooks" desc="Repath will POST to your endpoint on rollout events.">
-                <Field label="Endpoint URL">
-                  <Input placeholder="https://your-app.com/webhooks/repath" />
-                </Field>
-                <Field label="Signing secret" hint="Used to verify webhook signatures.">
-                  <CopyField value="whsec_••••••••••••••••" />
-                </Field>
-                <Field label="Events to send">
-                  <div className="space-y-2">
-                    {["rollback", "advance", "promote", "provider_outage"].map(ev => (
-                      <label key={ev} className="flex items-center gap-2.5 cursor-pointer">
-                        <input type="checkbox" defaultChecked className="rounded border-gray-300 text-violet-600 focus:ring-violet-500" />
-                        <span className="text-[13px] font-mono text-gray-700">{ev}</span>
-                      </label>
-                    ))}
-                  </div>
-                </Field>
-              </Section>
-              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 mb-6">
-                <p className="text-[12px] text-gray-500 font-mono">
-                  Verify with: <code className="text-violet-600">X-Repath-Signature: sha256=...</code>
-                </p>
-              </div>
-              <button
-                className={SAVE_BTN}
-                onClick={() => setMessage({ type: "success", text: "Webhook configuration saved." })}
-              >
-                Save webhook
-              </button>
-            </div>
+            <Section
+              title="Webhooks"
+              desc="Repath POSTs to your endpoint when a rollout changes state."
+            >
+              <Webhooks />
+            </Section>
           )}
 
-          {/* ── SECURITY ── */}
           {active === "security" && (
             <div>
               <Section title="Password" desc="Change your account password.">
                 <Field label="Current password">
-                  <Input type="password" placeholder="Current password" />
+                  <Input
+                    type="password"
+                    value={currentPw}
+                    onChange={setCurrentPw}
+                    placeholder="Current password"
+                  />
                 </Field>
-                <Field label="New password">
-                  <Input type="password" placeholder="At least 8 characters" />
+                <Field label="New password" hint="At least 8 characters.">
+                  <Input type="password" value={newPw} onChange={setNewPw} placeholder="New password" />
                 </Field>
                 <Field label="Confirm new password">
-                  <Input type="password" placeholder="Repeat new password" />
+                  <Input
+                    type="password"
+                    value={confirmPw}
+                    onChange={setConfirmPw}
+                    placeholder="Repeat new password"
+                  />
                 </Field>
               </Section>
 
-              <Section title="Sessions" desc="Active login sessions on your account.">
-                <div className="space-y-3">
-                  {[
-                    { device: "MacBook Air — Chrome", location: "Mumbai, India", time: "Active now", current: true },
-                    { device: "iPhone — Safari", location: "Mumbai, India", time: "2 hours ago", current: false },
-                  ].map(s => (
-                    <div key={s.device} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0">
-                      <div>
-                        <p className="text-[13px] font-medium text-gray-900 flex items-center gap-2">
-                          {s.device}
-                          {s.current && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100">Current</span>}
-                        </p>
-                        <p className="text-[12px] text-gray-400 mt-0.5">{s.location} · {s.time}</p>
-                      </div>
-                      {!s.current && (
-                        <button className="text-[12px] text-red-500 hover:text-red-700 font-medium">Revoke</button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </Section>
-
-              <button
-                className={SAVE_BTN}
-                onClick={() => setMessage({ type: "success", text: "Password updated." })}
-              >
-                Update password
+              <button className={SAVE_BTN} disabled={savingPw} onClick={changePassword}>
+                {savingPw ? "Updating…" : "Update password"}
               </button>
             </div>
           )}
 
-          {/* ── BILLING ── */}
           {active === "billing" && (
             <div>
               <Section title="Current Plan">

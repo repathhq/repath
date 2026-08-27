@@ -1243,3 +1243,74 @@ pub async fn save_gateway_settings(
         Err(e) => db_err(e),
     }
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// Profile
+// ════════════════════════════════════════════════════════════════════════════
+
+#[derive(Deserialize)]
+pub struct SaveProfile {
+    pub name: Option<String>,
+    pub email: Option<String>,
+    /// bcrypt hash, computed by the dashboard. The gateway never sees a
+    /// plaintext password — hashing stays where signup already does it, so
+    /// there is exactly one implementation to keep correct.
+    pub password_hash: Option<String>,
+}
+
+/// PUT /api/v1/settings/profile
+pub async fn save_profile(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Json(body): Json<SaveProfile>,
+) -> Response {
+    if let Some(ref name) = body.name {
+        if name.trim().is_empty() {
+            return err(StatusCode::BAD_REQUEST, "Your name cannot be empty.");
+        }
+        if name.len() > 255 {
+            return err(StatusCode::BAD_REQUEST, "That name is too long.");
+        }
+    }
+    if let Some(ref email) = body.email {
+        let e = email.trim();
+        if e.is_empty() || !e.contains('@') || e.len() > 255 {
+            return err(
+                StatusCode::BAD_REQUEST,
+                "That does not look like an email address.",
+            );
+        }
+    }
+
+    let result = sqlx::query(
+        "UPDATE tenants
+            SET name          = COALESCE($2, name),
+                email         = COALESCE($3, email),
+                password_hash = COALESCE($4, password_hash),
+                updated_at    = NOW()
+          WHERE id = $1
+        RETURNING name, email",
+    )
+    .bind(auth.owning_tenant())
+    .bind(body.name.as_deref().map(str::trim))
+    .bind(body.email.as_deref().map(str::trim))
+    .bind(body.password_hash.as_deref())
+    .fetch_optional(&state.db_pool)
+    .await;
+
+    match result {
+        Ok(Some(row)) => Json(json!({
+            "name": row.get::<String, _>("name"),
+            "email": row.get::<String, _>("email"),
+            "message": "Saved."
+        }))
+        .into_response(),
+        Ok(None) => err(StatusCode::NOT_FOUND, "Account not found."),
+        // Email is unique across tenants.
+        Err(sqlx::Error::Database(ref d)) if d.code().as_deref() == Some("23505") => err(
+            StatusCode::CONFLICT,
+            "Another account already uses that email address.",
+        ),
+        Err(e) => db_err(e),
+    }
+}

@@ -125,6 +125,97 @@ export interface CreatedRollout {
   message: string;
 }
 
+// ── Routing rules ──────────────────────────────────────────────────────────
+
+export type RuleField = "input_tokens" | "model" | "path" | "content" | "header";
+export type RuleOperator =
+  | "eq" | "neq" | "lt" | "lte" | "gt" | "gte"
+  | "contains" | "not_contains" | "starts_with" | "exists";
+
+export interface RuleCondition {
+  field: RuleField;
+  op: RuleOperator;
+  value: string;
+  header?: string;
+}
+
+export interface RuleAction {
+  provider: string;
+  model: string;
+}
+
+export interface RoutingRule {
+  id: string;
+  name: string;
+  priority: number;
+  enabled: boolean;
+  condition: RuleCondition;
+  action: RuleAction;
+  match_count: number;
+  last_matched_at: string | null;
+}
+
+export interface RuleInput {
+  name: string;
+  priority: number;
+  enabled: boolean;
+  condition: RuleCondition;
+  action: RuleAction;
+}
+
+export interface RuleTestResult {
+  estimated_input_tokens: number;
+  rules: Array<{
+    name: string;
+    priority: number;
+    matches: boolean;
+    would_route_to: RuleAction;
+  }>;
+  result:
+    | { matched: true; rule: string; provider: string; model: string }
+    | { matched: false; explanation: string };
+}
+
+// ── Providers & failover ───────────────────────────────────────────────────
+
+export interface ProviderCredential {
+  provider: string;
+  key_hint: string;
+  updated_at: string;
+}
+
+// ── Webhooks & notifications ───────────────────────────────────────────────
+
+export interface Webhook {
+  id: string;
+  url: string;
+  events: string[];
+  enabled: boolean;
+  created_at: string;
+}
+
+export interface WebhookDelivery {
+  event: string;
+  status_code: number | null;
+  error: string | null;
+  attempts: number;
+  delivered: boolean;
+  created_at: string;
+}
+
+export interface NotificationSettings {
+  email_enabled: boolean;
+  email_address: string | null;
+  slack_enabled: boolean;
+  slack_configured: boolean;
+  events: string[];
+}
+
+export interface GatewaySettings {
+  request_timeout_seconds: number;
+  eval_sample_rate: number;
+}
+
 export interface SystemHealth {
   status: string;
   database: string;
@@ -150,6 +241,21 @@ async function postApi(path: string): Promise<{ message: string }> {
 async function postJson<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${PROXY}${path}`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(
+      (err as { error?: { message?: string } })?.error?.message ?? `API error ${res.status}`
+    );
+  }
+  return res.json();
+}
+
+async function putJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${PROXY}${path}`, {
+    method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
@@ -191,5 +297,48 @@ export const api = {
   },
   system: {
     health: () => fetchApi<SystemHealth>("/system/health"),
+  },
+
+  routing: {
+    list: () => fetchApi<{ rules: RoutingRule[] }>("/routing/rules"),
+    create: (rule: RuleInput) => postJson<{ id: string }>("/routing/rules", rule),
+    update: (id: string, rule: RuleInput) => putJson<{ id: string }>(`/routing/rules/${id}`, rule),
+    remove: (id: string) => deleteApi(`/routing/rules/${id}`),
+    test: (sample: { model?: string; content?: string; headers?: Record<string, string> }) =>
+      postJson<RuleTestResult>("/routing/test", sample),
+  },
+
+  providers: {
+    list: () => fetchApi<{ providers: ProviderCredential[] }>("/settings/providers"),
+    save: (provider: string, api_key: string) =>
+      putJson<{ provider: string; key_hint: string }>("/settings/providers", { provider, api_key }),
+    remove: (provider: string) => deleteApi(`/settings/providers/${provider}`),
+  },
+
+  failover: {
+    get: () => fetchApi<{ chain: string[] }>("/settings/failover"),
+    save: (chain: string[]) => putJson<{ chain: string[] }>("/settings/failover", { chain }),
+  },
+
+  webhooks: {
+    list: () => fetchApi<{ webhooks: Webhook[] }>("/settings/webhooks"),
+    create: (url: string, events: string[]) =>
+      postJson<{ id: string; signing_secret: string }>("/settings/webhooks", { url, events }),
+    remove: (id: string) => deleteApi(`/settings/webhooks/${id}`),
+    deliveries: (id: string) =>
+      fetchApi<{ deliveries: WebhookDelivery[] }>(`/settings/webhooks/${id}/deliveries`),
+    test: (id: string) => postApi(`/settings/webhooks/${id}/test`),
+  },
+
+  notifications: {
+    get: () => fetchApi<NotificationSettings>("/settings/notifications"),
+    save: (settings: Partial<NotificationSettings> & { slack_webhook_url?: string }) =>
+      putJson<{ message: string }>("/settings/notifications", settings),
+  },
+
+  gatewaySettings: {
+    get: () => fetchApi<GatewaySettings>("/settings/gateway"),
+    save: (settings: Partial<GatewaySettings>) =>
+      putJson<{ message: string }>("/settings/gateway", settings),
   },
 };

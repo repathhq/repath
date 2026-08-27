@@ -377,14 +377,16 @@ pub async fn get_usage(
         SELECT
             t.plan,
             t.eval_quota_monthly,
-            t.evals_used_this_month,
+            -- Read the same counter the quota check enforces against. This
+            -- previously joined eval_usage, a table nothing writes to, so the
+            -- dashboard always showed zero usage while the gateway was
+            -- separately counting and could cut a tenant off without warning.
+            t.evals_used_this_month AS this_month_evals,
             t.trial_ends_at,
             t.active,
-            COALESCE(u.evals_count, 0) AS this_month_evals,
+            t.api_key_prefix,
             date_trunc('month', NOW()) AS month_start
         FROM tenants t
-        LEFT JOIN eval_usage u ON u.tenant_id = t.id
-            AND u.month = date_trunc('month', NOW())::date
         WHERE t.id = $1
         "#,
     )
@@ -395,7 +397,7 @@ pub async fn get_usage(
     match result {
         Ok(Some(row)) => {
             let quota: i32 = row.get("eval_quota_monthly");
-            let used: i64 = row.get("this_month_evals");
+            let used: i64 = row.get::<i32, _>("this_month_evals") as i64;
             let trial_ends_at: Option<DateTime<Utc>> = row.get("trial_ends_at");
 
             let trial_active = trial_ends_at.map(|t| t > Utc::now()).unwrap_or(false);
@@ -409,6 +411,7 @@ pub async fn get_usage(
                 "trial_active": trial_active,
                 "trial_ends_at": trial_ends_at,
                 "active": row.get::<bool, _>("active"),
+                "api_key_prefix": row.try_get::<Option<String>, _>("api_key_prefix").ok().flatten(),
                 "month_start": row.get::<DateTime<Utc>, _>("month_start"),
             }))
             .into_response()
