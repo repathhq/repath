@@ -53,6 +53,9 @@ use uuid::Uuid;
 ///
 /// These are hop-by-hop headers (RFC 9110) plus headers that would confuse the
 /// upstream or expose internal infrastructure details.
+/// Largest request body we will buffer. Matches the previous inline 10MB cap.
+const MAX_BODY_BYTES: usize = 10 * 1024 * 1024;
+
 static BLOCKED_HEADERS: &[&str] = &[
     "connection",
     "keep-alive",
@@ -158,6 +161,16 @@ async fn proxy_inner(
         .map(|pq| pq.as_str().to_owned())
         .unwrap_or_default();
 
+    // Read the body up front. Routing rules match on prompt size, requested
+    // model and content, so the body has to be in hand before any routing
+    // decision — not after, as it was when a rollout was the only mechanism.
+    let raw_body = axum::body::to_bytes(body, MAX_BODY_BYTES)
+        .await
+        .map_err(|e| Error::Network {
+            context: "Failed to read request body".to_string(),
+            source: e.into(),
+        })?;
+
     // ── Version selection (lock-free ArcSwap read) ────────────────────────
     let cache = state.rollout_cache.load();
     let session_id = extract_session_id(&parts.headers);
@@ -185,7 +198,21 @@ async fn proxy_inner(
         .and_then(|v| v.to_str().ok())
         .and_then(|s| uuid::Uuid::parse_str(s).ok());
 
-    let active_rollout = if !entitled {
+    // ── Conditional routing rules ─────────────────────────────────────────
+    //
+    // Rules are checked before rollouts. A request captured by a rule is
+    // served by that rule and takes no part in a canary: mixing the two would
+    // feed a rollout quality data from traffic it never chose, which makes its
+    // advance and rollback decisions meaningless.
+    let routing = state.routing_cache.load();
+    let matched_rule = if entitled {
+        let facts = build_request_facts(&raw_body, &path, &parts.headers);
+        routing.rules.first_match(&tenant_id_for_routing, &facts)
+    } else {
+        None
+    };
+
+    let active_rollout = if !entitled || matched_rule.is_some() {
         None
     } else {
         requested_rollout_id
@@ -198,16 +225,31 @@ async fn proxy_inner(
             .or_else(|| cache.active_for(&tenant_id_for_routing))
     };
 
-    let (version, rollout_id) = match active_rollout {
-        Some(rollout) => {
+    let tenant_routing = routing.routing_for(&tenant_id_for_routing);
+
+    let (version, rollout_id) = match (&matched_rule, active_rollout) {
+        (Some(rule), _) => {
+            debug!(
+                rule = %rule.name,
+                provider = %rule.action.provider,
+                model = %rule.action.model,
+                "Routing rule matched"
+            );
+            span.record("routing_rule", rule.name.as_str());
+            // Counting is best-effort and detached — never delay a request
+            // to update a dashboard number.
+            crate::routing::record_rule_match(state.db_pool.clone(), rule.id);
+            (version_from_rule(rule), None)
+        }
+        (None, Some(rollout)) => {
             let assignment = select_version(rollout, session_id.as_deref());
             let version = active_version(rollout, assignment);
             span.record("rollout_id", rollout.rollout_id.to_string());
             span.record("version_id", version.version_id.to_string());
             (version, Some(rollout.rollout_id))
         }
-        None => {
-            // No active rollout for this tenant — pass through to default provider
+        (None, None) => {
+            // No rule and no active rollout — pass straight through.
             let version = default_version(&state)?;
             (version, None)
         }
@@ -245,14 +287,11 @@ async fn proxy_inner(
         upstream_path
     );
 
-    // Reconstruct the request to pass to read_request_body
-    let req = Request::from_parts(parts, body);
-
     // Detect provider for request/response translation
     let detected_provider = Provider::from_url(&version.provider_url);
 
     // Read body; optionally inject system prompt for candidate version
-    let (body_bytes_raw, is_streaming) = read_request_body(req, &version).await?;
+    let (body_bytes_raw, is_streaming) = prepare_request_body(raw_body, &version);
 
     // Translate request body for non-OpenAI providers (e.g. Anthropic format)
     let body_bytes =
@@ -265,9 +304,14 @@ async fn proxy_inner(
     // ── Forward to upstream with retry + failover ─────────────────────────
     let start = Instant::now();
 
-    // Build fallback chain: empty for now (future: load from tenant config).
-    // OpenRouter is auto-added as last-resort if OPENROUTER_API_KEY is set.
-    let fallback_chain = build_fallback_chain(&version.provider_url, &[]);
+    // The tenant's configured failover chain, with their own decrypted keys
+    // attached. Previously this was a hardcoded empty list, so the per-tenant
+    // chain the product advertised never actually applied.
+    let tenant_fallbacks = tenant_routing
+        .as_deref()
+        .map(build_tenant_fallbacks)
+        .unwrap_or_default();
+    let fallback_chain = build_fallback_chain(&version.provider_url, &tenant_fallbacks);
 
     let (upstream_response, actual_provider_url) = send_with_failover(
         &state,
@@ -279,6 +323,7 @@ async fn proxy_inner(
         &fallback_chain,
         upstream_path,
         request_id,
+        &tenant_id_for_routing,
     )
     .await?;
 
@@ -445,16 +490,7 @@ fn default_version(state: &AppState) -> Result<RequestVersion> {
 ///
 /// If the version has a `prompt_override`, we inject the system prompt into
 /// the messages array. Otherwise we return the raw bytes unchanged.
-async fn read_request_body(req: Request<Body>, version: &RequestVersion) -> Result<(Bytes, bool)> {
-    use axum::body::to_bytes;
-
-    let body_bytes = to_bytes(req.into_body(), 10 * 1024 * 1024) // 10MB max
-        .await
-        .map_err(|e| Error::Network {
-            context: "Failed to read request body".to_string(),
-            source: e.into(),
-        })?;
-
+fn prepare_request_body(body_bytes: Bytes, version: &RequestVersion) -> (Bytes, bool) {
     // Detect streaming from the JSON body's "stream" field.
     // The Content-Type is always application/json for chat completions requests
     // regardless of whether streaming is enabled — it is not a reliable signal.
@@ -463,14 +499,107 @@ async fn read_request_body(req: Request<Body>, version: &RequestVersion) -> Resu
         .and_then(|v| v.get("stream").and_then(|s| s.as_bool()))
         .unwrap_or(false);
 
-    // If candidate has a system prompt override, inject it
+    // If the chosen version overrides the system prompt, inject it.
     if let Some(ref system_prompt) = version.prompt_override {
         let bytes =
             inject_system_prompt(&body_bytes, system_prompt).unwrap_or_else(|_| body_bytes.clone());
-        return Ok((bytes, is_streaming));
+        return (bytes, is_streaming);
     }
 
-    Ok((body_bytes, is_streaming))
+    (body_bytes, is_streaming)
+}
+
+/// Build the facts a routing rule matches against.
+///
+/// Parsed once per request and shared by every rule, so evaluating twenty
+/// rules costs twenty comparisons rather than twenty JSON parses.
+fn build_request_facts(
+    body: &Bytes,
+    path: &str,
+    headers: &HeaderMap,
+) -> crate::routing::RequestFacts {
+    // Cached across calls within this request; parsing failure just means an
+    // empty set of facts, so rules simply do not match rather than erroring.
+    let parsed: Option<serde_json::Value> = serde_json::from_slice(body).ok();
+
+    let model = parsed
+        .as_ref()
+        .and_then(|v| v.get("model"))
+        .and_then(|m| m.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let content = parsed
+        .as_ref()
+        .and_then(|v| v.get("messages"))
+        .and_then(|m| m.as_array())
+        .map(|msgs| {
+            msgs.iter()
+                .filter_map(|m| m.get("content").and_then(|c| c.as_str()))
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .unwrap_or_default();
+
+    // Header names are lowercased once here so rule matching never has to.
+    let header_map = headers
+        .iter()
+        .filter_map(|(k, v)| {
+            v.to_str()
+                .ok()
+                .map(|val| (k.as_str().to_ascii_lowercase(), val.to_string()))
+        })
+        .collect();
+
+    crate::routing::RequestFacts {
+        input_tokens: crate::routing::estimate_tokens(&content),
+        model,
+        path: path.to_string(),
+        content,
+        headers: header_map,
+    }
+}
+
+/// Turn a matched routing rule into the version to serve.
+fn version_from_rule(rule: &crate::routing::RoutingRule) -> RequestVersion {
+    RequestVersion {
+        // Rule-routed traffic belongs to no rollout, so there is no version
+        // row to reference. The recorder writes NULL for these.
+        version_id: Uuid::nil(),
+        provider_url: provider_base_url(&rule.action.provider),
+        model: rule.action.model.clone(),
+        prompt_override: None,
+    }
+}
+
+/// Canonical base URL for a provider name.
+fn provider_base_url(provider: &str) -> String {
+    match provider {
+        "anthropic" => "https://api.anthropic.com/v1".to_string(),
+        "gemini" => "https://generativelanguage.googleapis.com/v1beta/openai".to_string(),
+        "openrouter" => "https://openrouter.ai/api/v1".to_string(),
+        "openai" => "https://api.openai.com/v1".to_string(),
+        // Anything else is treated as a literal base URL, which is how
+        // custom/self-hosted providers are configured.
+        other => other.to_string(),
+    }
+}
+
+/// Turn a tenant's configured chain into concrete endpoints with their keys.
+///
+/// A provider with no stored key is skipped: calling it would forward the
+/// client's key for a *different* provider and fail with a confusing 401.
+fn build_tenant_fallbacks(routing: &crate::routing::TenantRouting) -> Vec<ProviderEndpoint> {
+    routing
+        .fallback_chain
+        .iter()
+        .filter_map(|provider| {
+            routing.credential_for(provider).map(|key| {
+                ProviderEndpoint::new(provider_base_url(provider), provider.clone())
+                    .with_key(key.to_string())
+            })
+        })
+        .collect()
 }
 
 /// Inject a system prompt into a chat completions request body.
@@ -615,6 +744,7 @@ async fn send_with_failover(
     fallback_chain: &[ProviderEndpoint],
     upstream_path: &str,
     request_id: uuid::Uuid,
+    tenant_id: &str,
 ) -> Result<(reqwest::Response, String)> {
     // Build the list of (url_to_try, provider_base_for_health, display_name, api_key_override)
     let mut attempts: Vec<(String, String, String, Option<String>)> = Vec::new();
@@ -716,13 +846,17 @@ async fn send_with_failover(
                         }
                     }
 
-                    // Log the failover if we have a fallback to try
+                    // Log and record the failover if we have a fallback to try
                     if !fallback_chain.is_empty() {
                         let next_name = &fallback_chain[0].name;
-                        log_failover(
-                            provider_base,
-                            next_name,
-                            last_error.as_deref().unwrap_or("5xx error"),
+                        let reason = last_error.clone().unwrap_or_else(|| "5xx error".into());
+                        log_failover(provider_base, next_name, &reason, request_id);
+                        crate::proxy::failover::record_incident(
+                            state.db_pool.clone(),
+                            tenant_id.to_string(),
+                            provider_base.to_string(),
+                            Some(next_name.clone()),
+                            reason,
                             request_id,
                         );
                     }

@@ -20,6 +20,18 @@
 //! POST /api/v1/rollouts/:id/resume       Resume a paused rollout
 //! GET  /api/v1/system/health             System health
 //!
+//! Settings:
+//! GET/PUT /api/v1/settings/providers     Per-tenant provider API keys
+//! DELETE  /api/v1/settings/providers/:p  Remove a provider key
+//! GET/PUT /api/v1/settings/failover      Ordered failover chain
+//!
+//! Conditional routing:
+//! GET  /api/v1/routing/rules             List rules
+//! POST /api/v1/routing/rules             Create a rule
+//! PUT  /api/v1/routing/rules/:id         Update a rule
+//! DELETE /api/v1/routing/rules/:id       Delete a rule
+//! POST /api/v1/routing/test              Dry-run rules against a sample request
+//!
 //! Cloud-only:
 //! POST   /api/v1/cloud/tenants             Create tenant (Clerk webhook)
 //! GET    /api/v1/cloud/tenants/:id         Get tenant
@@ -36,6 +48,7 @@
 pub mod cloud;
 pub mod handlers;
 pub mod rollout_create;
+pub mod settings;
 
 use crate::{tenant::require_auth, AppState};
 use axum::{
@@ -74,6 +87,29 @@ fn core_routes() -> Router<AppState> {
         .route("/rollouts/:id/rollback", post(handlers::rollback_rollout))
         .route("/rollouts/:id/pause", post(handlers::pause_rollout))
         .route("/rollouts/:id/resume", post(handlers::resume_rollout))
+        // ── Tenant settings ──────────────────────────────────────────────
+        .route(
+            "/settings/providers",
+            get(settings::list_credentials).put(settings::save_credential),
+        )
+        .route(
+            "/settings/providers/:provider",
+            axum::routing::delete(settings::delete_credential),
+        )
+        .route(
+            "/settings/failover",
+            get(settings::get_failover).put(settings::save_failover),
+        )
+        // ── Conditional routing ──────────────────────────────────────────
+        .route(
+            "/routing/rules",
+            get(settings::list_rules).post(settings::create_rule),
+        )
+        .route(
+            "/routing/rules/:id",
+            axum::routing::put(settings::update_rule).delete(settings::delete_rule),
+        )
+        .route("/routing/test", post(settings::test_rules))
         .route("/system/health", get(handlers::system_health))
         .route("/system/providers", get(handlers::provider_health))
 }

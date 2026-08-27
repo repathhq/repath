@@ -35,11 +35,13 @@ use std::sync::Arc;
 pub mod api;
 pub mod circuit_breaker;
 pub mod config;
+pub mod crypto;
 pub mod db;
 pub mod observability;
 pub mod proxy;
 pub mod recorder;
 pub mod router;
+pub mod routing;
 pub mod server;
 pub mod tenant;
 
@@ -100,6 +102,9 @@ pub struct AppState {
     /// request; refreshed every 5s by a background task. Same rationale as
     /// `rollout_cache` — key lookup must not put Postgres on the hot path.
     pub tenant_cache: Arc<arc_swap::ArcSwap<tenant::TenantCache>>,
+    /// Conditional routing rules and per-tenant provider credentials.
+    /// Read on every proxied request; refreshed every 5s like the others.
+    pub routing_cache: Arc<arc_swap::ArcSwap<routing::RoutingCache>>,
 }
 
 /// Helpers for integration tests.
@@ -156,6 +161,9 @@ pub mod test_support {
             circuit_breaker: circuit_breaker::CircuitBreakerRegistry::new(),
             provider_health: proxy::failover::ProviderHealthRegistry::new(),
             tenant_cache: Arc::new(arc_swap::ArcSwap::from_pointee(tenant::TenantCache::empty())),
+            routing_cache: Arc::new(arc_swap::ArcSwap::from_pointee(
+                routing::RoutingCache::empty(),
+            )),
         }
     }
 }

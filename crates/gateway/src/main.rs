@@ -6,7 +6,8 @@
 
 use repath_common::{Error, Result};
 use repath_gateway::{
-    circuit_breaker, config, db, observability, proxy, recorder, router, server, tenant, AppState,
+    circuit_breaker, config, db, observability, proxy, recorder, router, routing, server, tenant,
+    AppState,
 };
 use std::sync::Arc;
 use tokio::signal;
@@ -121,6 +122,15 @@ async fn main() -> Result<()> {
         tenant_cache.clone(),
     ));
 
+    // Initialize routing cache (rules + provider credentials) and its refresher.
+    let routing_cache = Arc::new(arc_swap::ArcSwap::from_pointee(
+        routing::RoutingCache::empty(),
+    ));
+    let routing_refresh_handle = tokio::spawn(routing::run_routing_cache_refresher(
+        db_pool.clone(),
+        routing_cache.clone(),
+    ));
+
     // Spawn background rollout cache refresher.
     // Polls the DB every 5 seconds and swaps the cache atomically.
     // This decouples every request handler from direct DB reads for routing.
@@ -141,6 +151,7 @@ async fn main() -> Result<()> {
         circuit_breaker: circuit_breaker::CircuitBreakerRegistry::new(),
         provider_health: proxy::failover::ProviderHealthRegistry::new(),
         tenant_cache,
+        routing_cache,
     };
 
     // Create Axum server
@@ -235,6 +246,7 @@ async fn main() -> Result<()> {
 
     cache_refresh_handle.abort();
     tenant_refresh_handle.abort();
+    routing_refresh_handle.abort();
     info!("Rollout cache refresher stopped");
 
     // Drop the sender to signal the recorder channel is closed

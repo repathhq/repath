@@ -268,6 +268,40 @@ pub fn log_failover(primary: &str, fallback: &str, reason: &str, request_id: uui
     );
 }
 
+/// Persist a failover incident so the customer can see it in their dashboard.
+///
+/// Detached and best-effort: a proxied request must never wait on, or fail
+/// because of, an audit write. The `provider_incidents` table has existed since
+/// migration 004 but nothing ever wrote to it, so the incident history the UI
+/// promised was always empty.
+pub fn record_incident(
+    pool: sqlx::PgPool,
+    tenant_id: String,
+    primary: String,
+    fallback: Option<String>,
+    reason: String,
+    request_id: uuid::Uuid,
+) {
+    tokio::spawn(async move {
+        let result = sqlx::query(
+            "INSERT INTO provider_incidents
+                 (tenant_id, primary_provider, fallback_provider, reason, request_id)
+             VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind(&tenant_id)
+        .bind(&primary)
+        .bind(&fallback)
+        .bind(&reason)
+        .bind(request_id)
+        .execute(&pool)
+        .await;
+
+        if let Err(e) = result {
+            warn!(error = %e, "Failed to record provider incident");
+        }
+    });
+}
+
 /// Log provider recovery.
 #[allow(dead_code)]
 pub fn log_recovery(provider: &str) {
