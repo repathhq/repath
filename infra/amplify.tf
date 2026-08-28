@@ -8,6 +8,30 @@ resource "aws_amplify_app" "dashboard" {
   name     = "${var.project_name}-dashboard"
   platform = "WEB_COMPUTE" # SSR/middleware support for Next.js
 
+  # The GitHub connection, its SSR logging role, and the default SPA redirect
+  # rule are all set by the console's own connect-repo flow (see the note
+  # above — that flow is the only one that can attach a repository at all).
+  # Terraform doesn't try to assert values for them; doing so would force a
+  # destroy/recreate that strips the very thing the console flow just set up.
+  lifecycle {
+    ignore_changes = [
+      repository,
+      iam_service_role_arn,
+      custom_rule,
+      cache_config,
+      tags,
+    ]
+  }
+
+  # Amplify's console/Terraform-configured environment_variables are only
+  # ever exposed during the build phase — by design, not a bug, per
+  # https://docs.aws.amazon.com/amplify/latest/userguide/ssr-environment-variables.html.
+  # They never reach the deployed SSR compute function's process.env at
+  # request time, for any app on this platform. The documented workaround is
+  # to write the runtime-needed ones into .env.production during preBuild:
+  # Next.js's standalone server (what WEB_COMPUTE actually deploys) loads
+  # that file into process.env on every cold start, which is what actually
+  # gets them to the route handlers.
   build_spec = <<-YAML
     version: 1
     applications:
@@ -17,6 +41,7 @@ resource "aws_amplify_app" "dashboard" {
             preBuild:
               commands:
                 - npm ci
+                - env | grep -e REPATH_API_TOKEN -e JWT_SECRET >> .env.production
             build:
               commands:
                 - npm run build
