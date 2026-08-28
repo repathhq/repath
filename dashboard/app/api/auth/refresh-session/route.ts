@@ -1,14 +1,17 @@
 import { NextResponse } from "next/server";
 import { getSession, createSession, cookieOptions } from "@/lib/auth";
 
-const GATEWAY   = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-const API_TOKEN = process.env.REPATH_API_TOKEN ?? "";
-
 // POST /api/auth/refresh-session
 // Re-reads the tenant's current plan from the DB and rewrites the session cookie.
 // Call this after any plan change (payment success, webhook, etc.) so the
 // in-browser session reflects the real plan without requiring a re-login.
 export async function POST() {
+  // Read per-request, not at module load: on Amplify's SSR compute a
+  // top-level `const` can get frozen at cold start before env vars are
+  // fully injected, silently baking in an empty token forever.
+  const GATEWAY   = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+  const API_TOKEN = process.env.REPATH_API_TOKEN ?? "";
+
   const session = await getSession().catch(() => null);
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

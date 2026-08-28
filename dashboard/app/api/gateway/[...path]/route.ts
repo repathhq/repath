@@ -17,16 +17,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 
-const GATEWAY =
-  process.env.REPATH_GATEWAY_URL ??
-  process.env.NEXT_PUBLIC_API_URL ??
-  "http://localhost:8080";
-const TOKEN = process.env.REPATH_API_TOKEN ?? "";
-
 /** Paths any signed-in user may read; they expose no tenant-owned data. */
 const UNSCOPED_PATHS = new Set(["system/health", "system/providers"]);
 
 async function proxy(req: NextRequest, path: string) {
+  // Read per-request, not at module load: on Amplify's SSR compute a
+  // top-level `const` can get frozen at cold start before env vars are
+  // fully injected, silently baking in an empty token forever.
+  const GATEWAY =
+    process.env.REPATH_GATEWAY_URL ??
+    process.env.NEXT_PUBLIC_API_URL ??
+    "http://localhost:8080";
+  const TOKEN = process.env.REPATH_API_TOKEN ?? "";
+
   const session = await getSession();
   if (!session) {
     return NextResponse.json(
