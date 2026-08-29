@@ -135,13 +135,30 @@ pub async fn run_cache_refresher(db_pool: PgPool, cache: Arc<ArcSwap<RolloutCach
     }
 }
 
-/// Query the database for the currently active rollout.
+/// Query the database for each tenant's current traffic-routing config.
 ///
 /// In self-hosted mode (REPATH_CLOUD_MODE not set) this returns the single
-/// active rollout. In cloud mode the gateway receives tenant_id per-request
-/// and the handler filters in the hot path — this cache holds all active
-/// rollouts, keyed by tenant_id, but for simplicity we only support one
-/// active rollout per tenant at a time.
+/// config. In cloud mode the gateway receives tenant_id per-request and the
+/// handler filters in the hot path — this cache holds one entry per tenant,
+/// keyed by tenant_id, but for simplicity we only support one rollout
+/// determining a tenant's routing at a time.
+///
+/// This deliberately includes more than rollouts that are still being
+/// *tested* (`shadow`/`canary`). A `promoted` rollout's `current_weight` is
+/// set to 1.0, and a `rolled_back` one's to 0.0 (see `apply_manual_action`
+/// and `store::apply_advance`) — those weights are exactly what should keep
+/// being served after the experiment ends, since there is no separate
+/// "tenant's current baseline" record anywhere else in the schema. A rollout
+/// is the only place a version's model/prompt config lives. Excluding
+/// `promoted`/`rolled_back` here (as an earlier version of this query did)
+/// meant a request's rollout simply vanished from the cache the moment an
+/// experiment finished, silently falling through to raw passthrough with no
+/// prompt override at all — for a promoted candidate as much as a rolled-
+/// back baseline. `paused` is included for the same reason: pausing holds
+/// the current split, it does not stop serving it. Only `created` (not yet
+/// started) is excluded. `ORDER BY created_at DESC` + `.first()` in
+/// `active_for` means a newer rollout for the same tenant always takes
+/// precedence over an older promoted/rolled-back one.
 async fn fetch_active_rollout(pool: &PgPool) -> Result<RolloutCache> {
     let rows = sqlx::query(
         r#"
@@ -160,7 +177,7 @@ async fn fetch_active_rollout(pool: &PgPool) -> Result<RolloutCache> {
         FROM rollouts r
         JOIN versions bv ON r.baseline_version_id = bv.id
         JOIN versions cv ON r.candidate_version_id = cv.id
-        WHERE r.state IN ('shadow', 'canary')
+        WHERE r.state IN ('shadow', 'canary', 'paused', 'promoted', 'rolled_back')
         ORDER BY r.created_at DESC
         "#,
     )
@@ -196,4 +213,249 @@ async fn fetch_active_rollout(pool: &PgPool) -> Result<RolloutCache> {
         by_tenant,
         refreshed_at: std::time::Instant::now(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    //! Regression tests for the promoted/rolled-back routing gap: a rollout
+    //! used to vanish from this cache the instant it left `shadow`/`canary`,
+    //! silently dropping prompt injection for the rest of its life. Skipped
+    //! (not failed) when `DATABASE_URL` is unset, matching the convention in
+    //! `tests/tenant_isolation.rs`.
+    //!
+    //! ```
+    //! DATABASE_URL=postgres://... cargo test -p repath-gateway --lib router::tests
+    //! ```
+
+    use super::*;
+    use sqlx::Row;
+
+    struct TestDb {
+        pool: PgPool,
+        schema: String,
+        admin_url: String,
+    }
+
+    impl TestDb {
+        async fn new() -> Option<Self> {
+            let database_url = std::env::var("DATABASE_URL").ok()?;
+            let schema = format!("router_{}", Uuid::new_v4().simple());
+
+            let root = PgPool::connect(&database_url).await.expect("connect");
+            sqlx::query(&format!("CREATE SCHEMA \"{schema}\""))
+                .execute(&root)
+                .await
+                .expect("create schema");
+            root.close().await;
+
+            let mut opts: sqlx::postgres::PgConnectOptions =
+                database_url.parse().expect("parse DATABASE_URL");
+            opts = opts.options([("search_path", schema.as_str())]);
+            let pool = PgPool::connect_with(opts).await.expect("connect to schema");
+
+            // A minimal, hand-rolled schema rather than the real migrations
+            // (as tests/tenant_isolation.rs also does): `sqlx::migrate!`
+            // would run `CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`, which
+            // is database-wide and lands in whichever schema happens to run
+            // it first — every other test's schema-scoped search_path then
+            // can't see uuid_generate_v4() and fails. gen_random_uuid() is
+            // built into Postgres 13+, so no extension is needed.
+            for ddl in [
+                r#"CREATE TABLE providers (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    name VARCHAR(255) NOT NULL UNIQUE,
+                    base_url VARCHAR(500) NOT NULL,
+                    api_key_encrypted TEXT NOT NULL,
+                    provider_type VARCHAR(50) NOT NULL
+                )"#,
+                r#"CREATE TABLE versions (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    name VARCHAR(255) NOT NULL UNIQUE,
+                    provider_id UUID NOT NULL REFERENCES providers(id),
+                    model VARCHAR(255) NOT NULL,
+                    prompt_template TEXT,
+                    provider_url VARCHAR(500),
+                    parameters JSONB NOT NULL DEFAULT '{}'::jsonb
+                )"#,
+                r#"CREATE TABLE rollouts (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    name VARCHAR(255) NOT NULL UNIQUE,
+                    tenant_id VARCHAR(64),
+                    baseline_version_id UUID NOT NULL REFERENCES versions(id),
+                    candidate_version_id UUID NOT NULL REFERENCES versions(id),
+                    state VARCHAR(50) NOT NULL DEFAULT 'created',
+                    current_weight DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+                    policy JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    strategy JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )"#,
+            ] {
+                sqlx::query(ddl).execute(&pool).await.expect("create table");
+            }
+
+            Some(Self {
+                pool,
+                schema,
+                admin_url: database_url,
+            })
+        }
+
+        /// Inserts a provider, a baseline + candidate version, and a rollout
+        /// in the given `state`/`current_weight`. Returns the rollout id.
+        async fn seed_rollout(&self, state: &str, weight: f64) -> Uuid {
+            let suffix = Uuid::new_v4().simple().to_string();
+
+            let provider_id: Uuid = sqlx::query(
+                "INSERT INTO providers (name, base_url, api_key_encrypted, provider_type) \
+                 VALUES ($1, 'https://api.openai.com/v1', 'enc', 'openai') RETURNING id",
+            )
+            .bind(format!("provider-{suffix}"))
+            .fetch_one(&self.pool)
+            .await
+            .expect("insert provider")
+            .get("id");
+
+            let baseline_id: Uuid = sqlx::query(
+                "INSERT INTO versions (name, provider_id, model, prompt_template) \
+                 VALUES ($1, $2, 'gpt-4o', 'baseline prompt') RETURNING id",
+            )
+            .bind(format!("baseline-{suffix}"))
+            .bind(provider_id)
+            .fetch_one(&self.pool)
+            .await
+            .expect("insert baseline version")
+            .get("id");
+
+            let candidate_id: Uuid = sqlx::query(
+                "INSERT INTO versions (name, provider_id, model, prompt_template) \
+                 VALUES ($1, $2, 'gpt-4o-mini', 'hello babye') RETURNING id",
+            )
+            .bind(format!("candidate-{suffix}"))
+            .bind(provider_id)
+            .fetch_one(&self.pool)
+            .await
+            .expect("insert candidate version")
+            .get("id");
+
+            sqlx::query(
+                "INSERT INTO rollouts \
+                 (name, baseline_version_id, candidate_version_id, state, current_weight, policy, strategy) \
+                 VALUES ($1, $2, $3, $4, $5, '{}'::jsonb, '{}'::jsonb) RETURNING id",
+            )
+            .bind(format!("rollout-{suffix}"))
+            .bind(baseline_id)
+            .bind(candidate_id)
+            .bind(state)
+            .bind(weight)
+            .fetch_one(&self.pool)
+            .await
+            .expect("insert rollout")
+            .get("id")
+        }
+    }
+
+    impl Drop for TestDb {
+        fn drop(&mut self) {
+            let schema = self.schema.clone();
+            let admin_url = self.admin_url.clone();
+            std::thread::spawn(move || {
+                tokio::runtime::Runtime::new().unwrap().block_on(async {
+                    if let Ok(root) = PgPool::connect(&admin_url).await {
+                        let _ = sqlx::query(&format!("DROP SCHEMA \"{schema}\" CASCADE"))
+                            .execute(&root)
+                            .await;
+                    }
+                });
+            })
+            .join()
+            .ok();
+        }
+    }
+
+    #[tokio::test]
+    async fn promoted_rollout_still_routes_at_full_candidate_weight() {
+        let Some(db) = TestDb::new().await else {
+            eprintln!("skipping: DATABASE_URL not set");
+            return;
+        };
+        let rollout_id = db.seed_rollout("promoted", 1.0).await;
+
+        let cache = fetch_active_rollout(&db.pool).await.expect("fetch");
+        let active = cache
+            .active_for("default")
+            .expect("promoted rollout must still be routable — this is the bug being fixed");
+
+        assert_eq!(active.rollout_id, rollout_id);
+        assert_eq!(active.candidate_weight, 1.0);
+        assert_eq!(active.candidate_prompt.as_deref(), Some("hello babye"));
+    }
+
+    #[tokio::test]
+    async fn rolled_back_rollout_still_routes_at_zero_candidate_weight() {
+        let Some(db) = TestDb::new().await else {
+            eprintln!("skipping: DATABASE_URL not set");
+            return;
+        };
+        let rollout_id = db.seed_rollout("rolled_back", 0.0).await;
+
+        let cache = fetch_active_rollout(&db.pool).await.expect("fetch");
+        let active = cache.active_for("default").expect(
+            "rolled-back rollout must still route to baseline, not fall through to nil passthrough",
+        );
+
+        assert_eq!(active.rollout_id, rollout_id);
+        assert_eq!(active.candidate_weight, 0.0);
+        assert_eq!(active.baseline_prompt.as_deref(), Some("baseline prompt"));
+    }
+
+    #[tokio::test]
+    async fn paused_rollout_holds_its_split() {
+        let Some(db) = TestDb::new().await else {
+            eprintln!("skipping: DATABASE_URL not set");
+            return;
+        };
+        db.seed_rollout("paused", 0.3).await;
+
+        let cache = fetch_active_rollout(&db.pool).await.expect("fetch");
+        let active = cache
+            .active_for("default")
+            .expect("paused rollout must keep serving its current split");
+
+        assert_eq!(active.candidate_weight, 0.3);
+    }
+
+    #[tokio::test]
+    async fn not_yet_started_rollout_is_excluded() {
+        let Some(db) = TestDb::new().await else {
+            eprintln!("skipping: DATABASE_URL not set");
+            return;
+        };
+        db.seed_rollout("created", 0.0).await;
+
+        let cache = fetch_active_rollout(&db.pool).await.expect("fetch");
+        assert!(
+            cache.active_for("default").is_none(),
+            "a rollout that was never started should not serve traffic"
+        );
+    }
+
+    #[tokio::test]
+    async fn newer_rollout_supersedes_an_older_promoted_one() {
+        let Some(db) = TestDb::new().await else {
+            eprintln!("skipping: DATABASE_URL not set");
+            return;
+        };
+        let _old_promoted = db.seed_rollout("promoted", 1.0).await;
+        // created_at is DEFAULT NOW(); force a later timestamp for the second one.
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        let newer_id = db.seed_rollout("canary", 0.1).await;
+
+        let cache = fetch_active_rollout(&db.pool).await.expect("fetch");
+        let active = cache.active_for("default").expect("some rollout active");
+
+        assert_eq!(
+            active.rollout_id, newer_id,
+            "the newer rollout must win over an older promoted one for the same tenant"
+        );
+    }
 }
