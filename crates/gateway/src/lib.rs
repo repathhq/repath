@@ -104,6 +104,10 @@ pub struct AppState {
     /// Conditional routing rules and per-tenant provider credentials.
     /// Read on every proxied request; refreshed every 5s like the others.
     pub routing_cache: Arc<arc_swap::ArcSwap<routing::RoutingCache>>,
+    /// Per-tenant request rate limiter. In-process token buckets, checked on
+    /// every proxied request — see `tenant::rate_limit` for why this is not
+    /// backed by Redis.
+    pub rate_limiter: Arc<tenant::rate_limit::RateLimiter>,
 }
 
 /// Helpers for integration tests.
@@ -163,6 +167,7 @@ pub mod test_support {
             routing_cache: Arc::new(arc_swap::ArcSwap::from_pointee(
                 routing::RoutingCache::empty(),
             )),
+            rate_limiter: Arc::new(tenant::rate_limit::RateLimiter::new()),
         }
     }
 }

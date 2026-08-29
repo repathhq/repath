@@ -131,6 +131,21 @@ async fn main() -> Result<()> {
         routing_cache.clone(),
     ));
 
+    // Per-tenant rate limiter, plus a sweeper for buckets nobody is using.
+    // Without eviction the map grows once per tenant that ever sends a
+    // request and never shrinks — a slow leak that only shows in a
+    // long-running process, which is exactly what this is.
+    let rate_limiter = Arc::new(repath_gateway::tenant::rate_limit::RateLimiter::new());
+    let rate_limiter_sweeper = rate_limiter.clone();
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(std::time::Duration::from_secs(600));
+        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            ticker.tick().await;
+            rate_limiter_sweeper.evict_idle();
+        }
+    });
+
     // Spawn background rollout cache refresher.
     // Polls the DB every 5 seconds and swaps the cache atomically.
     // This decouples every request handler from direct DB reads for routing.
@@ -152,6 +167,7 @@ async fn main() -> Result<()> {
         provider_health: proxy::failover::ProviderHealthRegistry::new(),
         tenant_cache,
         routing_cache,
+        rate_limiter: rate_limiter.clone(),
     };
 
     // Create Axum server

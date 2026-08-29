@@ -195,6 +195,37 @@ pub async fn resolve_proxy_auth(
         _ => AuthContext::Tenant(Arc::new(self_hosted_tenant())),
     };
 
+    // Rate limit before doing any upstream work. `eval_quota_monthly` meters
+    // judged evaluations, which is what costs money per unit; it does not
+    // meter requests, so proxied traffic and its egress were uncapped. This
+    // is a runaway-cost backstop, not a metering product — the limits are
+    // generous enough that normal use never reaches them.
+    if let AuthContext::Tenant(tenant) = &ctx {
+        let limit = crate::tenant::rate_limit::limit_for_plan(&tenant.plan);
+        if !state.rate_limiter.check(&tenant.id, limit) {
+            warn!(
+                tenant_id = %tenant.id,
+                plan = %tenant.plan,
+                "Rate limited"
+            );
+            return (
+                StatusCode::TOO_MANY_REQUESTS,
+                [("retry-after", "1")],
+                Json(json!({
+                    "error": {
+                        "message": format!(
+                            "Rate limit exceeded for the {} plan ({:.0} requests/second). \
+                             Retry shortly, or upgrade for more headroom.",
+                            tenant.plan, limit.per_second
+                        ),
+                        "type": "rate_limit_exceeded"
+                    }
+                })),
+            )
+                .into_response();
+        }
+    }
+
     req.extensions_mut().insert(ctx);
     next.run(req).await
 }

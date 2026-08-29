@@ -64,6 +64,7 @@ bytes = { workspace = true }
 async-trait = { workspace = true }
 tokio-stream = { workspace = true }
 arc-swap = { workspace = true }
+dashmap = { workspace = true }
 
 # Security
 ring = { workspace = true }

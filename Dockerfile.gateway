@@ -1,4 +1,8 @@
-FROM rust:1.88-slim-bookworm AS builder
+# 1.96, not 1.88: aws-sdk-sesv2 (used for transactional email) declares an
+# MSRV of 1.94.1. These per-service Dockerfiles are what CI actually builds
+# — see .github/workflows/ci.yml — so they, not the multi-stage Dockerfile,
+# are the ones that must track the workspace MSRV.
+FROM rust:1.96-slim-bookworm AS builder
 RUN apt-get update && apt-get install -y pkg-config libssl-dev libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 # ARG before COPY busts all subsequent cache layers

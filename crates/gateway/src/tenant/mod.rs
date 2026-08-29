@@ -40,6 +40,7 @@ use std::time::Duration;
 use tracing::{debug, error, info, warn};
 
 pub mod middleware;
+pub mod rate_limit;
 
 pub use middleware::{require_auth, resolve_proxy_auth};
 
