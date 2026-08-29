@@ -439,12 +439,52 @@ async fn activate_step_1(pool: &PgPool, rollout_id: Uuid) {
 }
 
 /// Insert a request + evaluation row.
+///
+/// Rows are tagged `llm_judge`, because every caller passes a graded quality
+/// score (0.92, 0.50, …) and only the LLM judge produces those. The
+/// programmatic evaluator emits a flat 1.0 for any healthy response and 0.0
+/// for a hard failure, so labelling these `programmatic` — as this fixture
+/// once did — modelled data the system cannot actually generate, and hid the
+/// fact that the advance gate was reading scores that never measured quality.
+/// Use `insert_request_with_programmatic_eval` to exercise that path.
 async fn insert_request_with_eval(
     pool: &PgPool,
     rollout_id: Uuid,
     version_id: Uuid,
     score: f64,
     latency_ms: i32,
+) {
+    insert_request_with_eval_typed(pool, rollout_id, version_id, score, latency_ms, "llm_judge")
+        .await
+}
+
+/// Insert a request evaluated *only* programmatically — what every row looks
+/// like when the LLM judge is unavailable (an expired API key will do it).
+async fn insert_request_with_programmatic_eval(
+    pool: &PgPool,
+    rollout_id: Uuid,
+    version_id: Uuid,
+    score: f64,
+    latency_ms: i32,
+) {
+    insert_request_with_eval_typed(
+        pool,
+        rollout_id,
+        version_id,
+        score,
+        latency_ms,
+        "programmatic",
+    )
+    .await
+}
+
+async fn insert_request_with_eval_typed(
+    pool: &PgPool,
+    rollout_id: Uuid,
+    version_id: Uuid,
+    score: f64,
+    latency_ms: i32,
+    evaluator_type: &str,
 ) {
     let request_id: Uuid = sqlx::query(
         r#"
@@ -464,12 +504,13 @@ async fn insert_request_with_eval(
     sqlx::query(
         r#"
         INSERT INTO evaluations (request_id, evaluator_type, scores, overall_score)
-        VALUES ($1, 'programmatic', $2, $3)
+        VALUES ($1, $4, $2, $3)
         "#,
     )
     .bind(request_id)
     .bind(json!({"quality": score}))
     .bind(score)
+    .bind(evaluator_type)
     .execute(pool)
     .await
     .expect("insert evaluation");
@@ -549,16 +590,20 @@ async fn test_healthy_candidate_advances() {
         baseline: VersionSnapshot {
             version_id: baseline_id,
             avg_quality: base.avg_quality,
+            avg_judged_quality: base.avg_judged_quality,
             p95_latency_ms: base.p95_latency_ms.max(0) as u32,
             error_rate: base.error_rate,
             sample_count: base.sample_count.max(0) as u32,
+            judged_sample_count: base.judged_sample_count.max(0) as u32,
         },
         candidate: VersionSnapshot {
             version_id: candidate_id,
             avg_quality: cand.avg_quality,
+            avg_judged_quality: cand.avg_judged_quality,
             p95_latency_ms: cand.p95_latency_ms.max(0) as u32,
             error_rate: cand.error_rate,
             sample_count: cand.sample_count.max(0) as u32,
+            judged_sample_count: cand.judged_sample_count.max(0) as u32,
         },
     };
 
@@ -610,16 +655,20 @@ async fn test_rollback_threshold_triggers_rollback() {
         baseline: VersionSnapshot {
             version_id: baseline_id,
             avg_quality: base.avg_quality,
+            avg_judged_quality: base.avg_judged_quality,
             p95_latency_ms: base.p95_latency_ms.max(0) as u32,
             error_rate: base.error_rate,
             sample_count: base.sample_count.max(0) as u32,
+            judged_sample_count: base.judged_sample_count.max(0) as u32,
         },
         candidate: VersionSnapshot {
             version_id: candidate_id,
             avg_quality: cand.avg_quality,
+            avg_judged_quality: cand.avg_judged_quality,
             p95_latency_ms: cand.p95_latency_ms.max(0) as u32,
             error_rate: cand.error_rate,
             sample_count: cand.sample_count.max(0) as u32,
+            judged_sample_count: cand.judged_sample_count.max(0) as u32,
         },
     };
 
@@ -959,5 +1008,86 @@ async fn test_policy_holds_when_min_samples_not_met() {
             assert_eq!(need, 10, "should report needing 10 samples");
         }
         other => panic!("expected InsufficientData {{ have: 3, need: 10 }}, got {other:?}"),
+    }
+}
+
+/// A rollout whose evaluations are all programmatic — what happens when the
+/// LLM judge is down — must not advance, no matter how perfect the scores
+/// look. This exercises the real `FILTER (WHERE evaluator_type = 'llm_judge')`
+/// SQL, which the pure-policy unit tests cannot reach.
+///
+/// The bug this pins: with a revoked OpenAI key every evaluation fell back to
+/// the programmatic evaluator's flat 1.0, so baseline and candidate both read
+/// 1.000, every gate passed, and rollouts promoted themselves having never
+/// measured quality at all.
+#[tokio::test]
+async fn test_programmatic_only_evaluations_do_not_advance() {
+    if std::env::var("DATABASE_URL").is_err() {
+        return;
+    }
+    let db = TestDb::new().await;
+    let pool = db.pool();
+    let policy = standard_policy();
+
+    let (rollout_id, baseline_id, candidate_id) =
+        insert_rollout(pool, "judge-down-canary", &policy, "canary", 0.10).await;
+    activate_step_1(pool, rollout_id).await;
+
+    // A flat 1.0 for everything is exactly what the programmatic evaluator
+    // emits for any healthy response.
+    for _ in 0..10 {
+        insert_request_with_programmatic_eval(pool, rollout_id, baseline_id, 1.0, 300).await;
+        insert_request_with_programmatic_eval(pool, rollout_id, candidate_id, 1.0, 280).await;
+    }
+
+    let rows = store::aggregate_version_metrics(pool, rollout_id, 10)
+        .await
+        .expect("aggregate_version_metrics");
+    let cand = rows
+        .iter()
+        .find(|m| m.version_id == candidate_id)
+        .expect("candidate metrics");
+    let base = rows
+        .iter()
+        .find(|m| m.version_id == baseline_id)
+        .expect("baseline metrics");
+
+    assert_eq!(
+        cand.sample_count, 10,
+        "all ten evaluations should still be counted"
+    );
+    assert_eq!(
+        cand.judged_sample_count, 0,
+        "none of them were judged — that is the whole point"
+    );
+
+    let rollout_metrics = RolloutMetrics {
+        rollout_id,
+        baseline: VersionSnapshot {
+            version_id: baseline_id,
+            avg_quality: base.avg_quality,
+            avg_judged_quality: base.avg_judged_quality,
+            p95_latency_ms: base.p95_latency_ms.max(0) as u32,
+            error_rate: base.error_rate,
+            sample_count: base.sample_count.max(0) as u32,
+            judged_sample_count: base.judged_sample_count.max(0) as u32,
+        },
+        candidate: VersionSnapshot {
+            version_id: candidate_id,
+            avg_quality: cand.avg_quality,
+            avg_judged_quality: cand.avg_judged_quality,
+            p95_latency_ms: cand.p95_latency_ms.max(0) as u32,
+            error_rate: cand.error_rate,
+            sample_count: cand.sample_count.max(0) as u32,
+            judged_sample_count: cand.judged_sample_count.max(0) as u32,
+        },
+    };
+
+    match policy::evaluate(&rollout_metrics, &policy, 0.10, 0.25, false, 9999, 0) {
+        PolicyVerdict::Hold { reason } => assert!(
+            reason.contains("No LLM-judge evaluations"),
+            "Hold should name the missing judge, got: {reason}"
+        ),
+        other => panic!("programmatic-only data must never advance a rollout, got {other:?}"),
     }
 }

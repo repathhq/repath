@@ -51,6 +51,10 @@ export interface RolloutDetail extends RolloutSummary {
   error_rate_candidate: number | null;
   sample_count_baseline: number | null;
   sample_count_candidate: number | null;
+  /** Evaluations scored by the LLM judge. 0 means the quality numbers above
+   *  come only from programmatic checks, which score ~1.0 for any healthy
+   *  response and cannot tell a better version from a worse one. */
+  judged_sample_count: number | null;
 }
 
 export interface MetricPoint {

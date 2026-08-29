@@ -13,7 +13,8 @@
 //!    - candidate.error_rate  > policy.max_error_rate      → ROLLBACK
 //!
 //! 2. Advance gate (checked only if rollback gate passes):
-//!    - candidate.quality     >= policy.advance_threshold
+//!    - candidate.judged_sample_count >= policy.min_samples  (see below)
+//!    - candidate.judged_quality >= policy.advance_threshold
 //!    - candidate.error_rate  <= policy.max_error_rate
 //!    - candidate.p95_latency <= baseline.p95_latency * policy.max_latency_increase
 //!    - step.pause_duration has elapsed
@@ -21,6 +22,23 @@
 //!
 //! 3. Otherwise: HOLD (not enough signal yet, or gates not met)
 //! ```
+//!
+//! # Why advance reads judge-only quality but rollback reads everything
+//!
+//! The programmatic evaluator scores a flat 1.0 for any response that is
+//! non-empty, non-5xx, not a refusal, and reasonably prompt. It cannot tell
+//! a better answer from a worse one — that is the LLM judge's job. If the
+//! judge is unavailable (an expired API key does it), every evaluation falls
+//! back to programmatic and both versions score 1.000. Advancing on that
+//! average would promote any candidate, however bad, while displaying a
+//! perfect score. So the advance gate requires judged samples and compares
+//! judged quality; with no judge, rollouts hold and say why.
+//!
+//! Rollback keeps using the all-evaluations average on purpose. Hard
+//! failures are scored 0.0 *by the programmatic evaluator*, so a judge-only
+//! average would hide exactly the outages rollback exists to catch. The
+//! asymmetry is deliberate: losing the quality signal must never block a
+//! rollback, only a promotion.
 //!
 //! # Why rollback is checked before advance
 //!
@@ -108,13 +126,14 @@ pub fn evaluate(
             new_weight: next_step_weight,
             is_final: is_final_step,
             reason: format!(
-                "All gates passed: quality={:.3} >= {}, error_rate={:.3} <= {}, \
-                 p95_latency={}ms, candidate_samples={}",
-                c.avg_quality,
+                "All gates passed: judged_quality={:.3} >= {}, error_rate={:.3} <= {}, \
+                 p95_latency={}ms, judged_samples={}/{}",
+                c.avg_judged_quality,
                 policy.advance_threshold,
                 c.error_rate,
                 policy.max_error_rate,
                 c.p95_latency_ms,
+                c.judged_sample_count,
                 c.sample_count,
             ),
         },
@@ -149,13 +168,48 @@ fn check_advance_gate(
     baseline: &VersionSnapshot,
     policy: &RolloutPolicy,
 ) -> GateResult {
+    // Advancing requires quality that was actually *measured*. The
+    // programmatic evaluator only checks that a response is non-empty, not a
+    // 5xx, not a refusal, over 10 characters and under 30s — essentially
+    // every healthy response scores a flat 1.0. Averaging those in and
+    // comparing against the advance threshold means a broken LLM judge (a
+    // revoked API key is enough) silently turns every gate into a rubber
+    // stamp: baseline 1.000, candidate 1.000, promote. The candidate could be
+    // strictly worse and nothing would catch it — the exact regression this
+    // system exists to prevent.
+    //
+    // So the advance path reads judge-only numbers and refuses to move
+    // without them. The rollback path deliberately does not: it keeps using
+    // the all-evaluations average so programmatic hard failures (scored 0.0)
+    // still trigger a rollback even when the judge is down. Safety stays
+    // live when the quality signal dies; only progress stops.
+    if candidate.judged_sample_count == 0 {
+        return GateResult::Fail(format!(
+            "No LLM-judge evaluations in this window ({} programmatic sample(s) only) — \
+             quality was never actually measured, so there is nothing to advance on. \
+             Check that the evaluator's OpenAI API key is valid.",
+            candidate.sample_count,
+        ));
+    }
+
+    // The same reasoning applies to the sample floor: `min_samples` means
+    // "this many real quality measurements", not "this many requests that
+    // happened to not crash". With judge sampling below 1.0 the two differ.
+    if (candidate.judged_sample_count as u64) < policy.min_samples as u64 {
+        return GateResult::Fail(format!(
+            "Not enough judged samples: {} of {} required \
+             ({} total evaluations, the rest programmatic-only)",
+            candidate.judged_sample_count, policy.min_samples, candidate.sample_count,
+        ));
+    }
+
     // Quality must be at or above the advance threshold
-    if candidate.avg_quality < policy.advance_threshold {
+    if candidate.avg_judged_quality < policy.advance_threshold {
         return GateResult::Fail(format!(
             "Quality below advance threshold: {:.3} < {:.3} (need {:.3} more)",
-            candidate.avg_quality,
+            candidate.avg_judged_quality,
             policy.advance_threshold,
-            policy.advance_threshold - candidate.avg_quality,
+            policy.advance_threshold - candidate.avg_judged_quality,
         ));
     }
 
@@ -214,16 +268,20 @@ mod tests {
             baseline: VersionSnapshot {
                 version_id: Uuid::new_v4(),
                 avg_quality: baseline_q,
+                avg_judged_quality: baseline_q,
                 p95_latency_ms: baseline_lat,
                 error_rate: 0.01,
                 sample_count: 200,
+                judged_sample_count: 200,
             },
             candidate: VersionSnapshot {
                 version_id: Uuid::new_v4(),
                 avg_quality: candidate_q,
+                avg_judged_quality: candidate_q,
                 p95_latency_ms: candidate_lat,
                 error_rate: candidate_errors,
                 sample_count: 100,
+                judged_sample_count: 100,
             },
         }
     }
@@ -363,6 +421,106 @@ mod tests {
             matches!(result, PolicyVerdict::Rollback { .. }),
             "Expected Rollback, got {:?}",
             result
+        );
+    }
+
+    // ── Judge-coverage gating ───────────────────────────────────────────
+    //
+    // Regression tests for a silent failure that shipped: with a revoked
+    // OpenAI key every evaluation fell back to the programmatic evaluator,
+    // which scores a flat 1.0 for any healthy response. Baseline and
+    // candidate both read 1.000, every advance gate passed, and rollouts
+    // promoted themselves without a single real quality measurement.
+
+    /// Strip judge coverage from a metrics set, leaving the flat 1.0
+    /// programmatic scores a broken judge produces.
+    fn without_judge(mut m: RolloutMetrics) -> RolloutMetrics {
+        for v in [&mut m.baseline, &mut m.candidate] {
+            v.avg_quality = 1.0;
+            v.avg_judged_quality = 0.0;
+            v.judged_sample_count = 0;
+        }
+        m
+    }
+
+    #[test]
+    fn programmatic_only_never_advances() {
+        // Perfect-looking 1.000 scores, but nothing was actually judged.
+        let metrics = without_judge(make_metrics(1.0, 500, 1.0, 490, 0.01));
+        let result = evaluate(&metrics, &policy(), 0.10, 0.50, false, 700, 600);
+
+        match result {
+            PolicyVerdict::Hold { reason } => assert!(
+                reason.contains("No LLM-judge evaluations"),
+                "Hold reason should name the missing judge, got: {reason}"
+            ),
+            other => panic!(
+                "A rollout with no judged samples must not advance — got {:?}",
+                other
+            ),
+        }
+    }
+
+    #[test]
+    fn programmatic_only_still_rolls_back_on_hard_failures() {
+        // Losing the judge must not disable the safety path. Hard failures
+        // are scored 0.0 by the programmatic evaluator, so avg_quality drops
+        // even though nothing was judged.
+        let mut metrics = without_judge(make_metrics(1.0, 500, 1.0, 490, 0.01));
+        metrics.candidate.avg_quality = 0.2; // hard failures dragging it down
+
+        let result = evaluate(&metrics, &policy(), 0.10, 0.50, false, 700, 600);
+        assert!(
+            matches!(result, PolicyVerdict::Rollback { .. }),
+            "Rollback must still fire without a judge, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn partial_judge_coverage_below_min_samples_holds() {
+        // Judge is alive but has only scored a handful; min_samples is 50.
+        let mut metrics = make_metrics(0.95, 500, 0.95, 490, 0.01);
+        metrics.candidate.judged_sample_count = 7;
+
+        match evaluate(&metrics, &policy(), 0.10, 0.50, false, 700, 600) {
+            PolicyVerdict::Hold { reason } => assert!(
+                reason.contains("Not enough judged samples"),
+                "Hold reason should cite judged sample count, got: {reason}"
+            ),
+            other => panic!("Expected Hold on thin judge coverage, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn advance_uses_judged_quality_not_the_inflated_average() {
+        // A genuinely poor candidate (judged 0.55) whose overall average is
+        // dragged up to 0.95 by unjudged programmatic 1.0s must not advance.
+        let mut metrics = make_metrics(0.95, 500, 0.95, 490, 0.01);
+        metrics.candidate.avg_judged_quality = 0.55;
+
+        match evaluate(&metrics, &policy(), 0.10, 0.50, false, 700, 600) {
+            PolicyVerdict::Hold { reason } => assert!(
+                reason.contains("Quality below advance threshold"),
+                "Expected the judged score to fail the gate, got: {reason}"
+            ),
+            other => panic!(
+                "Inflated all-eval average must not carry a weak candidate, got {:?}",
+                other
+            ),
+        }
+    }
+
+    #[test]
+    fn fully_judged_healthy_candidate_still_advances() {
+        // The gating must not block legitimate promotions.
+        let metrics = make_metrics(0.95, 500, 0.96, 490, 0.01);
+        assert!(
+            matches!(
+                evaluate(&metrics, &policy(), 0.10, 0.50, false, 700, 600),
+                PolicyVerdict::Advance { .. }
+            ),
+            "A fully judged, high-quality candidate should advance"
         );
     }
 }

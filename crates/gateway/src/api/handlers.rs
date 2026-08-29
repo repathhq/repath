@@ -57,6 +57,10 @@ struct RolloutDetail {
     error_rate_candidate: Option<f64>,
     sample_count_baseline: Option<i64>,
     sample_count_candidate: Option<i64>,
+    /// Evaluations in this rollout scored by the LLM judge. Zero means the
+    /// quality figures above are programmatic-only and cannot distinguish a
+    /// better version from a worse one.
+    judged_sample_count: Option<i64>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     completed_at: Option<DateTime<Utc>>,
@@ -224,6 +228,16 @@ pub async fn get_rollout(
                  JOIN requests req ON e.request_id = req.id
                  WHERE req.rollout_id = r.id AND req.version_id = r.candidate_version_id)
             ) AS avg_quality_candidate,
+            -- How many of those scores came from the LLM judge. A quality
+            -- score built only from programmatic checks is a flat 1.0 for any
+            -- healthy response and says nothing about which version is
+            -- better, so the dashboard has to be able to tell the difference
+            -- rather than presenting both as the same number.
+            (SELECT COUNT(*) FROM evaluations e
+             JOIN requests req ON e.request_id = req.id
+             WHERE req.rollout_id = r.id AND e.evaluator_type = 'llm_judge'
+               AND req.version_id IN (r.baseline_version_id, r.candidate_version_id)
+            ) AS judged_sample_count,
             COALESCE(
                 (SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY req.latency_ms)
                  FROM requests req WHERE req.rollout_id = r.id
@@ -310,6 +324,7 @@ pub async fn get_rollout(
                 error_rate_candidate: r.get("error_rate_candidate"),
                 sample_count_baseline: r.get("sample_count_baseline"),
                 sample_count_candidate: r.get("sample_count_candidate"),
+                judged_sample_count: r.get("judged_sample_count"),
                 created_at: r.get("created_at"),
                 updated_at: r.get("updated_at"),
                 completed_at: r.get("completed_at"),

@@ -40,14 +40,23 @@ pub struct RolloutMetrics {
 #[derive(Debug, Clone)]
 pub struct VersionSnapshot {
     pub version_id: Uuid,
-    /// Rolling average quality score (0.0 – 1.0)
+    /// Rolling average quality score across all evaluations (0.0 – 1.0),
+    /// programmatic ones included. Drives the rollback gate so that hard
+    /// failures (scored 0.0 programmatically) always remain visible.
     pub avg_quality: f64,
+    /// Rolling average across LLM-judge evaluations only (0.0 – 1.0).
+    /// Only meaningful when `judged_sample_count > 0`; callers must check
+    /// that first, because a version with no judged samples reports 0.0
+    /// here and 0.0 is indistinguishable from "genuinely terrible".
+    pub avg_judged_quality: f64,
     /// 95th-percentile latency in milliseconds
     pub p95_latency_ms: u32,
     /// Fraction of requests with status_code >= 400
     pub error_rate: f64,
     /// Number of evaluated requests in the window
     pub sample_count: u32,
+    /// How many of `sample_count` carry a real LLM-judge quality score.
+    pub judged_sample_count: u32,
 }
 
 /// Result of an aggregation attempt.
@@ -109,9 +118,11 @@ pub async fn aggregate(
             VersionSnapshot {
                 version_id: baseline_version_id,
                 avg_quality: 0.0,
+                avg_judged_quality: 0.0,
                 p95_latency_ms: 0,
                 error_rate: 0.0,
                 sample_count: 0,
+                judged_sample_count: 0,
             }
         }
     };
@@ -129,9 +140,11 @@ fn version_snapshot_from_raw(r: &VersionMetrics) -> VersionSnapshot {
     VersionSnapshot {
         version_id: r.version_id,
         avg_quality: r.avg_quality,
+        avg_judged_quality: r.avg_judged_quality,
         p95_latency_ms: r.p95_latency_ms.max(0) as u32,
         error_rate: r.error_rate.clamp(0.0, 1.0),
         sample_count: r.sample_count.max(0) as u32,
+        judged_sample_count: r.judged_sample_count.max(0) as u32,
     }
 }
 
@@ -146,6 +159,13 @@ pub fn build_snapshot_json(metrics: &RolloutMetrics) -> serde_json::Value {
         "error_rate_candidate":    metrics.candidate.error_rate,
         "sample_size_baseline":    metrics.baseline.sample_count,
         "sample_size_candidate":   metrics.candidate.sample_count,
+        // Judge coverage is recorded alongside the scores so an audited
+        // decision can always be re-read as "what evidence did we have?".
+        // A promote with judged_size 0 would be a decision made blind.
+        "judged_quality_baseline":  metrics.baseline.avg_judged_quality,
+        "judged_quality_candidate": metrics.candidate.avg_judged_quality,
+        "judged_size_baseline":     metrics.baseline.judged_sample_count,
+        "judged_size_candidate":    metrics.candidate.judged_sample_count,
     })
 }
 
@@ -158,9 +178,11 @@ mod tests {
         VersionSnapshot {
             version_id: Uuid::new_v4(),
             avg_quality: quality,
+            avg_judged_quality: quality,
             p95_latency_ms: latency,
             error_rate: errors,
             sample_count: samples,
+            judged_sample_count: samples,
         }
     }
 

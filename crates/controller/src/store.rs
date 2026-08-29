@@ -32,10 +32,20 @@ pub struct ActiveRolloutRow {
 #[derive(Debug, Clone)]
 pub struct VersionMetrics {
     pub version_id: Uuid,
+    /// Mean score across every evaluation, including programmatic ones.
+    /// Used for the rollback gate, which must still see hard failures —
+    /// those are scored 0.0 by the programmatic evaluator and would be
+    /// invisible to a judge-only average.
     pub avg_quality: f64,
+    /// Mean score across LLM-judge evaluations only — the only signal that
+    /// actually measures whether one version is *better* than another.
+    /// Meaningless (and left at 0.0) when `judged_sample_count` is 0.
+    pub avg_judged_quality: f64,
     pub p95_latency_ms: i64,
     pub error_rate: f64,
     pub sample_count: i64,
+    /// How many of `sample_count` were scored by the LLM judge.
+    pub judged_sample_count: i64,
 }
 
 /// Fetch all rollouts currently in `shadow` or `canary` state.
@@ -88,6 +98,14 @@ pub async fn aggregate_version_metrics(
         SELECT
             r.version_id,
             AVG(e.overall_score)                                       AS avg_quality,
+            -- Judge-only quality. FILTER yields NULL when nothing was judged;
+            -- COALESCE keeps the type simple because every reader is required
+            -- to check judged_sample_count > 0 before trusting this value.
+            COALESCE(
+                AVG(e.overall_score) FILTER (WHERE e.evaluator_type = 'llm_judge'),
+                0.0
+            )                                                          AS avg_judged_quality,
+            COUNT(e.id) FILTER (WHERE e.evaluator_type = 'llm_judge')  AS judged_sample_count,
             COALESCE(
                 PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY r.latency_ms),
                 0
@@ -121,9 +139,11 @@ pub async fn aggregate_version_metrics(
             Ok(VersionMetrics {
                 version_id: r.get("version_id"),
                 avg_quality: r.get("avg_quality"),
+                avg_judged_quality: r.get("avg_judged_quality"),
                 p95_latency_ms: r.get("p95_latency_ms"),
                 error_rate: r.get("error_rate"),
                 sample_count: r.get("sample_count"),
+                judged_sample_count: r.get("judged_sample_count"),
             })
         })
         .collect()
