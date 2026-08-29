@@ -10,7 +10,10 @@ resolver = "2"
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.88"
+# Floor is set by aws-sdk-sesv2 and friends (1.94.1). Declared here so a
+# too-old toolchain fails at `cargo check` rather than only in the Docker
+# build, which is where this was first noticed.
+rust-version = "1.94"
 authors = ["Repath Team"]
 license = "BSL-1.1"
 repository = "https://github.com/repath/repath"

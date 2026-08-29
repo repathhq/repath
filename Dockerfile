@@ -9,7 +9,11 @@
 
 # ── Rust build ─────────────────────────────────────────────────────────────────
 
-FROM rust:1.88-slim-bookworm AS builder
+# 1.96 rather than 1.88: the AWS SDK used for SES declares an MSRV of 1.94.1,
+# and the pinned builder silently became the only place that mattered — CI
+# runs `stable`, so `cargo build` passed everywhere except the image that
+# actually ships. Keep this at or above the highest MSRV in Cargo.lock.
+FROM rust:1.96-slim-bookworm AS builder
 RUN apt-get update && apt-get install -y pkg-config libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
