@@ -89,3 +89,17 @@ variable "repath_test_coupon" {
   sensitive   = true
   default     = ""
 }
+
+variable "razorpay_webhook_secret" {
+  description = <<-DESC
+    Signing secret for the Razorpay webhook, from Razorpay Dashboard →
+    Settings → Webhooks. The webhook endpoint is unauthenticated by design —
+    Razorpay cannot carry our operator token — so this signature is the only
+    thing preventing a forged payment.captured payload from granting a free
+    plan upgrade. Verification fails closed, so leaving this empty rejects
+    every webhook rather than trusting it.
+  DESC
+  type        = string
+  sensitive   = true
+  default     = ""
+}

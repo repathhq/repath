@@ -64,8 +64,12 @@ resource "aws_amplify_app" "dashboard" {
     # have to reach Amplify. They were only ever written to SSM, which the
     # dashboard cannot read — create-order returned 503 "Razorpay not
     # configured" for every checkout, so no customer could pay at all.
-    RAZORPAY_KEY_ID           = var.razorpay_key_id
-    RAZORPAY_KEY_SECRET       = var.razorpay_key_secret
+    # Live credentials, deliberately. The test key pair stored here was
+    # revoked upstream and returns 401 from Razorpay directly, so test mode is
+    # simply not available. The internal REPATH_TEST_COUPON exists to exercise
+    # this real payment path for ₹1 rather than a full plan price.
+    RAZORPAY_KEY_ID           = var.razorpay_live_key
+    RAZORPAY_KEY_SECRET       = var.razorpay_live_secret
     REPATH_TEST_COUPON        = var.repath_test_coupon
     AMPLIFY_MONOREPO_APP_ROOT = "dashboard"
     AMPLIFY_DIFF_DEPLOY       = "false"

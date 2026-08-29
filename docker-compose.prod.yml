@@ -33,6 +33,9 @@ services:
       # without a verified SES identity fails loudly at the call site rather
       # than appearing to send. AWS credentials come from the EC2 instance
       # role — there is deliberately no key here to leak.
+      # Webhook signing secret. Verification fails closed without it, so an
+      # unset value rejects webhooks rather than trusting forged ones.
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
       REPATH_EMAIL_ENABLED: ${REPATH_EMAIL_ENABLED:-0}
       REPATH_MAIL_FROM: ${REPATH_MAIL_FROM:-Repath <no-reply@tryrepath.com>}
       REPATH_APP_URL: ${REPATH_APP_URL:-https://tryrepath.com}

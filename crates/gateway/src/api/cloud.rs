@@ -657,18 +657,35 @@ fn build_gateway_url(_tenant_id: &str) -> String {
     // This avoids needing wildcard SSL certs at launch
 }
 
-fn verify_razorpay_signature(body: &[u8], signature: &str) -> bool {
+/// Verify a payment-provider webhook signature.
+///
+/// # This must fail closed
+///
+/// These endpoints are deliberately unauthenticated — the provider cannot
+/// carry our operator token — so the signature is the *only* thing standing
+/// between the internet and a free plan upgrade. An earlier version returned
+/// `true` when the secret was unset "for dev/test", and the secret was never
+/// configured in any environment. The result, verified against production:
+/// an unsigned POST claiming `payment.captured` with any tenant id in its
+/// notes upgraded that tenant to Pro and answered 200. Every customer knows
+/// their own tenant id, so every customer could grant themselves Pro.
+///
+/// Refusing to verify without a secret means an unconfigured deployment
+/// rejects webhooks instead of trusting them. That is the safe direction: a
+/// dropped webhook delays an upgrade, a forged one gives the product away.
+fn verify_hmac_sha256_hex(secret_var: &str, body: &[u8], signature: &str) -> bool {
     use std::fmt::Write;
 
-    let secret = std::env::var("RAZORPAY_WEBHOOK_SECRET").unwrap_or_default();
+    let secret = std::env::var(secret_var).unwrap_or_default();
 
     if secret.is_empty() {
-        // In dev/test mode, skip verification
-        tracing::warn!("RAZORPAY_WEBHOOK_SECRET not set — skipping signature verification");
-        return true;
+        tracing::error!(
+            "{secret_var} is not set — rejecting webhook. Configure it, or this \
+             endpoint cannot be trusted."
+        );
+        return false;
     }
 
-    // HMAC-SHA256: hmac(secret, body) == signature
     use ring::hmac;
     let key = hmac::Key::new(hmac::HMAC_SHA256, secret.as_bytes());
     let computed = hmac::sign(&key, body);
@@ -676,17 +693,33 @@ fn verify_razorpay_signature(body: &[u8], signature: &str) -> bool {
         let _ = write!(out, "{:02x}", b);
         out
     });
-    computed_hex == signature
+
+    // Constant-time compare. A byte-at-a-time `==` short-circuits on the first
+    // difference, which leaks the expected digest to anyone who can measure
+    // response latency across enough attempts.
+    #[allow(deprecated)]
+    ring::constant_time::verify_slices_are_equal(computed_hex.as_bytes(), signature.as_bytes())
+        .is_ok()
 }
 
-fn verify_paddle_signature(body: &[u8], signature: &str) -> bool {
+pub fn verify_razorpay_signature(body: &[u8], signature: &str) -> bool {
+    verify_hmac_sha256_hex("RAZORPAY_WEBHOOK_SECRET", body, signature)
+}
+
+pub fn verify_paddle_signature(body: &[u8], signature: &str) -> bool {
     use std::fmt::Write;
 
     let secret = std::env::var("PADDLE_WEBHOOK_SECRET").unwrap_or_default();
 
+    // Fails closed for the same reason as Razorpay above: this endpoint is
+    // unauthenticated, so trusting an unverifiable payload hands out plan
+    // upgrades to anyone who can send a POST.
     if secret.is_empty() {
-        tracing::warn!("PADDLE_WEBHOOK_SECRET not set — skipping signature verification");
-        return true;
+        tracing::error!(
+            "PADDLE_WEBHOOK_SECRET is not set — rejecting webhook. Configure it, \
+             or this endpoint cannot be trusted."
+        );
+        return false;
     }
 
     // Paddle uses: sha256(ts:body) with HMAC
@@ -710,7 +743,10 @@ fn verify_paddle_signature(body: &[u8], signature: &str) -> bool {
         let _ = write!(out, "{:02x}", b);
         out
     });
-    computed_hex == provided_hash
+
+    #[allow(deprecated)]
+    ring::constant_time::verify_slices_are_equal(computed_hex.as_bytes(), provided_hash.as_bytes())
+        .is_ok()
 }
 
 fn cloud_error(status: StatusCode, message: String) -> axum::response::Response {

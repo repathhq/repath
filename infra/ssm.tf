@@ -23,7 +23,8 @@ locals {
     "RAZORPAY_KEY_ID"      = var.razorpay_key_id
     "RAZORPAY_KEY_SECRET"  = var.razorpay_key_secret
     "RAZORPAY_LIVE_KEY"    = var.razorpay_live_key
-    "RAZORPAY_LIVE_SECRET" = var.razorpay_live_secret
+    "RAZORPAY_LIVE_SECRET"    = var.razorpay_live_secret
+    "RAZORPAY_WEBHOOK_SECRET" = var.razorpay_webhook_secret
   }
 }
 
