@@ -268,6 +268,10 @@ mod tests {
 
         // Nothing is idle yet, so eviction must not discard a live bucket.
         rl.evict_idle();
-        assert_eq!(rl.bucket_count(), 1, "a bucket in use must survive eviction");
+        assert_eq!(
+            rl.bucket_count(),
+            1,
+            "a bucket in use must survive eviction"
+        );
     }
 }
