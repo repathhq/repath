@@ -725,3 +725,184 @@ fn cloud_error(status: StatusCode, message: String) -> axum::response::Response 
     )
         .into_response()
 }
+
+// ── Password reset ─────────────────────────────────────────────────────────
+//
+// Both endpoints are admin-only: the dashboard calls them server-side with the
+// operator token, exactly as it already does for login. Exposing them to the
+// browser would let anyone trigger mail to any address.
+//
+// The token is random 32 bytes, hex-encoded. Only its SHA-256 is stored, so a
+// database dump does not yield working reset links.
+
+/// How long a reset link stays valid. Long enough to find the mail, short
+/// enough that a link left in an inbox is not a standing key to the account.
+const RESET_TTL_MINUTES: i64 = 30;
+
+#[derive(Deserialize)]
+pub struct PasswordResetRequest {
+    pub email: String,
+}
+
+/// POST /api/v1/cloud/password-reset/request
+///
+/// Always answers 200 with the same body, whether or not the address exists.
+/// Anything else turns this into an account-enumeration oracle — the one place
+/// where being helpful about "no such user" is a security bug.
+pub async fn request_password_reset(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Json(body): Json<PasswordResetRequest>,
+) -> impl IntoResponse {
+    if let Some(resp) = reject_non_admin(&auth) {
+        return resp;
+    }
+
+    let ok = || {
+        Json(json!({
+            "message": "If that address has an account, a reset link is on its way."
+        }))
+        .into_response()
+    };
+
+    let email = body.email.trim().to_lowercase();
+    let row = sqlx::query("SELECT id, name FROM tenants WHERE LOWER(email) = $1 LIMIT 1")
+        .bind(&email)
+        .fetch_optional(&state.db_pool)
+        .await;
+
+    let Ok(Some(row)) = row else {
+        // Unknown address, or a database error. Both answer identically; the
+        // error case is logged rather than surfaced.
+        if let Err(e) = row {
+            tracing::error!(error = %e, "Password reset lookup failed");
+        }
+        return ok();
+    };
+
+    let tenant_id: String = row.get("id");
+
+    // 32 bytes of OS randomness. Hex so it survives being pasted out of a
+    // mail client without any escaping question.
+    let token = {
+        use rand::Rng;
+        let bytes: [u8; 32] = rand::thread_rng().gen();
+        bytes.iter().map(|b| format!("{b:02x}")).collect::<String>()
+    };
+    let token_hash = sha256_hex(&token);
+    let expires_at = Utc::now() + Duration::minutes(RESET_TTL_MINUTES);
+
+    // Any older live token is retired first, so a second request invalidates
+    // the first link rather than leaving several usable at once.
+    let _ = sqlx::query(
+        "UPDATE password_reset_tokens SET used_at = NOW() \
+         WHERE tenant_id = $1 AND used_at IS NULL",
+    )
+    .bind(&tenant_id)
+    .execute(&state.db_pool)
+    .await;
+
+    if let Err(e) = sqlx::query(
+        "INSERT INTO password_reset_tokens (tenant_id, token_hash, expires_at) \
+         VALUES ($1, $2, $3)",
+    )
+    .bind(&tenant_id)
+    .bind(&token_hash)
+    .bind(expires_at)
+    .execute(&state.db_pool)
+    .await
+    {
+        tracing::error!(error = %e, "Could not store password reset token");
+        return ok();
+    }
+
+    match repath_common::notify::email::send_password_reset(&email, &token, RESET_TTL_MINUTES).await
+    {
+        Ok(()) => tracing::info!(tenant_id, "Password reset email sent"),
+        Err(e) => {
+            // The token is already stored, so retiring it here keeps the
+            // system honest: no live token exists for mail that never went.
+            tracing::error!(error = %e, tenant_id, "Password reset email failed to send");
+            let _ = sqlx::query(
+                "UPDATE password_reset_tokens SET used_at = NOW() WHERE token_hash = $1",
+            )
+            .bind(&token_hash)
+            .execute(&state.db_pool)
+            .await;
+        }
+    }
+
+    ok()
+}
+
+#[derive(Deserialize)]
+pub struct PasswordResetConfirm {
+    pub token: String,
+    /// Already bcrypt-hashed by the dashboard, which is where every other
+    /// password hash in this system is produced. The gateway never sees a
+    /// plaintext password.
+    pub password_hash: String,
+}
+
+/// POST /api/v1/cloud/password-reset/confirm
+pub async fn confirm_password_reset(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Json(body): Json<PasswordResetConfirm>,
+) -> impl IntoResponse {
+    if let Some(resp) = reject_non_admin(&auth) {
+        return resp;
+    }
+
+    if body.password_hash.trim().is_empty() {
+        return cloud_error(StatusCode::BAD_REQUEST, "Missing password hash".into());
+    }
+
+    let token_hash = sha256_hex(body.token.trim());
+
+    // Claim the token and read its tenant in one statement. Doing this as a
+    // conditional UPDATE rather than SELECT-then-UPDATE means two concurrent
+    // redemptions of the same link cannot both succeed.
+    let claimed = sqlx::query(
+        "UPDATE password_reset_tokens \
+            SET used_at = NOW() \
+          WHERE token_hash = $1 AND used_at IS NULL AND expires_at > NOW() \
+      RETURNING tenant_id",
+    )
+    .bind(&token_hash)
+    .fetch_optional(&state.db_pool)
+    .await;
+
+    let tenant_id: String = match claimed {
+        Ok(Some(r)) => r.get("tenant_id"),
+        Ok(None) => {
+            return cloud_error(
+                StatusCode::BAD_REQUEST,
+                "That reset link has expired or already been used. Request a new one.".into(),
+            )
+        }
+        Err(e) => return cloud_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    };
+
+    match sqlx::query("UPDATE tenants SET password_hash = $1, updated_at = NOW() WHERE id = $2")
+        .bind(&body.password_hash)
+        .bind(&tenant_id)
+        .execute(&state.db_pool)
+        .await
+    {
+        Ok(_) => {
+            tracing::info!(tenant_id, "Password reset completed");
+            Json(json!({ "message": "Password updated." })).into_response()
+        }
+        Err(e) => cloud_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+fn sha256_hex(input: &str) -> String {
+    use ring::digest;
+    digest::digest(&digest::SHA256, input.as_bytes())
+        .as_ref()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}

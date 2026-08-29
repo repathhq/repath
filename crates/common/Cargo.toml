@@ -25,6 +25,8 @@ validator = { version = "0.18", features = ["derive"] }
 
 # Outbound delivery for webhooks and Slack
 reqwest = { workspace = true }
+aws-config = { workspace = true }
+aws-sdk-sesv2 = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 

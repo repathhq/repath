@@ -29,6 +29,14 @@ services:
       REPATH_API_TOKEN: ${REPATH_API_TOKEN}
       REPATH_CLOUD_MODE: "true"
       REPATH_CLOUD_DOMAIN: ${REPATH_CLOUD_DOMAIN}
+      # Transactional email. Off unless explicitly enabled, so a deployment
+      # without a verified SES identity fails loudly at the call site rather
+      # than appearing to send. AWS credentials come from the EC2 instance
+      # role — there is deliberately no key here to leak.
+      REPATH_EMAIL_ENABLED: ${REPATH_EMAIL_ENABLED:-0}
+      REPATH_MAIL_FROM: ${REPATH_MAIL_FROM:-Repath <no-reply@tryrepath.com>}
+      REPATH_APP_URL: ${REPATH_APP_URL:-https://tryrepath.com}
+      AWS_REGION: ${AWS_REGION:-ap-south-1}
       RUST_LOG: info
     ports:
       - "127.0.0.1:8080:8080"

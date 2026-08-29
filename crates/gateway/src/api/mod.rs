@@ -38,6 +38,8 @@
 //! DELETE /api/v1/cloud/tenants/:id         Delete tenant (account deletion)
 //! POST   /api/v1/cloud/tenants/:id/upgrade Upgrade plan (after payment)
 //! GET    /api/v1/cloud/tenants/:id/usage   Usage + quota
+//! POST   /api/v1/cloud/password-reset/request  Email a reset link
+//! POST   /api/v1/cloud/password-reset/confirm  Redeem a reset token
 //! POST   /api/v1/cloud/tenants/:id/api-key/rotate  Issue a new API key
 //!
 //! Payment webhooks (signed, no auth token required):
@@ -152,6 +154,14 @@ fn cloud_routes() -> Router<AppState> {
         .route("/tenants/:id/usage", get(cloud::get_usage))
         .route("/tenants/:id/api-key/rotate", post(cloud::rotate_api_key))
         .route("/tenants/by-email/:email", get(cloud::get_tenant_by_email))
+        .route(
+            "/password-reset/request",
+            post(cloud::request_password_reset),
+        )
+        .route(
+            "/password-reset/confirm",
+            post(cloud::confirm_password_reset),
+        )
 }
 
 pub fn api_router(state: AppState) -> Router<AppState> {

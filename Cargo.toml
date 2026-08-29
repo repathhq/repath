@@ -49,6 +49,12 @@ opentelemetry_sdk = { version = "0.24", features = ["rt-tokio"] }
 opentelemetry-prometheus = "0.17"
 prometheus = "0.13"
 
+# AWS — transactional email. The SDK is used rather than hand-rolled SigV4
+# because it picks up the EC2 instance role automatically, so no SES
+# credential ever has to exist as a stored secret.
+aws-config = { version = "1.5", features = ["behavior-version-latest"] }
+aws-sdk-sesv2 = "1.48"
+
 # Error handling
 thiserror = "1.0"
 anyhow = "1.0"

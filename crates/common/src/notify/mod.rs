@@ -18,6 +18,7 @@
 //! Recording every attempt with its status code turns "it stopped working" into
 //! something the customer can diagnose themselves.
 
+pub mod email;
 pub mod webhooks;
 
 pub use webhooks::{dispatch_event, Event, EventPayload};
