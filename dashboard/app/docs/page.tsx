@@ -217,6 +217,43 @@ const client = new OpenAI({
             Repath is a fully OpenAI-compatible proxy. Streaming, function calling, embeddings — everything works unchanged. Only the base URL changes.
           </Note>
 
+          <H3>Vercel AI SDK</H3>
+          <p className="text-[14px] text-gray-600 mb-2">
+            The AI SDK talks the OpenAI wire protocol, so it needs the same two changes. Streaming works — Repath forwards
+            every SSE chunk to your app as it arrives and evaluates the assembled response afterwards, so
+            <code className="text-[13px]"> streamText</code> stays token-by-token.
+          </p>
+          <Code lang="typescript">{`import { createOpenAI } from "@ai-sdk/openai";
+import { streamText } from "ai";
+
+const repath = createOpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: "https://api.tryrepath.com/v1",
+  headers: { "X-Repath-Key": process.env.REPATH_KEY! },
+});
+
+const result = streamText({
+  model: repath("gpt-4o-mini"),
+  prompt: "Explain progressive delivery in one paragraph.",
+});`}</Code>
+
+          <H3>OpenRouter, Anthropic and Gemini</H3>
+          <p className="text-[14px] text-gray-600 mb-2">
+            Point the same client at Repath and name the provider&rsquo;s model. For Anthropic, Repath translates the
+            request and response between the OpenAI and Anthropic formats, so your OpenAI client keeps working
+            unchanged. Store that provider&rsquo;s key under Settings → Provider API Keys first, and Repath uses it
+            instead of forwarding yours.
+          </p>
+          <Code lang="typescript">{`// OpenRouter — model ids are namespaced
+const result = streamText({
+  model: repath("anthropic/claude-3.5-sonnet"),
+  prompt: "…",
+});`}</Code>
+          <Note type="info">
+            Provider keys are stored encrypted with AES-256-GCM and are only ever used server-side. Add them under
+            Settings → Provider API Keys, then list the providers in your failover chain under Settings → Gateway.
+          </Note>
+
           <H3>3. Create your first rollout</H3>
           <p className="text-[14px] text-gray-600 mb-2">Go to your dashboard → Rollouts → New Rollout, or use the CLI:</p>
           <Code lang="yaml">{`# rollout.yaml

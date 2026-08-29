@@ -173,6 +173,22 @@ export default function BillingPage() {
 
   const plans = [
     {
+      id: "indie",
+      name: "Indie",
+      usd: "$20",
+      inr: "\u20b91,699",
+      evals: "3,000 evals/month",
+      features: [
+        "1 active rollout",
+        "OpenAI + Anthropic + Gemini + OpenRouter",
+        "Auto-rollback",
+        "7-day data retention",
+        "Slack + webhook alerts",
+        "Dashboard + API",
+      ],
+      highlight: false,
+    },
+    {
       id: "starter",
       name: "Starter",
       usd: "$49",
@@ -180,10 +196,10 @@ export default function BillingPage() {
       evals: "10,000 evals/month",
       features: [
         "3 active rollouts",
-        "OpenAI + Anthropic + Gemini",
+        "OpenAI + Anthropic + Gemini + OpenRouter",
         "Auto-rollback",
         "7-day data retention",
-        "Email alerts",
+        "Slack + webhook alerts",
         "Dashboard + API",
       ],
       highlight: false,
@@ -247,7 +263,7 @@ export default function BillingPage() {
                 )}
               </div>
             </div>
-            {usage.plan === "trial" || usage.plan === "starter" ? (
+            {usage.plan === "trial" || usage.plan === "indie" || usage.plan === "starter" ? (
               <Link href="#upgrade" className="px-3.5 py-2 bg-violet-600 hover:bg-violet-700 text-white text-[13px] font-semibold rounded-lg transition-colors">
                 Upgrade
               </Link>
@@ -331,7 +347,7 @@ export default function BillingPage() {
           <div className="grid md:grid-cols-2 gap-4 mb-4">
             {plans.map(plan => {
               const isCurrent = usage?.plan === plan.id;
-              const planRank = { trial: 0, starter: 1, pro: 2, enterprise: 3 };
+              const planRank = { trial: 0, indie: 1, starter: 2, pro: 3, enterprise: 4 };
               const userRank = planRank[usage?.plan as keyof typeof planRank] ?? 0;
               const cardRank = planRank[plan.id as keyof typeof planRank] ?? 0;
               const isDowngrade = cardRank < userRank;
