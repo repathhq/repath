@@ -153,6 +153,11 @@ fn cloud_routes() -> Router<AppState> {
         .route("/tenants/:id/upgrade", post(cloud::upgrade_tenant))
         .route("/tenants/:id/usage", get(cloud::get_usage))
         .route("/tenants/:id/api-key/rotate", post(cloud::rotate_api_key))
+        .route(
+            "/tenants/:id/subscription",
+            post(cloud::activate_subscription),
+        )
+        .route("/tenants/:id/payments", get(cloud::list_payments))
         .route("/tenants/by-email/:email", get(cloud::get_tenant_by_email))
         .route(
             "/password-reset/request",

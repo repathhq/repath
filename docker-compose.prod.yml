@@ -82,6 +82,11 @@ services:
     container_name: repath-controller
     environment:
       REPATH_DATABASE_URL: ${REPATH_DATABASE_URL}
+      # Read-only use: the reconciler polls subscription status so a lapsed
+      # plan can be removed. Absent here, reconciliation is skipped rather
+      # than defaulting to downgrading everyone.
+      RAZORPAY_KEY_ID: ${RAZORPAY_LIVE_KEY:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_LIVE_SECRET:-}
       RUST_LOG: info
     ports:
       - "127.0.0.1:9091:9091"

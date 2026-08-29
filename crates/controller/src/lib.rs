@@ -42,6 +42,7 @@
 //!   gates all pass AND the minimum sample size is met. Sparse traffic
 //!   (< min_samples evaluations) never triggers premature decisions.
 
+pub mod billing_reconciler;
 pub mod decision;
 pub mod loop_runner;
 pub mod metrics;

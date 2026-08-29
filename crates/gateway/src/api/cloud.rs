@@ -942,3 +942,164 @@ fn sha256_hex(input: &str) -> String {
         .map(|b| format!("{b:02x}"))
         .collect()
 }
+
+// ── Subscriptions ──────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct ActivateSubscriptionRequest {
+    pub plan: String,
+    pub subscription_id: String,
+    pub subscription_status: String,
+    /// End of the paid period, as reported by the provider. `None` when the
+    /// provider has not set one yet (a mandate authorised but not yet
+    /// charged), in which case no expiry is enforced until the reconciler
+    /// learns one.
+    pub current_period_end: Option<DateTime<Utc>>,
+    pub payment_id: Option<String>,
+}
+
+/// POST /api/v1/cloud/tenants/:id/subscription
+///
+/// Records a subscription and grants its plan. Replaces the old `upgrade`
+/// endpoint's behaviour of setting a plan with no end date, under which one
+/// payment bought the tier permanently.
+pub async fn activate_subscription(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(id): Path<String>,
+    Json(body): Json<ActivateSubscriptionRequest>,
+) -> impl IntoResponse {
+    // Admin-only: the dashboard's billing route calls this server-side after
+    // verifying the provider's signature. A tenant must never be able to grant
+    // itself a plan.
+    if let Some(resp) = reject_non_admin(&auth) {
+        return resp;
+    }
+
+    let quota = plan_quota(&body.plan);
+    if quota == 0 {
+        return cloud_error(
+            StatusCode::BAD_REQUEST,
+            format!("Unknown plan: {}", body.plan),
+        );
+    }
+
+    let result = sqlx::query(
+        r#"
+        UPDATE tenants
+           SET plan                = $1,
+               eval_quota_monthly  = $2,
+               subscription_id     = $3,
+               subscription_status = $4,
+               current_period_end  = $5,
+               last_synced_at      = NOW(),
+               trial_ends_at       = NULL,
+               active              = true,
+               updated_at          = NOW()
+         WHERE id = $6
+        RETURNING id
+        "#,
+    )
+    .bind(&body.plan)
+    .bind(quota)
+    .bind(&body.subscription_id)
+    .bind(&body.subscription_status)
+    .bind(body.current_period_end)
+    .bind(&id)
+    .fetch_optional(&state.db_pool)
+    .await;
+
+    match result {
+        Ok(Some(_)) => {
+            // Record the charge. Best-effort and separate from the activation
+            // above: a customer who paid must get their plan even if the
+            // history row fails to write. ON CONFLICT makes a retried
+            // callback idempotent rather than double-recording one payment.
+            if let Some(payment_id) = &body.payment_id {
+                let _ = sqlx::query(
+                    "INSERT INTO payments \
+                       (tenant_id, provider_payment_id, provider, subscription_id, plan, \
+                        amount_minor, currency, status) \
+                     VALUES ($1, $2, 'razorpay', $3, $4, $5, 'INR', 'captured') \
+                     ON CONFLICT (provider_payment_id) DO NOTHING",
+                )
+                .bind(&id)
+                .bind(payment_id)
+                .bind(&body.subscription_id)
+                .bind(&body.plan)
+                .bind(plan_amount_minor(&body.plan))
+                .execute(&state.db_pool)
+                .await;
+            }
+
+            tracing::info!(
+                tenant_id = %id,
+                plan = %body.plan,
+                subscription_id = %body.subscription_id,
+                "Subscription activated"
+            );
+            Json(json!({
+                "message": format!("Subscribed to {}", body.plan),
+                "plan": body.plan,
+                "eval_quota_monthly": quota,
+                "current_period_end": body.current_period_end,
+            }))
+            .into_response()
+        }
+        Ok(None) => cloud_error(StatusCode::NOT_FOUND, format!("Tenant not found: {id}")),
+        Err(e) => cloud_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+/// GET /api/v1/cloud/tenants/:id/payments
+///
+/// Payment history for the Billing page. Previously nothing recorded a
+/// payment at all — the id was logged and discarded — so a customer had no
+/// way to see what they had been charged.
+pub async fn list_payments(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    if let Some(resp) = reject_cross_tenant(&auth, &id) {
+        return resp;
+    }
+
+    let rows = sqlx::query(
+        "SELECT provider_payment_id, plan, amount_minor, currency, status, created_at \
+           FROM payments WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 50",
+    )
+    .bind(&id)
+    .fetch_all(&state.db_pool)
+    .await;
+
+    match rows {
+        Ok(rows) => {
+            let payments: Vec<_> = rows
+                .iter()
+                .map(|r| {
+                    json!({
+                        "payment_id":   r.get::<String, _>("provider_payment_id"),
+                        "plan":         r.get::<String, _>("plan"),
+                        "amount_minor": r.get::<i64, _>("amount_minor"),
+                        "currency":     r.get::<String, _>("currency"),
+                        "status":       r.get::<String, _>("status"),
+                        "created_at":   r.get::<DateTime<Utc>, _>("created_at"),
+                    })
+                })
+                .collect();
+            Json(json!({ "payments": payments })).into_response()
+        }
+        Err(e) => cloud_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+/// Price in paise, mirroring dashboard/lib/plans.ts.
+fn plan_amount_minor(plan: &str) -> i64 {
+    match plan {
+        "indie" => 169_900,
+        "starter" => 409_900,
+        "pro" => 1_249_900,
+        _ => 0,
+    }
+}

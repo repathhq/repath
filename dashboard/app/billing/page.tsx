@@ -59,7 +59,10 @@ export default function BillingPage() {
     : null;
 
   const handleRazorpay = async (plan: string) => {
-    const res = await fetch("/api/billing/razorpay/create-order", {
+    // Subscriptions, not one-time orders. Under the old Order flow a single
+    // payment bought the plan permanently — nothing stored a period end and
+    // nothing ever renewed or expired it.
+    const res = await fetch("/api/billing/razorpay/create-subscription", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ plan, ...(couponApplied && coupon && { coupon: coupon.trim() }) }),
     });
@@ -76,9 +79,9 @@ export default function BillingPage() {
       return;
     }
     const order = await res.json() as {
-      orderId: string; amount: number; currency: string;
-      keyId: string; tenantId: string; email: string; name: string;
-      plan: string; testMode?: boolean;
+      subscriptionId: string; amountMinor: number; keyId: string;
+      tenantId: string; email: string; name: string;
+      plan: string; planName: string;
     };
     if (!window.Razorpay) {
       await new Promise<void>(resolve => {
@@ -90,30 +93,28 @@ export default function BillingPage() {
     }
     new window.Razorpay({
       key: order.keyId,
-      amount: order.amount,
-      currency: order.currency,
       name: "Repath",
-      description: `${order.plan.charAt(0).toUpperCase() + order.plan.slice(1)} Plan`,
-      order_id: order.orderId,
+      description: `${order.planName} plan — billed monthly`,
+      // subscription_id, not order_id: this authorises a recurring mandate.
+      subscription_id: order.subscriptionId,
       prefill: { email: order.email, name: order.name },
       theme: { color: "#7c3aed" },
       modal: { ondismiss: () => setUpgrading(null) },
       handler: async (response: {
         razorpay_payment_id: string;
-        razorpay_order_id: string;
+        razorpay_subscription_id: string;
         razorpay_signature: string;
       }) => {
         setVerifying(true);
-        // Verify signature server-side before activating plan
-        const verify = await fetch("/api/billing/razorpay/verify-payment", {
+        // The server re-reads the plan from Razorpay rather than trusting
+        // anything sent from here, so no plan or tenant is posted back.
+        const verify = await fetch("/api/billing/razorpay/verify-subscription", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            razorpay_payment_id:  response.razorpay_payment_id,
-            razorpay_order_id:    response.razorpay_order_id,
-            razorpay_signature:   response.razorpay_signature,
-            plan:                 order.plan,
-            tenant_id:            order.tenantId,
+            razorpay_payment_id:      response.razorpay_payment_id,
+            razorpay_subscription_id: response.razorpay_subscription_id,
+            razorpay_signature:       response.razorpay_signature,
           }),
         });
         if (verify.ok) {

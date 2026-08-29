@@ -92,6 +92,22 @@ async fn main() -> anyhow::Result<()> {
         http_client: reqwest::Client::new(),
     };
 
+    // Billing reconciliation runs alongside the decision loop. It is spawned
+    // rather than awaited so a billing problem can never stall rollout
+    // decisions, and it is skipped entirely when payment credentials are
+    // absent — a self-hosted deployment has no subscriptions to reconcile,
+    // and defaulting to "reconcile anyway" would downgrade every tenant.
+    match repath_controller::billing_reconciler::ReconcilerConfig::from_env(reqwest::Client::new())
+    {
+        Some(billing) => {
+            let billing_pool = pool.clone();
+            tokio::spawn(async move {
+                repath_controller::billing_reconciler::run(billing_pool, billing).await;
+            });
+        }
+        None => info!("Razorpay credentials not set — billing reconciler disabled"),
+    }
+
     // Run the decision loop — returns only on task abort (shutdown)
     run(pool, config).await;
 
