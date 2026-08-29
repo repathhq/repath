@@ -202,7 +202,10 @@ async fn upsert_provider(
             "https://generativelanguage.googleapis.com/v1beta/openai",
             "gemini",
         ),
-        // Anything else is treated as a custom base URL.
+        "openrouter" => ("https://openrouter.ai/api/v1", "openrouter"),
+        // Anything else is treated as a custom base URL. It is typed as
+        // `openai` because a custom endpoint is only usable here if it speaks
+        // the OpenAI wire format — that is what the proxy will send it.
         other => (other, "openai"),
     };
 

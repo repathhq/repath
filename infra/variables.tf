@@ -75,3 +75,17 @@ variable "razorpay_live_secret" {
   sensitive   = true
   default     = ""
 }
+
+variable "repath_test_coupon" {
+  description = <<-DESC
+    Internal testing coupon code. Charges a flat INR 1 for any plan, so it must
+    never be published — a previous version hardcoded the code into
+    dashboard/app/api/billing/.../create-order/route.ts, which put a working
+    discount for the INR 12,499 plan into a public repository. Leave empty to
+    disable coupons entirely; the route fails closed when this is unset.
+    Set it in terraform.tfvars (gitignored), never here.
+  DESC
+  type        = string
+  sensitive   = true
+  default     = ""
+}

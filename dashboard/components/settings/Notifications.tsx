@@ -1,7 +1,10 @@
 "use client";
 
 /**
- * Email and Slack notifications.
+ * Slack notifications.
+ *
+ * Email is deliberately absent: the delivery side does not exist, so offering
+ * the toggle would take a subscription for rollback alerts and drop it.
  *
  * Defaults to the two events that actually need a person — an automatic
  * rollback and a provider outage. Advance and promote are the system working
@@ -51,6 +54,8 @@ export default function Notifications() {
     setError(null);
     try {
       await api.notifications.save({
+        // Preserved as-is: the UI no longer edits these, and a save must not
+        // silently clear a value the user set before the control was hidden.
         email_enabled: settings.email_enabled,
         email_address: settings.email_address,
         slack_enabled: settings.slack_enabled,
@@ -114,25 +119,12 @@ export default function Notifications() {
         </div>
       </div>
 
-      <div>
-        <h3 className="text-[14px] font-semibold text-gray-900 mb-3">Email</h3>
-        <label className="flex items-center gap-2.5 cursor-pointer mb-3">
-          <input
-            type="checkbox"
-            className="accent-violet-600"
-            checked={settings.email_enabled}
-            onChange={(e) => setSettings({ ...settings, email_enabled: e.target.checked })}
-          />
-          <span className="text-[13.5px] text-gray-800">Send email notifications</span>
-        </label>
-        <input
-          className={input}
-          placeholder="alerts@yourcompany.com"
-          value={settings.email_address ?? ""}
-          onChange={(e) => setSettings({ ...settings, email_address: e.target.value })}
-          disabled={!settings.email_enabled}
-        />
-      </div>
+      {/* Email delivery is not built yet — dispatch_event only sends webhooks
+          and Slack, and there is no SES/SMTP integration anywhere. The control
+          is hidden rather than shown-and-disabled because the failure it used
+          to produce was the dangerous kind: it accepted the subscription,
+          reported success, and then silently never delivered a rollback
+          alert. Restore this block in the same commit that adds a sender. */}
 
       <div>
         <h3 className="text-[14px] font-semibold text-gray-900 mb-3">Slack</h3>

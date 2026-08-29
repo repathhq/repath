@@ -30,6 +30,10 @@ pub enum Provider {
     Anthropic,
     Gemini,
     Azure,
+    /// OpenAI-compatible aggregator. Needs no body or auth translation, but is
+    /// recognised explicitly so incidents and metrics attribute to it by name
+    /// rather than to "unknown", and so it gets its attribution headers.
+    OpenRouter,
     Unknown,
 }
 
@@ -44,6 +48,8 @@ impl Provider {
             Provider::Gemini
         } else if url.contains("openai.azure.com") {
             Provider::Azure
+        } else if url.contains("openrouter.ai") {
+            Provider::OpenRouter
         } else if url.contains("api.openai.com") {
             Provider::OpenAI
         } else {
@@ -57,6 +63,7 @@ impl Provider {
             Provider::Anthropic => "anthropic",
             Provider::Gemini => "gemini",
             Provider::Azure => "azure",
+            Provider::OpenRouter => "openrouter",
             Provider::Unknown => "unknown",
         }
     }
@@ -103,6 +110,19 @@ pub fn normalize_headers(
         Provider::Gemini => {
             // Gemini's OpenAI-compat endpoint uses Bearer auth — pass through as-is
             // but ensure anthropic version header isn't present
+        }
+        Provider::OpenRouter => {
+            // OpenAI-compatible, so auth passes through untouched. These two
+            // headers are how OpenRouter attributes traffic on their dashboard
+            // and rankings; without them requests show as anonymous.
+            headers.insert(
+                HeaderName::from_static("http-referer"),
+                HeaderValue::from_static("https://tryrepath.com"),
+            );
+            headers.insert(
+                HeaderName::from_static("x-title"),
+                HeaderValue::from_static("Repath"),
+            );
         }
         _ => {
             // OpenAI, Azure, Unknown — pass Authorization header through as-is
@@ -330,5 +350,57 @@ mod tests {
         assert!(normalized.get("authorization").is_none());
         assert_eq!(normalized["x-api-key"], "sk-ant-test");
         assert_eq!(normalized["anthropic-version"], "2023-06-01");
+    }
+}
+
+#[cfg(test)]
+mod openrouter_tests {
+    use super::*;
+
+    #[test]
+    fn openrouter_is_detected_not_swallowed_as_unknown() {
+        // Before this variant existed OpenRouter fell through to Unknown, so
+        // every provider incident and metric recorded it as "unknown".
+        assert_eq!(
+            Provider::from_url("https://openrouter.ai/api/v1"),
+            Provider::OpenRouter
+        );
+        assert_eq!(Provider::OpenRouter.to_str(), "openrouter");
+    }
+
+    #[test]
+    fn openrouter_keeps_bearer_auth_and_gains_attribution() {
+        // It is OpenAI-compatible, so the client's Authorization header must
+        // survive untouched — the Anthropic branch's x-api-key rewrite would
+        // break it.
+        let mut h = HeaderMap::new();
+        h.insert(
+            "authorization",
+            HeaderValue::from_static("Bearer sk-or-v1-x"),
+        );
+
+        let out = normalize_headers(h, &Provider::OpenRouter, None);
+
+        assert_eq!(
+            out.get("authorization").unwrap(),
+            "Bearer sk-or-v1-x",
+            "OpenRouter auth must pass through unchanged"
+        );
+        assert!(out.get("x-api-key").is_none());
+        assert_eq!(out.get("http-referer").unwrap(), "https://tryrepath.com");
+        assert_eq!(out.get("x-title").unwrap(), "Repath");
+    }
+
+    #[test]
+    fn openrouter_body_is_not_translated() {
+        // OpenAI wire format goes straight through; translating it would
+        // corrupt the request.
+        let body = Bytes::from(r#"{"model":"anthropic/claude-3.5-sonnet","messages":[]}"#);
+        assert_eq!(
+            translate_request_body(&body, &Provider::OpenRouter),
+            body,
+            "OpenRouter speaks OpenAI natively — the body must be untouched"
+        );
+        assert_eq!(translate_response_body(&body, &Provider::OpenRouter), body);
     }
 }

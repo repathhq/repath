@@ -630,8 +630,16 @@ pub async fn paddle_webhook(
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
+/// Monthly LLM-judge evaluation allowance per plan.
+///
+/// The quotas descend in price-per-evaluation as the plan rises — indie
+/// ₹/eval > starter > pro — so that growing is rewarded and downgrading never
+/// is. Indie deliberately sits at 3,000 rather than 5,000: at 5,000 it would
+/// undercut starter's unit price and every starter customer would rationally
+/// move down.
 fn plan_quota(plan: &str) -> i32 {
     match plan {
+        "indie" => 3_000,
         "starter" => 10_000,
         "pro" => 100_000,
         "enterprise" => i32::MAX,

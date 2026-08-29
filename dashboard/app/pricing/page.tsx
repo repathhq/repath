@@ -14,6 +14,25 @@ function GithubIcon({ className }: { className?: string }) {
 
 const plans = [
   {
+    name: "Indie",
+    price: { inr: "\u20b91,699", usd: "$20" },
+    period: "/ month",
+    description: "For solo builders and side projects.",
+    highlight: false,
+    features: [
+      "3,000 LLM evaluations/month",
+      "1 active rollout",
+      "OpenAI + Anthropic + Gemini + OpenRouter",
+      "Auto-rollback",
+      "7-day data retention",
+      "Slack + webhook alerts",
+      "Dashboard + CLI",
+      "Community support",
+    ],
+    cta: "Start 1-week trial",
+    ctaHref: "/signup?plan=indie",
+  },
+  {
     name: "Starter",
     price: { inr: "₹4,099", usd: "$49" },
     period: "/ month",
@@ -22,10 +41,10 @@ const plans = [
     features: [
       "10,000 LLM evaluations/month",
       "3 active rollouts",
-      "OpenAI + Anthropic + Gemini",
+      "OpenAI + Anthropic + Gemini + OpenRouter",
       "Auto-rollback",
       "7-day data retention",
-      "Email alerts",
+      "Slack + webhook alerts",
       "Dashboard + CLI",
       "Community support",
     ],

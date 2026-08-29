@@ -3,14 +3,34 @@ import { getSession } from "@/lib/auth";
 
 // Plan prices in INR paise (1 INR = 100 paise)
 const PLAN_PRICES: Record<string, number> = {
-  starter: 409900,   // ₹4,099
-  pro:     1249900,  // ₹12,499
+  indie:   169900,   // ₹1,699  ($20)
+  starter: 409900,   // ₹4,099  ($49)
+  pro:     1249900,  // ₹12,499 ($149)
 };
 
-// Server-side coupon validation
-const COUPONS: Record<string, { discountPaise: number | "flat"; flatPaise?: number }> = {
-  avibuddi: { discountPaise: "flat", flatPaise: 100 }, // ₹1
-};
+/**
+ * The internal testing coupon, which charges a flat ₹1.
+ *
+ * The code lives in REPATH_TEST_COUPON, never in this file. A previous
+ * version hardcoded it here, which put a working code for the ₹12,499 plan
+ * into a public repository — anyone reading the source could buy Pro for one
+ * rupee, repeatedly, forever. If the variable is unset no coupon is accepted
+ * at all, so a deployment that forgets it fails closed rather than open.
+ *
+ * Rotate by changing the environment variable and redeploying; nothing else
+ * needs to change.
+ */
+function resolveTestCoupon(submitted: string): boolean {
+  const configured = process.env.REPATH_TEST_COUPON?.trim();
+  if (!configured) return false;
+  // Length check first so the comparison below can't be used as an oracle.
+  if (submitted.length !== configured.length) return false;
+  let diff = 0;
+  for (let i = 0; i < configured.length; i++) {
+    diff |= submitted.charCodeAt(i) ^ configured.charCodeAt(i);
+  }
+  return diff === 0;
+}
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -18,19 +38,24 @@ export async function POST(req: NextRequest) {
 
   const baseAmount = PLAN_PRICES[plan];
   if (!baseAmount) {
-    return NextResponse.json({ error: "Invalid plan. Must be 'starter' or 'pro'." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid plan. Must be 'indie', 'starter' or 'pro'." },
+      { status: 400 }
+    );
   }
 
   // Apply coupon if provided
   let amount = baseAmount;
   let appliedCoupon: string | null = null;
   if (coupon && typeof coupon === "string") {
-    const c = COUPONS[coupon.toLowerCase().trim()];
-    if (!c) {
+    const submitted = coupon.trim();
+    if (!resolveTestCoupon(submitted)) {
       return NextResponse.json({ error: "Invalid coupon code." }, { status: 400 });
     }
-    amount = c.discountPaise === "flat" ? (c.flatPaise ?? 100) : Math.max(100, baseAmount - c.discountPaise);
-    appliedCoupon = coupon.toLowerCase().trim();
+    amount = 100; // ₹1
+    appliedCoupon = "test";
+    // Redemptions are logged so an unexpected one is visible after the fact.
+    console.warn(`[billing] test coupon redeemed for plan=${plan}`);
   }
 
   const keyId     = process.env.RAZORPAY_KEY_ID;

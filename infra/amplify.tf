@@ -41,7 +41,7 @@ resource "aws_amplify_app" "dashboard" {
             preBuild:
               commands:
                 - npm ci
-                - env | grep -e REPATH_API_TOKEN -e JWT_SECRET >> .env.production
+                - env | grep -e REPATH_API_TOKEN -e JWT_SECRET -e RAZORPAY_KEY_ID -e RAZORPAY_KEY_SECRET -e REPATH_TEST_COUPON >> .env.production
             build:
               commands:
                 - npm run build
@@ -60,6 +60,13 @@ resource "aws_amplify_app" "dashboard" {
     NEXT_PUBLIC_APP_URL       = "https://${var.domain_name}"
     REPATH_API_TOKEN          = random_password.api_token.result
     JWT_SECRET                = random_password.jwt_secret.result
+    # Billing runs in the dashboard's own server routes, not on EC2, so these
+    # have to reach Amplify. They were only ever written to SSM, which the
+    # dashboard cannot read — create-order returned 503 "Razorpay not
+    # configured" for every checkout, so no customer could pay at all.
+    RAZORPAY_KEY_ID           = var.razorpay_key_id
+    RAZORPAY_KEY_SECRET       = var.razorpay_key_secret
+    REPATH_TEST_COUPON        = var.repath_test_coupon
     AMPLIFY_MONOREPO_APP_ROOT = "dashboard"
     AMPLIFY_DIFF_DEPLOY       = "false"
   }

@@ -417,7 +417,7 @@ export default function SettingsPage() {
                 <Field label="Full name">
                   <Input value={profileName} onChange={setProfileName} placeholder="Your name" />
                 </Field>
-                <Field label="Email address" hint="Used for sign-in, billing and alerts.">
+                <Field label="Email address" hint="Used for sign-in and billing.">
                   <Input value={profileEmail} onChange={setProfileEmail} type="email" placeholder="you@company.com" />
                 </Field>
               </Section>
