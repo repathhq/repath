@@ -28,10 +28,27 @@ locals {
   }
 }
 
+# Which secrets are actually configured.
+#
+# Empty values are skipped rather than written: SSM rejects a zero-length
+# SecureString outright, and a parameter that exists but is blank is worse than
+# one that is absent — code reading it cannot tell "not configured yet" from
+# "configured to nothing". Anything genuinely optional, such as the Razorpay
+# webhook secret before a webhook exists, simply has no parameter.
+#
+# `nonsensitive` is applied only to the emptiness *test*, which yields a
+# boolean. The values themselves stay sensitive and are read back out of
+# `local.ssm_values` below, so nothing secret ever becomes a resource key.
+locals {
+  ssm_configured_keys = toset([
+    for k, v in local.ssm_values : k if nonsensitive(v) != ""
+  ])
+}
+
 resource "aws_ssm_parameter" "app" {
-  for_each = local.ssm_values
+  for_each = local.ssm_configured_keys
 
   name  = "${local.ssm_prefix}/${each.key}"
   type  = "SecureString"
-  value = each.value
+  value = local.ssm_values[each.key]
 }

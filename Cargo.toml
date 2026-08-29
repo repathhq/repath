@@ -53,7 +53,17 @@ prometheus = "0.13"
 # because it picks up the EC2 instance role automatically, so no SES
 # credential ever has to exist as a stored secret.
 aws-config = { version = "1.5", features = ["behavior-version-latest"] }
-aws-sdk-sesv2 = "1.48"
+# default-features = false is load-bearing: the default `rustls` feature maps
+# to aws-smithy-runtime/tls-rustls, which pulls the legacy hyper 0.14 + rustls
+# 0.21 stack and with it h2 0.3 and rustls-webpki 0.101 — four advisories that
+# fail `cargo audit`. `default-https-client` selects the modern hyper 1.x /
+# rustls-aws-lc path instead. sigv4a is dropped because SES does not use
+# multi-region signing.
+aws-sdk-sesv2 = { version = "1.48", default-features = false, features = [
+  "behavior-version-latest",
+  "rt-tokio",
+  "default-https-client",
+] }
 
 # Error handling
 thiserror = "1.0"
