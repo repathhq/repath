@@ -1178,6 +1178,13 @@ pub async fn save_notifications(
 pub struct SaveGateway {
     pub request_timeout_seconds: Option<i32>,
     pub eval_sample_rate: Option<f64>,
+    /// Whether to store prompt and response text for judged requests.
+    ///
+    /// Off means the request log still shows metrics and scores, but no
+    /// payloads — for customers who cannot have end-user text held by a
+    /// third party at all. Turning it off does not delete what was already
+    /// captured; that expires on its own retention schedule.
+    pub capture_payloads: Option<bool>,
 }
 
 /// GET /api/v1/settings/gateway
@@ -1185,16 +1192,23 @@ pub async fn get_gateway_settings(
     State(state): State<AppState>,
     Extension(auth): Extension<AuthContext>,
 ) -> Response {
-    let row =
-        sqlx::query("SELECT request_timeout_seconds, eval_sample_rate FROM tenants WHERE id = $1")
-            .bind(auth.owning_tenant())
-            .fetch_optional(&state.db_pool)
-            .await;
+    let row = sqlx::query(
+        "SELECT request_timeout_seconds, eval_sample_rate, capture_payloads, \
+                    retention_days(plan) AS retention_days \
+               FROM tenants WHERE id = $1",
+    )
+    .bind(auth.owning_tenant())
+    .fetch_optional(&state.db_pool)
+    .await;
 
     match row {
         Ok(Some(r)) => Json(json!({
             "request_timeout_seconds": r.get::<i32, _>("request_timeout_seconds"),
             "eval_sample_rate": r.get::<f64, _>("eval_sample_rate"),
+            "capture_payloads": r.get::<bool, _>("capture_payloads"),
+            // Surfaced so the UI can state the actual window rather than
+            // repeating a number from the pricing page that might drift.
+            "retention_days": r.get::<i32, _>("retention_days"),
         }))
         .into_response(),
         Ok(None) => err(StatusCode::NOT_FOUND, "Tenant not found."),
@@ -1229,12 +1243,14 @@ pub async fn save_gateway_settings(
         "UPDATE tenants
             SET request_timeout_seconds = COALESCE($2, request_timeout_seconds),
                 eval_sample_rate        = COALESCE($3, eval_sample_rate),
+                capture_payloads        = COALESCE($4, capture_payloads),
                 updated_at = NOW()
           WHERE id = $1",
     )
     .bind(auth.owning_tenant())
     .bind(body.request_timeout_seconds)
     .bind(body.eval_sample_rate)
+    .bind(body.capture_payloads)
     .execute(&state.db_pool)
     .await;
 

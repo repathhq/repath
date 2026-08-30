@@ -23,13 +23,18 @@ resource "aws_ses_domain_dkim" "repath" {
   domain = aws_ses_domain_identity.repath.domain
 }
 
-# Envelope-sender alignment for DMARC. Without this, mail passes DKIM but the
-# Return-Path stays on amazonses.com, which some receivers treat as a
-# forwarding signal and score down.
-resource "aws_ses_domain_mail_from" "repath" {
-  domain           = aws_ses_domain_identity.repath.domain
-  mail_from_domain = "mail.${var.domain_name}"
-}
+# A custom MAIL FROM domain (envelope-sender alignment for DMARC) is
+# deliberately NOT configured.
+#
+# It needs an MX record on mail.tryrepath.com, and DNS for this domain lives at
+# Namecheap with Email Forwarding enabled — which takes ownership of MX and
+# removes it from the Advanced DNS editor entirely. Switching to "Custom MX" to
+# expose it would disable email forwarding for the whole domain, which is a
+# worse trade than the deliverability it buys.
+#
+# Without it SES uses amazonses.com as the envelope sender. Mail still sends and
+# DKIM still passes, so DMARC can align on DKIM alone. Revisit if forwarding is
+# ever retired, or if DNS moves to Route 53.
 
 # Bounces and complaints are the two events that get a sender blocklisted if
 # ignored. Routing them to SNS means they are at least recorded and can be
@@ -85,15 +90,5 @@ output "ses_dns_records" {
         value = "${t}.dkim.amazonses.com"
       }
     ]
-    mail_from_mx = {
-      type  = "MX"
-      name  = aws_ses_domain_mail_from.repath.mail_from_domain
-      value = "10 feedback-smtp.${var.aws_region}.amazonses.com"
-    }
-    mail_from_spf = {
-      type  = "TXT"
-      name  = aws_ses_domain_mail_from.repath.mail_from_domain
-      value = "v=spf1 include:amazonses.com ~all"
-    }
   }
 }

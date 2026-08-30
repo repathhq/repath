@@ -26,6 +26,7 @@
 //! the channel closes and the `run_recorder` loop exits its `recv()` loop
 //! naturally. The task then flushes any remaining records and returns.
 
+pub mod cost;
 pub mod eval_queue;
 pub mod request_logger;
 
@@ -72,10 +73,19 @@ pub struct RecordRequest {
     pub error: Option<String>,
     pub session_id: Option<String>,
     /// Full response text (captured from the tee'd stream).
-    /// Used by the eval queue publisher — not stored in `requests` table.
+    ///
+    /// Feeds the eval queue, and — when the tenant has payload capture on —
+    /// is persisted to `request_payloads` so the log can show what the judge
+    /// was actually reasoning about. Before that table existed this text was
+    /// scored and then discarded, which is why a customer could see a score
+    /// of 0.68 but never which answers caused it.
     pub response_text: String,
     /// Original user messages, serialised as JSON.
     pub request_body_json: String,
+    /// Which provider actually served this, after routing rules and failover.
+    /// Only the model was recorded before, so a request answered by an
+    /// OpenRouter fallback looked identical to a direct OpenAI call.
+    pub provider: String,
 }
 
 /// Create a Redis `ConnectionManager` — a single multiplexed async connection

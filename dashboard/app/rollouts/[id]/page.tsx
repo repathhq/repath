@@ -186,7 +186,17 @@ export default function RolloutDetailPage({
 
           {/* Metrics grid */}
           <section className="rounded-lg border border-gray-200 bg-white p-5">
-            <h2 className="text-[14px] font-semibold text-gray-900 mb-4">Metrics</h2>
+            <div className="flex items-baseline justify-between mb-4">
+              <h2 className="text-[14px] font-semibold text-gray-900">Metrics</h2>
+              {/* Say which period these cover. They used to be labelled "10m"
+                  unconditionally while silently falling back to all-time
+                  whenever there was no recent traffic. */}
+              <span className="text-[11.5px] text-gray-400">
+                {r.metrics_window === "all_time"
+                  ? "no traffic in the last 10 min — showing all time"
+                  : "last 10 minutes"}
+              </span>
+            </div>
             {/* Without the LLM judge these scores come only from the
                 programmatic checks, which pass ~everything at 1.000. Showing
                 them unqualified reads as "both versions are perfect" when the
@@ -227,7 +237,7 @@ export default function RolloutDetailPage({
                 candidate={formatLatency(r.p95_latency_candidate)}
               />
               <MetricCard
-                label="Samples (10m)"
+                label={r.metrics_window === "all_time" ? "Samples (all time)" : "Samples (10m)"}
                 baseline={r.sample_count_baseline?.toLocaleString() ?? "—"}
                 candidate={r.sample_count_candidate?.toLocaleString() ?? "—"}
               />

@@ -55,6 +55,10 @@ export interface RolloutDetail extends RolloutSummary {
    *  come only from programmatic checks, which score ~1.0 for any healthy
    *  response and cannot tell a better version from a worse one. */
   judged_sample_count: number | null;
+  /** Period every metric above covers: "10m" when there was recent traffic,
+   *  "all_time" when it fell back. The label must follow this — a score from
+   *  all-time shown under "Samples (10m)" reads as measured from nothing. */
+  metrics_window: "10m" | "all_time";
 }
 
 export interface MetricPoint {
@@ -218,6 +222,11 @@ export interface NotificationSettings {
 export interface GatewaySettings {
   request_timeout_seconds: number;
   eval_sample_rate: number;
+  /** Whether prompts and responses are stored for judged requests. */
+  capture_payloads: boolean;
+  /** Days payloads are kept, from the plan. Reported by the server so the UI
+   *  states the real window rather than repeating a pricing-page number. */
+  retention_days: number;
 }
 
 export interface SystemHealth {
@@ -284,7 +293,88 @@ async function deleteApi(path: string): Promise<{ deleted: boolean }> {
   return res.json();
 }
 
+
+// ── Request log ────────────────────────────────────────────────────────────
+
+export interface LogRow {
+  id: string;
+  created_at: string;
+  model: string;
+  provider: string | null;
+  latency_ms: number;
+  status_code: number;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  /** Millionths of a dollar. `null` when the model is unpriced — render "—",
+   *  never "$0.00", which would read as free. */
+  cost_micro_usd: number | null;
+  score: number | null;
+  /** "llm_judge" scores measure quality; "programmatic" ones are health
+   *  checks that return ~1.0 for anything that did not error. Showing them
+   *  identically is how a broken judge looked like a perfect candidate. */
+  evaluator_type: string | null;
+  rollout_id: string | null;
+  version_id: string | null;
+  role: "baseline" | "candidate" | null;
+  session_id: string | null;
+  has_payload: boolean;
+}
+
+export interface EvaluationDetail {
+  evaluator_type: string;
+  overall_score: number;
+  scores: Record<string, unknown>;
+  /** Carries the judge's per-criterion reasoning. */
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface RequestDetail extends Omit<LogRow, "has_payload"> {
+  error: string | null;
+  rollout_name: string | null;
+  system_prompt: string | null;
+  request_body: string | null;
+  response_text: string | null;
+  truncated: boolean;
+  payload_expires_at: string | null;
+  evaluations: EvaluationDetail[];
+}
+
+export interface LogFilters {
+  rollout_id?: string;
+  version_id?: string;
+  model?: string;
+  provider?: string;
+  status?: "success" | "error";
+  max_score?: number;
+  min_score?: number;
+  evaluator?: string;
+  limit?: number;
+  before?: string;
+}
+
 export const api = {
+  logs: {
+    list: (f: LogFilters = {}) => {
+      const q = new URLSearchParams();
+      Object.entries(f).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== "") q.set(k, String(v));
+      });
+      const qs = q.toString();
+      return fetchApi<{ requests: LogRow[]; next_before: string | null; has_more: boolean }>(
+        `/requests${qs ? `?${qs}` : ""}`
+      );
+    },
+    get: (id: string) => fetchApi<RequestDetail>(`/requests/${id}`),
+    /** The requests behind a controller decision, worst-scoring first. */
+    forDecision: (decisionId: string) =>
+      fetchApi<{
+        decision: { id: string; action: string; created_at: string; metrics_snapshot: Record<string, unknown> | null };
+        requests: LogRow[];
+        window_minutes: number;
+        note: string;
+      }>(`/decisions/${decisionId}/requests`),
+  },
   rollouts: {
     list: () => fetchApi<{ rollouts: RolloutSummary[]; total: number }>("/rollouts"),
     get: (id: string) => fetchApi<RolloutDetail>(`/rollouts/${id}`),

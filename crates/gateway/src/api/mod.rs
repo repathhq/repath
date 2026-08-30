@@ -49,6 +49,7 @@
 
 pub mod cloud;
 pub mod handlers;
+pub mod logs;
 pub mod rollout_create;
 pub mod settings;
 
@@ -139,6 +140,10 @@ fn core_routes() -> Router<AppState> {
             "/settings/gateway",
             get(settings::get_gateway_settings).put(settings::save_gateway_settings),
         )
+        // Request log — the evidence behind scores and decisions.
+        .route("/requests", get(logs::list_requests))
+        .route("/requests/:id", get(logs::get_request))
+        .route("/decisions/:id/requests", get(logs::requests_for_decision))
         .route("/system/health", get(handlers::system_health))
         .route("/system/providers", get(handlers::provider_health))
 }

@@ -403,6 +403,9 @@ async fn proxy_inner(
         session_id,
         response_text: stream_result.response_text,
         request_body_json: String::from_utf8_lossy(&body_bytes).into_owned(),
+        provider: crate::proxy::provider::Provider::from_url(&actual_provider_url)
+            .to_str()
+            .to_string(),
     };
 
     // try_send is non-blocking — if channel is full, we log and drop the record.

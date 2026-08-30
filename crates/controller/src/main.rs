@@ -108,6 +108,16 @@ async fn main() -> anyhow::Result<()> {
         None => info!("Razorpay credentials not set — billing reconciler disabled"),
     }
 
+    // Retention sweeping runs alongside the decision loop. Spawned rather
+    // than awaited so a slow sweep can never delay a rollback, and
+    // unconditional because the retention promise applies to every
+    // deployment — unlike billing, there is no configuration that makes
+    // "keep customers' text forever" the correct behaviour.
+    let retention_pool = pool.clone();
+    tokio::spawn(async move {
+        repath_controller::retention::run(retention_pool).await;
+    });
+
     // Run the decision loop — returns only on task abort (shutdown)
     run(pool, config).await;
 

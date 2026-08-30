@@ -1,1313 +1,1622 @@
-
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { motion, useInView } from "motion/react";
-import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ReferenceLine,
-} from "recharts";
-import {
-  ArrowRight, ChevronRight, Check, GitBranch, Menu, X,
-  RefreshCw, Zap, Shield, BarChart2, Lock, Cloud, ChevronLeft,
-} from "lucide-react";
+/**
+ * Marketing landing page.
+ *
+ * Ported from the "Repath Landing v4" Claude Design canvas. Light and dark are
+ * two token blocks over one set of markup (see landing.css); the toggle sets
+ * `data-lp-theme` and persists the choice.
+ *
+ * Everything a real browser needs that a design canvas does not — hover and
+ * focus states, reduced-motion, responsive collapse, real links — is in
+ * landing.css or wired here, rather than approximated inline.
+ */
+
 import Image from "next/image";
 import Link from "next/link";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import "./landing.css";
 
-/* ─── Palette ────────────────────────────────────────────────────────────── */
-const C = {
-  blue:   { bg: "#DBEAFE", label: "#1D4ED8", text: "#0F172A" },
-  violet: { bg: "#EDE9FE", label: "#6D28D9", text: "#0F172A" },
-  amber:  { bg: "#FEF3C7", label: "#B45309", text: "#0F172A" },
-  dark:   "#09090B",
-};
+// ── Interactive demo ─────────────────────────────────────────────────────
+// The ladder the controller walks, and the thresholds it walks it by. These
+// mirror the real defaults so the demo is not telling a different story from
+// the product.
+const LADDER = [0, 10, 50, 100] as const;
+const ADVANCE_AT = 0.9;
+const ROLLBACK_UNDER = 0.7;
 
-/* ─── Data ────────────────────────────────────────────────────────────────── */
-const qualityData = [
-  { t: "T+0",  v1: 0.92, v2: null },
-  { t: "T+1",  v1: 0.89, v2: null },
-  { t: "T+2",  v1: 0.91, v2: 0.92 },
-  { t: "T+3",  v1: 0.93, v2: 0.88 },
-  { t: "T+4",  v1: 0.91, v2: 0.85 },
-  { t: "T+5",  v1: 0.92, v2: 0.72 },
-  { t: "T+6",  v1: 0.91, v2: 0.65 },
-  { t: "T+7",  v1: 0.93, v2: null },
-];
-
-const capabilities = [
-  "Canary Deployments",
-  "LLM-as-Judge",
-  "Auto-Rollback",
-  "Provider Failover",
-  "Quality Gates",
-  "Audit Trail",
-  "Provider Health",
-  "One-line Integration",
-];
-
-const researchCards = [
-  { tag: "CANARY",   title: "5% → 25% → 50% → 100%",               sub: "Configurable quality gates at every step. Traffic only advances when scores hold.", author: "Repath Labs" },
-  { tag: "SCORING",  title: "Async LLM judge — zero latency overhead", sub: "Every response evaluated against your rubric. Results arrive in ~120ms, never blocking your users.", author: "Repath Research", highlight: true },
-  { tag: "ROLLBACK", title: "Auto-revert in under 500ms",              sub: "Score drops below threshold? 100% traffic back to stable instantly. No on-call needed.", author: "Repath Infra" },
-  { tag: "FAILOVER", title: "Silent provider switching",               sub: "OpenAI down? We retry then silently failover to Anthropic or OpenRouter. Your app keeps running.", author: "Repath Platform" },
-];
-
-// Feature tabs — data only, panels rendered inline below
-const featureTabs = [
-  { id: "canary",   label: "Canary Deployments", icon: GitBranch },
-  { id: "judge",    label: "LLM-as-Judge",        icon: BarChart2 },
-  { id: "rollback", label: "Auto-Rollback",       icon: RefreshCw },
-];
-
-const features = [
-  { icon: GitBranch, title: "Canary deployments",         body: "5% → 25% → 50% → 100% with configurable quality gates at each step." },
-  { icon: BarChart2,  title: "LLM-as-judge evaluation",   body: "Define criteria in plain English. Scores every response asynchronously — never slows your app." },
-  { icon: RefreshCw,  title: "Auto-rollback in <500ms",   body: "Score drops below threshold? Back to baseline instantly. No manual intervention." },
-  { icon: Zap,        title: "Provider failover",          body: "OpenAI down? We retry, then silently switch to Anthropic or OpenRouter. Your app keeps running." },
-  { icon: Cloud,      title: "Provider health tracking",  body: "Live error rates per provider. Know about outages before your users do." },
-  { icon: Lock,       title: "Full audit trail",           body: "Every advance and rollback logged with exact scores. Complete visibility into every decision." },
-];
-
-const pricingPlans = [
-  {
-    name: "Starter",
-    usd: "$49",
-    inr: "₹4,099",
-    period: "/month",
-    features: [
-      "10,000 evals/mo",
-      "3 active rollouts",
-      "OpenAI + Anthropic + Gemini",
-      "Auto-rollback",
-      "7-day data retention",
-      "Email alerts",
-      "Dashboard + API",
-    ],
-    cta: "Start free trial",
-    style: "outline",
-  },
-  {
-    name: "Pro",
-    usd: "$149",
-    inr: "₹12,499",
-    period: "/month",
-    badge: "MOST POPULAR",
-    features: [
-      "100,000 evals/mo",
-      "Unlimited rollouts",
-      "All providers + OpenRouter fallback",
-      "Auto-rollback",
-      "90-day data retention",
-      "Slack + webhook alerts",
-      "Custom eval criteria",
-      "Priority support",
-    ],
-    cta: "Start free trial",
-    style: "primary",
-  },
-  {
-    name: "Enterprise",
-    usd: "Custom",
-    inr: "",
-    period: "",
-    features: [
-      "Unlimited evals",
-      "Dedicated infrastructure",
-      "SSO / SAML",
-      "Team RBAC",
-      "1-year data retention",
-      "On-call support",
-      "Custom SLA",
-    ],
-    cta: "Contact us",
-    style: "outline",
-  },
-];
-
-/* ─── Helpers ──────────────────────────────────────────────────────────────── */
-function AnimatedNumber({ value, prefix = "", suffix = "" }: { value: number; prefix?: string; suffix?: string }) {
-  const [n, setN] = useState(0);
-  const ref = useRef<HTMLSpanElement>(null);
-  const inView = useInView(ref, { once: true });
-  useEffect(() => {
-    if (!inView) return;
-    const start = performance.now();
-    const dur = 1200;
-    const tick = (now: number) => {
-      const p = Math.min((now - start) / dur, 1);
-      const ease = 1 - Math.pow(1 - p, 3);
-      setN(Math.round(ease * value));
-      if (p < 1) requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  }, [inView, value]);
-  return <span ref={ref}>{prefix}{n}{suffix}</span>;
+interface Decision {
+  action: "ADVANCE" | "ROLLBACK" | "HOLD" | "PROMOTE";
+  move: string;
+  reason: string;
+  color: string;
+  border: string;
 }
 
-function Marquee() {
+const seedLog = (): Decision[] => [
+  {
+    action: "ADVANCE",
+    move: "0% → 10%",
+    reason: "gate passed · 1,204 samples",
+    color: "var(--adv)",
+    border: "var(--adv-line)",
+  },
+];
+
+const MONO = "var(--font-geist-mono), ui-monospace, monospace";
+
+// ── Small shared pieces ──────────────────────────────────────────────────
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="overflow-hidden relative">
-      <div className="flex gap-12 items-center w-max" style={{ animation: "scroll-x 28s linear infinite" }}>
-        {[...capabilities, ...capabilities].map((name, i) => (
-          <span key={i} className="text-sm font-medium text-gray-400 tracking-widest uppercase whitespace-nowrap hover:text-gray-600 transition-colors">{name}</span>
-        ))}
-      </div>
-      <style>{`@keyframes scroll-x { from { transform: translateX(0) } to { transform: translateX(-50%) } }`}</style>
+    <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 28 }}>
+      <span
+        className="lp-mono"
+        style={{
+          fontSize: 11,
+          letterSpacing: "0.16em",
+          textTransform: "uppercase",
+          color: "var(--accent)",
+        }}
+      >
+        {children}
+      </span>
+      <span
+        style={{ flex: 1, height: 1, background: "linear-gradient(90deg, var(--line), transparent)" }}
+      />
     </div>
   );
 }
 
-/* ─── Animated Hero Traffic Flow ──────────────────────────────────────────── */
-function HeroTrafficFlow() {
-  const [tick, setTick] = useState(0);
-  const [phase, setPhase] = useState<"routing"|"rollback"|"shadow">("routing");
-  const phaseRef = useRef(0);
-  useEffect(() => { const id = setInterval(() => setTick(t => (t + 1) % 240), 40); return () => clearInterval(id); }, []);
-  useEffect(() => {
-    const id = setInterval(() => {
-      phaseRef.current = (phaseRef.current + 1) % 3;
-      setPhase(phaseRef.current === 0 ? "routing" : phaseRef.current === 1 ? "rollback" : "shadow");
-    }, 5500);
-    return () => clearInterval(id);
-  }, []);
+function ArrowRight() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ position: "relative", zIndex: 1 }}
+      aria-hidden="true"
+    >
+      <path d="M5 12h14" />
+      <path d="m12 5 7 7-7 7" />
+    </svg>
+  );
+}
 
-  // ── Fixed coordinate layout — nothing can overlap ──
-  // viewBox: 820 × 500
-  // Zone A (left):   Your App    x=20–170   y=210–290
-  // Zone B (center): Gateway     x=220–390  y=195–315
-  // Zone C (top-r):  Baseline    x=530–780  y=60–160
-  // Zone D (bot-r):  Candidate   x=530–780  y=310–410
-  // Zone E (bot-c):  Judge       x=220–390  y=370–450
-  // Threshold badge: x=410–540   y=295–325  (between gateway and candidate — fixed)
-  // Phase chip:      x=20–230    y=14–44    (top, never overlaps nodes)
+/** The primary CTA, with its travelling sheen. */
+function StartFree({ delay, href = "/signup" }: { delay: string; href?: string }) {
+  return (
+    <Link
+      href={href}
+      className="lp-btn-primary"
+      style={{
+        position: "relative",
+        overflow: "hidden",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 10,
+        height: 54,
+        padding: "0 28px",
+        borderRadius: 12,
+        background: "var(--btn-bg)",
+        color: "var(--btn-fg)",
+        fontSize: 16,
+        fontWeight: 550,
+      }}
+    >
+      <span style={{ position: "relative", zIndex: 1 }}>Start free</span>
+      <ArrowRight />
+      <span
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          top: 0,
+          bottom: 0,
+          width: 60,
+          background: "linear-gradient(90deg,transparent,var(--sheen),transparent)",
+          animation: `lp-sheen 4.5s ease-in-out infinite ${delay}`,
+        }}
+      />
+    </Link>
+  );
+}
 
-  const T = tick / 240;
-  const R = phase === "rollback";
-  const S = phase === "shadow";
-  const F = "Inter,system-ui,sans-serif";
+function Stat({
+  label,
+  value,
+  sub,
+  subColor = "var(--fg3)",
+  last = false,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  subColor?: string;
+  last?: boolean;
+}) {
+  return (
+    <div style={{ padding: "16px 20px", borderRight: last ? undefined : "1px solid var(--line2)" }}>
+      <div
+        className="lp-mono"
+        style={{
+          fontSize: 10,
+          letterSpacing: "0.12em",
+          textTransform: "uppercase",
+          color: "var(--fg4)",
+          marginBottom: 8,
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+        <span className="lp-mono" style={{ fontSize: 20, color: "var(--fg)" }}>
+          {value}
+        </span>
+        {sub && (
+          <span className="lp-mono" style={{ fontSize: 12, color: subColor }}>
+            {sub}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
 
-  function lp(pts: number[][], t: number) {
-    const n = pts.length - 1;
-    const seg = Math.min(Math.floor(t * n), n - 1);
-    const st = (t * n) - seg;
-    const a = pts[seg], b = pts[seg + 1];
-    return { x: a[0] + (b[0] - a[0]) * st, y: a[1] + (b[1] - a[1]) * st };
+function LogRow({
+  action,
+  move,
+  reason,
+  when,
+  color,
+  border,
+  dim = false,
+}: {
+  action: string;
+  move: string;
+  reason: string;
+  when: string;
+  color: string;
+  border: string;
+  dim?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "auto 1fr auto",
+        gap: 12,
+        padding: "13px 22px",
+        borderTop: "1px solid var(--line2)",
+        opacity: dim ? 0.6 : 1,
+        background:
+          action === "ROLLBACK" ? "linear-gradient(90deg, var(--roll-soft), transparent)" : undefined,
+      }}
+    >
+      <span
+        className="lp-mono"
+        style={{
+          fontSize: 10,
+          fontWeight: 500,
+          letterSpacing: "0.08em",
+          color,
+          border: `1px solid ${border}`,
+          borderRadius: 5,
+          padding: "3px 7px",
+          height: "fit-content",
+        }}
+      >
+        {action}
+      </span>
+      <span className="lp-mono" style={{ fontSize: 12, color: "var(--fg)", lineHeight: 1.65 }}>
+        {move}
+        <br />
+        <span style={{ color: "var(--fg3)" }}>{reason}</span>
+      </span>
+      <span className="lp-mono" style={{ fontSize: 11, color: "var(--fg4)" }}>
+        {when}
+      </span>
+    </div>
+  );
+}
+
+function FlowBox({
+  children,
+  accent = false,
+  filled = false,
+}: {
+  children: React.ReactNode;
+  accent?: boolean;
+  filled?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        borderRadius: 12,
+        border: `1px solid ${accent ? "var(--accent-line)" : "var(--line)"}`,
+        background: accent ? "var(--accent-soft)" : filled ? "var(--hover)" : undefined,
+        padding: accent ? 18 : 16,
+        textAlign: "center",
+        color: "var(--fg)",
+        boxSizing: "border-box",
+        width: "100%",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Connector({ h = 26 }: { h?: number }) {
+  return <div aria-hidden="true" style={{ height: h, width: 1, background: "var(--dash)", margin: "0 auto" }} />;
+}
+
+function CodeCard({ title, code }: { title: string; code: string }) {
+  return (
+    <div
+      style={{
+        borderRadius: 12,
+        border: "1px solid var(--line2)",
+        background: "var(--code)",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        className="lp-mono"
+        style={{
+          padding: "10px 16px",
+          borderBottom: "1px solid var(--line2)",
+          fontSize: 10,
+          letterSpacing: "0.12em",
+          textTransform: "uppercase",
+          color: "var(--fg4)",
+        }}
+      >
+        {title}
+      </div>
+      <pre
+        className="lp-mono"
+        style={{
+          margin: 0,
+          padding: 18,
+          fontSize: 13,
+          lineHeight: 1.85,
+          color: "var(--fg)",
+          whiteSpace: "pre-wrap",
+        }}
+      >
+        {code}
+      </pre>
+    </div>
+  );
+}
+
+// ── Comparison table data ────────────────────────────────────────────────
+type Cell = boolean | string;
+const COMPARISON: Array<[string, Cell, Cell, Cell, Cell]> = [
+  ["Canary deployments for prompts", true, "Enterprise", false, false],
+  ["LLM quality evaluation", true, false, false, "View only"],
+  ["Automatic rollback on quality", true, "Enterprise", false, false],
+  ["Open source", true, false, true, true],
+  ["Self-hostable", true, false, true, true],
+  ["Price for startups", "Free", "$100K+/yr", "Free", "Free"],
+];
+
+function CompareCell({ value }: { value: Cell }) {
+  if (value === true) {
+    return (
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        style={{ margin: "0 auto", display: "block", stroke: "var(--adv)" }}
+        role="img"
+        aria-label="Yes"
+      >
+        <path d="M20 6 9 17l-5-5" />
+      </svg>
+    );
   }
+  if (value === false) {
+    return (
+      <span className="lp-mono" style={{ fontSize: 14, color: "var(--fg5)" }} role="img" aria-label="No">
+        —
+      </span>
+    );
+  }
+  return (
+    <span className="lp-mono" style={{ fontSize: 12, color: "var(--fg2)" }}>
+      {value}
+    </span>
+  );
+}
 
-  const pApp   = [[170,250],[218,250]] as number[][];
-  const pBL    = [[392,222],[500,222],[500,110],[528,110]] as number[][];
-  const pCand  = [[392,278],[500,278],[500,360],[528,360]] as number[][];
-  const pJudge = [[305,316],[305,368]] as number[][];
-  // Rollback: Judge → back left to Gateway (not to baseline)
-  const pRB    = [[304,368],[304,310],[392,310]] as number[][];
+// ── Theme ────────────────────────────────────────────────────────────────
+// The theme lives on <html data-lp-theme>, written by a blocking inline
+// script in layout.tsx before first paint — so there is no flash of the wrong
+// theme on load. React subscribes to that attribute rather than owning it;
+// mirroring it into state via an effect would repaint after hydration and
+// reintroduce the flash the script exists to prevent.
+type Theme = "light" | "dark";
+const THEME_KEY = "repath-landing-theme";
+const themeListeners = new Set<() => void>();
 
-  const cQ = R ? 0.62 : S ? 0.88 : 0.85;
+function subscribeTheme(cb: () => void) {
+  themeListeners.add(cb);
+  return () => themeListeners.delete(cb);
+}
+function readTheme(): Theme {
+  return document.documentElement.dataset.lpTheme === "dark" ? "dark" : "light";
+}
+// The server has no DOM and no localStorage, so it always renders light —
+// matching what the inline script paints before React arrives.
+function readThemeOnServer(): Theme {
+  return "light";
+}
+function writeTheme(next: Theme) {
+  document.documentElement.dataset.lpTheme = next;
+  try {
+    localStorage.setItem(THEME_KEY, next);
+  } catch {
+    // Private browsing, or storage disabled. Not being able to remember the
+    // choice is not a reason to refuse it for this visit.
+  }
+  themeListeners.forEach((l) => l());
+}
 
-  const D = (offs: number[], path: number[][], col: string, r: number, op = 1) =>
-    offs.map((o, i) => {
-      const t = (T + o) % 1; if (t > 0.96) return null;
-      const p = lp(path, t);
-      return <circle key={i} cx={p.x} cy={p.y} r={r} fill={col} opacity={op}/>;
+export default function LandingPage() {
+  const theme = useSyncExternalStore(subscribeTheme, readTheme, readThemeOnServer);
+  const chooseTheme = useCallback((next: Theme) => writeTheme(next), []);
+
+  // ── Reveal on scroll ───────────────────────────────────────────────────
+  //
+  // Deliberately fail-safe. An earlier version hid every below-the-fold
+  // section and relied on the observer to bring each back; loading a deep
+  // link like /#demo scrolled past those sections before the observer was
+  // watching, and they stayed at opacity 0 — a blank page. Content that
+  // never animates is a small loss; content that never appears is the whole
+  // page gone, so every branch here errs toward visible:
+  //
+  //   * a page opened at an anchor skips the effect entirely,
+  //   * reduced-motion skips it,
+  //   * no IntersectionObserver skips it,
+  //   * and anything still hidden after a moment is revealed regardless.
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+
+    const nodes = Array.from(root.querySelectorAll<HTMLElement>("[data-reveal]"));
+    const show = (n: HTMLElement) => {
+      n.style.opacity = "1";
+      n.style.transform = "none";
+    };
+
+    if (
+      window.location.hash ||
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ||
+      !("IntersectionObserver" in window)
+    ) {
+      nodes.forEach(show);
+      return;
+    }
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (!e.isIntersecting) return;
+          show(e.target as HTMLElement);
+          io.unobserve(e.target);
+        });
+      },
+      { rootMargin: "0px 0px -12% 0px", threshold: 0.05 }
+    );
+
+    const hidden: HTMLElement[] = [];
+    nodes.forEach((n) => {
+      // Only hide what is genuinely below the fold — hiding what is already
+      // on screen would blank the page for the time it takes to observe it.
+      if (n.getBoundingClientRect().top < window.innerHeight * 0.92) return;
+      n.style.transition =
+        "opacity .8s cubic-bezier(.16,1,.3,1), transform .8s cubic-bezier(.16,1,.3,1)";
+      n.style.opacity = "0";
+      n.style.transform = "translateY(26px)";
+      hidden.push(n);
+      io.observe(n);
     });
 
-  return (
-    <div className="hidden md:block absolute right-0 top-1/2 -translate-y-1/2 w-[62%] min-w-[580px] h-[580px] pointer-events-none select-none" aria-hidden>
-      <svg viewBox="0 0 820 500" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-        <defs>
-          <filter id="sh1"><feDropShadow dx="0" dy="2" stdDeviation="8" floodColor="#6366f1" floodOpacity="0.09"/></filter>
-          <filter id="sh2"><feDropShadow dx="0" dy="1" stdDeviation="6" floodColor="#000" floodOpacity="0.06"/></filter>
-          <marker id="av" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,1 L0,7 L8,4 z" fill="#818cf8"/></marker>
-          <marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,1 L0,7 L8,4 z" fill="#f87171"/></marker>
-          <marker id="ap" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,1 L0,7 L8,4 z" fill="#a78bfa"/></marker>
-        </defs>
+    // Last resort. If the observer never fires — a mid-load scroll, a
+    // restored session, a browser quirk — nothing stays invisible.
+    const failsafe = window.setTimeout(() => hidden.forEach(show), 4000);
 
-        {/* ══ CONNECTORS ══════════════════════════════════════ */}
-        {/* App → Gateway */}
-        <line x1="170" y1="250" x2="218" y2="250" stroke="#818cf8" strokeWidth="2" markerEnd="url(#av)"/>
-
-        {/* Gateway → Baseline (elbow right then up) */}
-        <path d="M 392 222 H 500 V 110 H 528" stroke="#818cf8" strokeWidth="2" fill="none"
-          markerEnd="url(#av)" opacity={R ? 0.2 : 1}/>
-
-        {/* Gateway → Candidate (elbow right then down) */}
-        <path d="M 392 278 H 500 V 360 H 528"
-          stroke={R ? "#f87171" : S ? "#a78bfa" : "#818cf8"}
-          strokeWidth="2" fill="none"
-          strokeDasharray={R ? "7 4" : S ? "5 4" : undefined}
-          markerEnd={R ? "url(#ar)" : S ? "url(#ap)" : "url(#av)"}/>
-
-        {/* Gateway → Judge (dashed down) */}
-        <line x1="305" y1="316" x2="305" y2="368" stroke="#c4b5fd" strokeWidth="1.5" strokeDasharray="5 4" markerEnd="url(#ap)"/>
-
-        {/* Rollback: Judge → back to Gateway (shows traffic returning to stable) */}
-        {R && <path d="M 304 368 V 310 H 392" stroke="#ef4444" strokeWidth="2" strokeDasharray="6 4" fill="none" markerEnd="url(#ar)"/>}
-
-        {/* ══ % PILLS (fixed, on elbow midpoints — never overlap nodes) ══ */}
-        {/* 80% pill: on baseline elbow at x=500, y=165 */}
-        <rect x="478" y="152" width="44" height="20" rx="10" fill="#818cf8" opacity={R ? 0.3 : 1}/>
-        <text x="500" y="166" textAnchor="middle" fontSize="11" fill="white" fontFamily={F} fontWeight="700">80%</text>
-
-        {/* 20% pill: on candidate elbow at x=500, y=318 */}
-        <rect x="478" y="305" width="44" height="20" rx="10" fill={R ? "#f87171" : S ? "#a78bfa" : "#818cf8"}/>
-        <text x="500" y="319" textAnchor="middle" fontSize="11" fill="white" fontFamily={F} fontWeight="700">20%</text>
-
-        {/* Threshold badge — below the candidate elbow, clear of all nodes */}
-        {R && (
-          <g>
-            <rect x="392" y="420" width="126" height="28" rx="8" fill="#fef2f2" stroke="#fca5a5" strokeWidth="1.2"/>
-            <text x="455" y="438" textAnchor="middle" fontSize="11" fill="#b91c1c" fontFamily={F} fontWeight="700">score &lt; 0.70 threshold</text>
-          </g>
-        )}
-
-        {/* ══ NODE A — YOUR APP ═══════════════════════════════ */}
-        {/* Fixed zone: x=20–170, y=215–285 */}
-        <rect x="20" y="215" width="150" height="70" rx="14" fill="white" stroke="#e5e7eb" strokeWidth="1.5" filter="url(#sh2)"/>
-        {/* 2×2 icon grid */}
-        <rect x="36" y="231" width="7" height="7" rx="2" fill="#a78bfa"/>
-        <rect x="46" y="231" width="7" height="7" rx="2" fill="#c4b5fd"/>
-        <rect x="36" y="241" width="7" height="7" rx="2" fill="#c4b5fd"/>
-        <rect x="46" y="241" width="7" height="7" rx="2" fill="#a78bfa"/>
-        <text x="100" y="244" textAnchor="middle" fontSize="14" fill="#111827" fontFamily={F} fontWeight="800">YOUR APP</text>
-        <text x="100" y="262" textAnchor="middle" fontSize="11" fill="#9ca3af" fontFamily={F}>any LLM client</text>
-
-        {/* ══ NODE B — REPATH GATEWAY ═════════════════════════ */}
-        {/* Fixed zone: x=220–390, y=195–315 */}
-        <rect x="220" y="195" width="172" height="120" rx="16" fill="white" stroke="#ddd6fe" strokeWidth="1.8" filter="url(#sh1)"/>
-        {/* pulsing ring — inside the node rect, safe */}
-        <circle cx="306" cy="252" r={42 + Math.sin(tick * 0.07) * 2} stroke="rgba(124,58,237,0.06)" strokeWidth="1.5" fill="none"/>
-        {/* icon */}
-        <path d="M284 218 C284 218 292 213 306 218 C320 223 328 218 328 218" stroke="#7c3aed" strokeWidth="2" fill="none" strokeLinecap="round"/>
-        <circle cx="306" cy="224" r="3" fill="#7c3aed"/>
-        <text x="306" y="246" textAnchor="middle" fontSize="16" fill="#111827" fontFamily={F} fontWeight="800">REPATH</text>
-        <text x="306" y="263" textAnchor="middle" fontSize="16" fill="#111827" fontFamily={F} fontWeight="800">GATEWAY</text>
-        <text x="306" y="280" textAnchor="middle" fontSize="11" fill="#a78bfa" fontFamily={F}>routes · scores · &lt;2ms</text>
-
-        {/* ══ NODE C — BASELINE ═══════════════════════════════ */}
-        {/* Fixed zone: x=528–778, y=62–162 */}
-        <rect x="528" y="62" width="250" height="96" rx="14" fill="white" stroke="#bfdbfe" strokeWidth="1.5" filter="url(#sh2)"/>
-        <text x="653" y="92" textAnchor="middle" fontSize="16" fill="#1d4ed8" fontFamily={F} fontWeight="800">BASELINE</text>
-        <text x="653" y="112" textAnchor="middle" fontSize="12.5" fill="#3b82f6" fontFamily={F} fontWeight="600">80% of traffic</text>
-        <text x="653" y="130" textAnchor="middle" fontSize="11" fill="#93c5fd" fontFamily={F}>current prompt · score: 0.91 ✓</text>
-        <text x="653" y="148" textAnchor="middle" fontSize="10" fill="#bfdbfe" fontFamily={F}>stable · quality gate passing</text>
-
-        {/* ══ NODE D — CANDIDATE / SHADOW ═════════════════════ */}
-        {/* Fixed zone: x=528–778, y=312–412 */}
-        <rect x="528" y="312" width="250" height="96" rx="14" fill="white"
-          stroke={R ? "#fca5a5" : S ? "#c4b5fd" : "#c7d2fe"} strokeWidth="1.5" filter="url(#sh2)"/>
-        <text x="653" y="342" textAnchor="middle" fontSize="16"
-          fill={R ? "#b91c1c" : S ? "#6d28d9" : "#4338ca"} fontFamily={F} fontWeight="800">
-          {S ? "SHADOW" : "CANDIDATE"}
-        </text>
-        <text x="653" y="362" textAnchor="middle" fontSize="12.5"
-          fill={R ? "#ef4444" : S ? "#7c3aed" : "#6366f1"} fontFamily={F} fontWeight="600">
-          {S ? "parallel · no user impact" : "20% of traffic"}
-        </text>
-        <text x="653" y="380" textAnchor="middle" fontSize="11"
-          fill={R ? "#fca5a5" : S ? "#a78bfa" : "#818cf8"} fontFamily={F}>
-          {R ? `score: ${cQ} · auto-rollback triggered` : S ? `score: ${cQ} · comparing` : `score: ${cQ} · advancing`}
-        </text>
-        <text x="653" y="398" textAnchor="middle" fontSize="10"
-          fill={R ? "#ef4444" : S ? "#a78bfa" : "#a5b4fc"} fontFamily={F}>
-          {R ? "100% traffic returning to baseline" : S ? "shadow test · evaluating" : "new prompt · testing"}
-        </text>
-
-        {/* ══ NODE E — LLM JUDGE ══════════════════════════════ */}
-        {/* Fixed zone: x=220–390, y=370–450 */}
-        <rect x="220" y="370" width="172" height="78" rx="14" fill="white" stroke="#ede9fe" strokeWidth="1.5" filter="url(#sh2)"/>
-        <path d="M248 392 L251 385 L254 392 L261 395 L254 398 L251 405 L248 398 L241 395 Z" fill="#a78bfa" opacity="0.8"/>
-        <text x="306" y="400" textAnchor="middle" fontSize="14" fill="#111827" fontFamily={F} fontWeight="800">LLM JUDGE</text>
-        <text x="306" y="417" textAnchor="middle" fontSize="11" fill="#7c3aed" fontFamily={F}>scores every response</text>
-        <text x="306" y="433" textAnchor="middle" fontSize="10" fill="#c4b5fd" fontFamily={F}>async · ~120ms · 0ms user impact</text>
-
-        {/* ══ PHASE CHIP (top-left, fixed zone x=20–240, y=14–44) ══ */}
-        <rect x="20" y="14" width={R ? 196 : S ? 160 : 188} height="28" rx="14"
-          fill={R ? "#fef2f2" : S ? "#f5f3ff" : "#f0fdf4"}
-          stroke={R ? "#fca5a5" : S ? "#ddd6fe" : "#86efac"} strokeWidth="1"/>
-        <circle cx="37" cy="28" r="5" fill={R ? "#ef4444" : S ? "#7c3aed" : "#22c55e"}>
-          <animate attributeName="r" values="4;5.5;4" dur="1.6s" repeatCount="indefinite"/>
-        </circle>
-        <text x="49" y="33" fontSize="11.5" fill={R ? "#b91c1c" : S ? "#6d28d9" : "#15803d"} fontFamily={F} fontWeight="700">
-          {R ? "ROLLBACK TRIGGERED" : S ? "SHADOW TESTING" : "CANARY ROUTING LIVE"}
-        </text>
-
-        {/* ══ ANIMATED PARTICLES ══════════════════════════════ */}
-        {[0,0.42,0.78].map((o,i)=>{const t=(T+o)%1;if(t>0.96)return null;const p=lp(pApp,t);return<circle key={`a${i}`}cx={p.x}cy={p.y}r="5"fill="#818cf8"opacity="0.9"/>;})}
-        {D([0,0.18,0.36,0.54,0.72],pBL,"#3b82f6",5,R?0.2:0.9)}
-        {!S&&D([0,0.55],pCand,R?"#f87171":"#6366f1",5,0.9)}
-        {S&&D([0,0.6],pCand,"#a78bfa",4,0.6)}
-        {D([0,0.6],pJudge,"#a78bfa",4,0.75)}
-        {R&&D([0,0.5],pRB,"#ef4444",5.5,0.9)}
-      </svg>
-    </div>
-  );
-}
-
-function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: { dataKey: string; value: number; color: string; name: string }[]; label?: string }) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-xs">
-      <div className="text-gray-500 mb-1">{label}</div>
-      {payload.map((p) => p.value != null && (
-        <div key={p.dataKey} className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full" style={{ background: p.color }} />
-          <span className="text-gray-700">{p.name === "v1" ? "v1 stable" : "v2 canary"}: <strong>{p.value.toFixed(2)}</strong></span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ─── Mobile hero diagram — static, scales to any width ──────────────────── */
-function HeroTrafficFlowMobile() {
-  return (
-    <div className="w-full rounded-2xl border border-gray-100 bg-gray-50 overflow-hidden p-4">
-      <svg viewBox="0 0 400 260" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-auto">
-        {/* Your App */}
-        <rect x="8" y="100" width="80" height="60" rx="10" fill="white" stroke="#e5e7eb" strokeWidth="1.5"/>
-        <text x="48" y="124" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="8" fontWeight="600" fill="#374151">YOUR APP</text>
-        <text x="48" y="137" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="6" fill="#9ca3af">any LLM client</text>
-        {/* Arrow */}
-        <line x1="90" y1="130" x2="118" y2="130" stroke="#818cf8" strokeWidth="1.5" markerEnd="url(#mv)"/>
-        {/* Gateway */}
-        <rect x="120" y="90" width="100" height="80" rx="10" fill="white" stroke="#c7d2fe" strokeWidth="1.5"/>
-        <text x="170" y="120" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="8" fontWeight="700" fill="#4338ca">REPATH</text>
-        <text x="170" y="132" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="8" fontWeight="700" fill="#4338ca">GATEWAY</text>
-        <text x="170" y="148" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="6" fill="#9ca3af">routes · scores · &lt;2ms</text>
-        {/* Baseline arrow */}
-        <line x1="222" y1="110" x2="260" y2="55" stroke="#818cf8" strokeWidth="1.5" markerEnd="url(#mv)"/>
-        {/* Candidate arrow */}
-        <line x1="222" y1="150" x2="260" y2="200" stroke="#818cf8" strokeWidth="1.5" markerEnd="url(#mv)"/>
-        {/* Baseline box */}
-        <rect x="262" y="20" width="128" height="60" rx="8" fill="white" stroke="#e5e7eb" strokeWidth="1.5"/>
-        <text x="326" y="42" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="8" fontWeight="700" fill="#1d4ed8">BASELINE</text>
-        <text x="326" y="54" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="7" fill="#6b7280">80% of traffic</text>
-        <text x="326" y="67" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="6" fill="#16a34a">score: 0.91 ✓ stable</text>
-        {/* Candidate box */}
-        <rect x="262" y="170" width="128" height="60" rx="8" fill="white" stroke="#e5e7eb" strokeWidth="1.5"/>
-        <text x="326" y="192" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="8" fontWeight="700" fill="#b45309">CANDIDATE</text>
-        <text x="326" y="204" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="7" fill="#6b7280">20% of traffic</text>
-        <text x="326" y="217" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="6" fill="#7c3aed">score: 0.85 · advancing</text>
-        {/* LLM Judge */}
-        <rect x="120" y="195" width="100" height="50" rx="8" fill="#faf5ff" stroke="#e9d5ff" strokeWidth="1.5"/>
-        <text x="170" y="216" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="7" fontWeight="700" fill="#7c3aed">⚡ LLM JUDGE</text>
-        <text x="170" y="228" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="6" fill="#9ca3af">scores every response</text>
-        <text x="170" y="238" textAnchor="middle" fontFamily="Inter,system-ui,sans-serif" fontSize="5.5" fill="#9ca3af">async · ~120ms · 0ms user impact</text>
-        {/* Judge dotted line */}
-        <line x1="170" y1="172" x2="170" y2="193" stroke="#c4b5fd" strokeWidth="1.5" strokeDasharray="3,2"/>
-        {/* Marker */}
-        <defs>
-          <marker id="mv" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-            <path d="M0,1 L0,5 L6,3 z" fill="#818cf8"/>
-          </marker>
-        </defs>
-      </svg>
-    </div>
-  );
-}
-
-/* ─── Page ─────────────────────────────────────────────────────────────────── */
-export default function LandingPage() {
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("canary");
-  const [scrolled, setScrolled] = useState(false);
-
-  useEffect(() => {
-    const fn = () => setScrolled(window.scrollY > 8);
-    window.addEventListener("scroll", fn, { passive: true });
-    return () => window.removeEventListener("scroll", fn);
+    return () => {
+      io.disconnect();
+      window.clearTimeout(failsafe);
+    };
   }, []);
 
-  const tab = featureTabs.find((t) => t.id === activeTab)!;
+  // ── Demo state ─────────────────────────────────────────────────────────
+  const [q, setQ] = useState(93);
+  const [step, setStep] = useState(1);
+  const [tick, setTick] = useState(12);
+  const [log, setLog] = useState<Decision[]>(seedLog);
+  const [countdown, setCountdown] = useState(24);
+
+  useEffect(() => {
+    const t = setInterval(() => setCountdown((c) => (c > 0 ? c - 1 : 30)), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const qv = q / 100;
+  const weight = LADDER[step];
+  const qColor = qv >= ADVANCE_AT ? "var(--adv)" : qv < ROLLBACK_UNDER ? "var(--roll)" : "var(--fg)";
+
+  const runTick = useCallback(() => {
+    const cur = LADDER[step];
+    let next = step;
+    let entry: Decision;
+
+    if (qv < ROLLBACK_UNDER) {
+      next = 0;
+      entry = {
+        action: "ROLLBACK",
+        move: `${cur}% → 0%`,
+        reason: `quality ${qv.toFixed(2)} < 0.70`,
+        color: "var(--roll)",
+        border: "var(--roll-line)",
+      };
+    } else if (qv >= ADVANCE_AT) {
+      if (cur === 100) {
+        entry = {
+          action: "PROMOTE",
+          move: "100% → baseline",
+          reason: "candidate is now the baseline",
+          color: "var(--adv)",
+          border: "var(--adv-line)",
+        };
+      } else {
+        next = step + 1;
+        entry = {
+          action: "ADVANCE",
+          move: `${cur}% → ${LADDER[next]}%`,
+          reason: `quality ${qv.toFixed(2)} ≥ 0.90`,
+          color: "var(--adv)",
+          border: "var(--adv-line)",
+        };
+      }
+    } else {
+      entry = {
+        action: "HOLD",
+        move: `${cur}% → ${cur}%`,
+        reason: `quality ${qv.toFixed(2)} between thresholds`,
+        color: "var(--fg2)",
+        border: "var(--line)",
+      };
+    }
+
+    setStep(next);
+    setTick((t) => t + 1);
+    setLog((l) => [entry, ...l].slice(0, 6));
+  }, [step, qv]);
+
+  const resetDemo = useCallback(() => {
+    setQ(93);
+    setStep(1);
+    setTick(12);
+    setLog(seedLog());
+  }, []);
+
+  const pill = (active: boolean) => ({
+    border: "none",
+    cursor: "pointer",
+    height: 26,
+    padding: "0 11px",
+    borderRadius: 999,
+    fontFamily: MONO,
+    fontSize: 11,
+    letterSpacing: "0.02em",
+    transition: "background .25s, color .25s",
+    background: active ? "var(--btn-bg)" : "transparent",
+    color: active ? "var(--btn-fg)" : "var(--fg2)",
+  });
 
   return (
-    <div className="min-h-screen bg-white text-[#0A0A0B] overflow-x-hidden" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
+    <div ref={rootRef} className="lp">
+      {/* Ambient glows and grid. Decorative only. */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          top: -380,
+          left: "50%",
+          width: 1400,
+          height: 900,
+          marginLeft: -700,
+          pointerEvents: "none",
+          zIndex: 0,
+          background: "radial-gradient(50% 50% at 50% 50%, var(--glow-a), transparent 70%)",
+          filter: "blur(20px)",
+        }}
+      />
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          top: 120,
+          right: -200,
+          width: 700,
+          height: 700,
+          pointerEvents: "none",
+          zIndex: 0,
+          background: "radial-gradient(50% 50% at 50% 50%, var(--glow-b), transparent 70%)",
+          filter: "blur(30px)",
+          animation: "lp-float 14s ease-in-out infinite",
+        }}
+      />
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 1800,
+          pointerEvents: "none",
+          zIndex: 0,
+          backgroundImage:
+            "linear-gradient(to right, var(--grid) 1px, transparent 1px),linear-gradient(to bottom, var(--grid) 1px, transparent 1px)",
+          backgroundSize: "64px 64px",
+          maskImage: "linear-gradient(180deg, #000, transparent 75%)",
+          WebkitMaskImage: "linear-gradient(180deg, #000, transparent 75%)",
+        }}
+      />
 
-      {/* ══ NAV ══════════════════════════════════════════════════════════════ */}
-      <header className={`sticky top-0 z-50 bg-white transition-shadow duration-200 ${scrolled ? "shadow-[0_1px_0_0_rgba(0,0,0,0.08)]" : ""}`}>
-        <nav className="max-w-7xl mx-auto px-6 h-[72px] flex items-center justify-between gap-6">
-          <Link href="/" className="shrink-0 flex items-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/repath-logo.png?v=3" alt="Repath" style={{ height: 44, width: "auto", display: "block" }} />
+      {/* ── Nav ──────────────────────────────────────────────────────── */}
+      <nav
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 80,
+          background: "var(--nav)",
+          backdropFilter: "blur(18px) saturate(160%)",
+          WebkitBackdropFilter: "blur(18px) saturate(160%)",
+          borderBottom: "1px solid var(--line2)",
+        }}
+      >
+        <div
+          className="lp-pad"
+          style={{
+            maxWidth: 1280,
+            margin: "0 auto",
+            padding: "16px 40px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 32,
+          }}
+        >
+          <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Image src="/logo-icon.png" alt="" width={26} height={26} style={{ objectFit: "contain" }} />
+            <span style={{ fontWeight: 600, fontSize: 18, letterSpacing: "-0.03em", color: "var(--fg)" }}>
+              Repath
+            </span>
           </Link>
 
-          <div className="hidden md:flex items-center gap-0.5">
-            {[["#features","Features"],["#how-it-works","How It Works"],["#pricing","Pricing"]].map(([href, label]) => (
-              <a key={href} href={href} className="px-3.5 py-2 text-sm text-gray-600 hover:text-gray-900 transition-colors rounded-lg hover:bg-gray-50">{label}</a>
-            ))}
-          </div>
-
-          <div className="hidden md:flex items-center gap-3">
-            <Link href="/login" className="text-sm text-gray-600 hover:text-gray-900 transition-colors px-3 py-2">Sign in</Link>
-            <Link href="/signup" className="px-4 py-2 text-sm font-medium bg-[#0A0A0B] text-white rounded-lg hover:bg-gray-800 transition-colors">Start free trial</Link>
-          </div>
-
-          <button className="md:hidden text-gray-600 hover:text-gray-900" onClick={() => setMobileOpen(!mobileOpen)}>
-            {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
-        </nav>
-
-        {mobileOpen && (
-          <div className="md:hidden border-t border-gray-100 bg-white px-6 py-4 flex flex-col gap-1">
-            {[["#features","Features"],["#how-it-works","How It Works"],["#pricing","Pricing"]].map(([href, label]) => (
-              <a key={href} href={href} className="py-2.5 text-sm text-gray-600 hover:text-gray-900" onClick={() => setMobileOpen(false)}>{label}</a>
-            ))}
-            <div className="flex gap-3 pt-3 border-t border-gray-100 mt-2">
-              <Link href="/login" className="text-sm text-gray-600 py-2">Sign in</Link>
-              <Link href="/signup" className="px-4 py-2 text-sm font-medium bg-[#0A0A0B] text-white rounded-lg">Start free trial</Link>
-            </div>
-          </div>
-        )}
-      </header>
-
-      {/* ══ HERO ═════════════════════════════════════════════════════════════ */}
-      <section className="relative max-w-7xl mx-auto px-5 sm:px-8 pt-10 sm:pt-16 pb-10 sm:pb-20 overflow-hidden">
-        {/* Desktop: side-by-side | Mobile: stacked */}
-        <div className="flex flex-col md:flex-row md:items-center gap-10 md:gap-0">
-
-          {/* Left — text */}
-          <div className="relative z-10 w-full md:max-w-[480px] md:shrink-0">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-100 text-xs text-gray-500 mb-5 border border-gray-200">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              AI-native progressive delivery · 7-day free trial
-            </div>
-
-            <motion.h1
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-              className="text-[2.4rem] leading-[1.08] sm:text-5xl md:text-6xl font-bold tracking-tight mb-4"
-            >
-              Ship AI changes<br />
-              <span className="text-gray-400">without the risk.</span>
-            </motion.h1>
-
-            <motion.p
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-              className="text-base sm:text-lg text-gray-500 leading-relaxed mb-7 max-w-[480px]"
-            >
-              Canary deployments for LLM prompts and models. Repath splits traffic, scores every response with an AI judge, and rolls back automatically before your users notice.
-            </motion.p>
-
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.18, duration: 0.6 }}
-              className="flex flex-wrap gap-3 mb-6"
-            >
-              <Link href="/signup" className="inline-flex items-center gap-2 px-5 py-3 bg-[#0A0A0B] text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors">
-                Start free trial <ArrowRight className="w-4 h-4" />
-              </Link>
-              <a href="#pricing" className="inline-flex items-center gap-2 px-5 py-3 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
-                See pricing
-              </a>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3, duration: 0.5 }}
-              className="flex flex-wrap gap-x-4 gap-y-2"
-            >
-              {["No credit card", "7-day free trial", "Cancel anytime", "UPI & cards"].map((t) => (
-                <span key={t} className="flex items-center gap-1.5 text-xs text-gray-400">
-                  <Check className="w-3.5 h-3.5 text-gray-400" /> {t}
-                </span>
-              ))}
-            </motion.div>
-          </div>
-
-          {/* Right — animation: hidden on mobile (shown below), visible on desktop */}
-          <div className="hidden md:block relative flex-1 min-h-[500px]">
-            <HeroTrafficFlow />
-          </div>
-
-          {/* Mobile-only animation — inline, scales to viewport */}
-          <div className="md:hidden w-full">
-            <HeroTrafficFlowMobile />
-          </div>
-        </div>
-      </section>
-
-      {/* ══ CAPABILITIES MARQUEE ══════════════════════════════════════════════ */}
-      <section className="border-t border-gray-100 py-8">
-        <div className="max-w-7xl mx-auto px-5 sm:px-6">
-          <div className="flex items-center gap-6 overflow-hidden">
-            <span className="text-xs text-gray-400 uppercase tracking-widest whitespace-nowrap shrink-0">What we do</span>
-            <div className="flex-1 overflow-hidden"><Marquee /></div>
-          </div>
-        </div>
-      </section>
-
-      {/* ══ PLATFORM STATS ════════════════════════════════════════════════════ */}
-      <section className="max-w-7xl mx-auto px-5 sm:px-6 py-12 sm:py-24">
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-          className="text-center mb-14"
-        >
-          <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-3">The Repath Platform</h2>
-          <p className="text-gray-500 text-lg max-w-xl mx-auto">Catch regressions, evaluate quality, and revert automatically — all before your users notice.</p>
-        </motion.div>
-
-        <div className="grid md:grid-cols-3 gap-6">
-          {[
-            { palette: C.blue,   arrow: "↑", tag: "FASTER DETECTION", value: 4,   suffix: " responses", desc: "Mean responses before a quality drop is flagged and rollback triggered.",         link: null },
-            { palette: C.violet, arrow: "↓", tag: "LATENCY ADDED",     value: 0,   suffix: "ms",         desc: "Eval runs async — never touches your critical path. Your users never feel it.", link: "How it works" },
-            { palette: C.amber,  arrow: "<", tag: "ROLLBACK SPEED",    value: 500, suffix: "ms",         desc: "Time from detection to full traffic restore on the stable version.",             link: null },
-          ].map((s, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.1, duration: 0.5 }}
-              className="rounded-2xl p-8 flex flex-col gap-4"
-              style={{ background: s.palette.bg }}
-            >
-              <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold tracking-widest uppercase" style={{ color: s.palette.label }}>
-                <span>{s.arrow}</span><span>{s.tag}</span>
-              </div>
-              <div className="text-6xl md:text-7xl font-bold tracking-tight" style={{ color: s.palette.text }}>
-                {s.arrow === "<" ? (
-                  <span>&lt;<AnimatedNumber value={s.value} suffix={s.suffix} /></span>
-                ) : (
-                  <AnimatedNumber value={s.value} suffix={s.suffix} />
-                )}
-              </div>
-              <p className="text-sm leading-relaxed" style={{ color: s.palette.label }}>{s.desc}</p>
-              {s.link && (
-                <a href="#how-it-works" className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wider" style={{ color: s.palette.label }}>
-                  {s.link} <ChevronRight className="w-3 h-3" />
-                </a>
-              )}
-            </motion.div>
-          ))}
-        </div>
-      </section>
-
-      {/* ══ TAB FEATURES ══════════════════════════════════════════════════════ */}
-      <section id="features" className="border-t border-gray-100 py-12 sm:py-20 bg-white">
-        <div className="max-w-7xl mx-auto px-5 sm:px-6">
-
-          {/* Tab bar — Together.ai style: 3 columns, underline active */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 border-b-2 border-gray-100 mb-10 sm:mb-14">
-            {featureTabs.map((t) => {
-              const active = activeTab === t.id;
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => setActiveTab(t.id)}
-                  className={`flex items-center justify-center gap-2.5 py-4 text-[15px] font-semibold transition-all duration-200 border-b-2 -mb-px ${
-                    active
-                      ? "border-violet-600 text-gray-900"
-                      : "border-transparent text-gray-400 hover:text-gray-700"
-                  }`}
-                >
-                  <t.icon className={`w-4 h-4 ${active ? "text-violet-600" : "text-gray-400"}`} strokeWidth={1.8} />
-                  {t.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Panel — full-width dashboard card */}
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.28 }}
-          >
-
-            {/* ── CANARY DEPLOYMENTS ── */}
-            {activeTab === "canary" && (
-              <div className="grid lg:grid-cols-[380px_1fr] gap-12 items-start">
-                {/* Left: description */}
-                <div>
-                  <div className="flex items-center gap-2.5 mb-5">
-                    <GitBranch className="w-5 h-5 text-violet-600" strokeWidth={2} />
-                    <span className="text-[13px] font-semibold text-violet-600 uppercase tracking-wide">Canary Deployments</span>
-                  </div>
-                  <h3 className="text-[32px] font-bold text-gray-900 leading-[1.15] tracking-tight mb-4">
-                    Ship prompt changes<br />without the risk.
-                  </h3>
-                  <p className="text-[15px] text-gray-500 leading-relaxed mb-6">
-                    Route a small % of traffic to a new prompt version. Quality gates control every step — traffic only advances when scores consistently hold.
-                  </p>
-                  {[
-                    { label: "Traffic splitting", desc: "Any % down to 0.1% granularity. No SDK rewrites." },
-                    { label: "Quality-gated advance", desc: "Traffic only increases when scores hold." },
-                    { label: "Instant abort", desc: "Any step can halt immediately — traffic snaps back." },
-                  ].map(item => (
-                    <div key={item.label} className="flex items-start gap-3 mb-4">
-                      <div className="w-4 h-4 rounded-full bg-violet-600 flex items-center justify-center shrink-0 mt-1">
-                        <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
-                      </div>
-                      <div>
-                        <div className="text-[14px] font-semibold text-gray-900">{item.label}</div>
-                        <div className="text-[13px] text-gray-500">{item.desc}</div>
-                      </div>
-                    </div>
-                  ))}
-                  <Link href="/signup" className="inline-flex items-center gap-2 mt-2 px-5 py-2.5 bg-gray-900 text-white text-[13px] font-semibold rounded-lg hover:bg-gray-800 transition-colors">
-                    START FREE TRIAL <ArrowRight className="w-4 h-4" />
-                  </Link>
-                </div>
-
-                {/* Right: dashboard card */}
-                <div className="rounded-2xl bg-white border border-gray-200 shadow-sm overflow-hidden">
-                  {/* Header */}
-                  <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-[15px] font-semibold text-gray-900">Deployment Monitor</span>
-                      <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-[11px] font-semibold text-emerald-600 border border-emerald-100">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live
-                      </span>
-                    </div>
-                    <span className="text-[12px] text-gray-400 font-medium">rollout: support-v2</span>
-                  </div>
-
-                  {/* Stats row */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 divide-gray-100 gap-px sm:divide-x sm:gap-0">
-                    {[
-                      { label: "QUALITY SCORE", val: "0.87", sub: "was 0.91", valColor: "text-emerald-600" },
-                      { label: "THRESHOLD",      val: "0.85", sub: "configured" },
-                      { label: "TRAFFIC",        val: "50%",  sub: "to support-v2", valColor: "text-violet-600" },
-                      { label: "STEP",           val: "3/4",  sub: "advancing" },
-                    ].map(s => (
-                      <div key={s.label} className="px-5 py-4">
-                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">{s.label}</p>
-                        <p className={`text-[22px] font-bold ${s.valColor ?? "text-gray-900"}`}>{s.val}</p>
-                        <p className="text-[11px] text-gray-400 mt-0.5">{s.sub}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Rollout progress */}
-                  <div className="px-6 py-5 border-t border-gray-100">
-                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-4">Rollout Steps</p>
-                    <div className="space-y-3">
-                      {[
-                        { pct: "5%",   label: "Step 1",  status: "passed",  score: "0.91" },
-                        { pct: "25%",  label: "Step 2",  status: "passed",  score: "0.89" },
-                        { pct: "50%",  label: "Step 3",  status: "live",    score: "0.87" },
-                        { pct: "100%", label: "Step 4",  status: "pending", score: "—" },
-                      ].map(step => (
-                        <div key={step.pct} className="flex items-center gap-4">
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
-                            step.status === "passed"  ? "bg-emerald-100" :
-                            step.status === "live"    ? "bg-violet-100" : "bg-gray-100"
-                          }`}>
-                            {step.status === "passed"  && <Check className="w-3.5 h-3.5 text-emerald-600" strokeWidth={2.5} />}
-                            {step.status === "live"    && <span className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />}
-                            {step.status === "pending" && <span className="w-2 h-2 rounded-full bg-gray-300" />}
-                          </div>
-                          <div className="w-10 text-[13px] font-semibold text-gray-700">{step.pct}</div>
-                          <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                            <div className={`h-full rounded-full transition-all duration-700 ${
-                              step.status === "passed" ? "w-full bg-emerald-400" :
-                              step.status === "live"   ? "w-1/2 bg-violet-500" : "w-0"
-                            }`} />
-                          </div>
-                          <div className={`text-[12px] font-mono w-10 text-right ${
-                            step.status === "passed" ? "text-emerald-600" :
-                            step.status === "live"   ? "text-violet-600" : "text-gray-300"
-                          }`}>{step.score}</div>
-                          <div className={`text-[11px] font-medium w-16 ${
-                            step.status === "passed" ? "text-emerald-500" :
-                            step.status === "live"   ? "text-violet-500 font-semibold" : "text-gray-300"
-                          }`}>
-                            {step.status === "passed" ? "✓ passed" : step.status === "live" ? "● live" : "pending"}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Gate expression */}
-                  <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 flex items-center gap-3">
-                    <span className="text-[11px] text-gray-400 uppercase tracking-wide font-semibold">Quality gate</span>
-                    <code className="text-[12px] font-mono text-violet-600 bg-violet-50 px-2.5 py-0.5 rounded-md">score ≥ 0.85 for 10 min</code>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ── LLM-AS-JUDGE ── */}
-            {activeTab === "judge" && (
-              <div className="grid lg:grid-cols-[380px_1fr] gap-12 items-start">
-                <div>
-                  <div className="flex items-center gap-2.5 mb-5">
-                    <BarChart2 className="w-5 h-5 text-violet-600" strokeWidth={2} />
-                    <span className="text-[13px] font-semibold text-violet-600 uppercase tracking-wide">LLM-as-Judge</span>
-                  </div>
-                  <h3 className="text-[32px] font-bold text-gray-900 leading-[1.15] tracking-tight mb-4">
-                    Score every response.<br />Catch silent regressions.
-                  </h3>
-                  <p className="text-[15px] text-gray-500 leading-relaxed mb-6">
-                    An independent LLM judge scores every response against your custom rubric — async, ~120ms, zero latency added to your users.
-                  </p>
-                  {[
-                    { label: "Plain-English criteria", desc: "Define what \"good\" means in natural language." },
-                    { label: "8 judge models", desc: "GPT-4o, Claude 3.5, Gemini 1.5 Pro and more." },
-                    { label: "Per-dimension scores", desc: "Accuracy, safety, format, tone — individually weighted." },
-                  ].map(item => (
-                    <div key={item.label} className="flex items-start gap-3 mb-4">
-                      <div className="w-4 h-4 rounded-full bg-violet-600 flex items-center justify-center shrink-0 mt-1">
-                        <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
-                      </div>
-                      <div>
-                        <div className="text-[14px] font-semibold text-gray-900">{item.label}</div>
-                        <div className="text-[13px] text-gray-500">{item.desc}</div>
-                      </div>
-                    </div>
-                  ))}
-                  <Link href="/signup" className="inline-flex items-center gap-2 mt-2 px-5 py-2.5 bg-gray-900 text-white text-[13px] font-semibold rounded-lg hover:bg-gray-800 transition-colors">
-                    START FREE TRIAL <ArrowRight className="w-4 h-4" />
-                  </Link>
-                </div>
-
-                <div className="rounded-2xl bg-white border border-gray-200 shadow-sm overflow-hidden">
-                  {/* Header */}
-                  <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-[15px] font-semibold text-gray-900">Evaluation Result</span>
-                      <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-[11px] font-bold text-emerald-600 border border-emerald-100">PASS</span>
-                    </div>
-                    <span className="text-[12px] text-gray-400 font-mono">response #48291</span>
-                  </div>
-
-                  {/* Score bars */}
-                  <div className="px-6 py-5 space-y-5">
-                    {[
-                      { dim: "Accuracy",    score: 0.91, color: "#7C3AED", bg: "bg-violet-500" },
-                      { dim: "Safety",      score: 0.98, color: "#10B981", bg: "bg-emerald-500" },
-                      { dim: "Helpfulness", score: 0.84, color: "#F97316", bg: "bg-orange-500" },
-                      { dim: "Tone",        score: 0.79, color: "#EC4899", bg: "bg-pink-500" },
-                    ].map(r => (
-                      <div key={r.dim}>
-                        <div className="flex justify-between mb-1.5">
-                          <span className="text-[13px] font-medium text-gray-700">{r.dim}</span>
-                          <span className="text-[13px] font-bold font-mono" style={{ color: r.color }}>{r.score.toFixed(2)}</span>
-                        </div>
-                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                          <div className={`h-full rounded-full ${r.bg}`} style={{ width: `${r.score * 100}%` }} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Composite */}
-                  <div className="mx-6 mb-5 rounded-xl bg-gray-50 border border-gray-200 px-5 py-4 flex items-center justify-between">
-                    <div>
-                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Composite Score</p>
-                      <p className="text-[28px] font-bold text-gray-900">0.88</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">Judge Model</p>
-                      <p className="text-[13px] font-semibold text-gray-700">gpt-4o-mini</p>
-                      <p className="text-[11px] text-gray-400 mt-0.5">~124ms · async</p>
-                    </div>
-                  </div>
-
-                  {/* Footer */}
-                  <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 flex items-center gap-3">
-                    <span className="text-[11px] text-gray-400 uppercase tracking-wide font-semibold">Threshold</span>
-                    <code className="text-[12px] font-mono text-purple-600 bg-purple-50 px-2.5 py-0.5 rounded-md">composite ≥ 0.80 → advance</code>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ── AUTO-ROLLBACK ── */}
-            {activeTab === "rollback" && (
-              <div className="grid lg:grid-cols-[380px_1fr] gap-12 items-start">
-                <div>
-                  <div className="flex items-center gap-2.5 mb-5">
-                    <RefreshCw className="w-5 h-5 text-violet-600" strokeWidth={2} />
-                    <span className="text-[13px] font-semibold text-violet-600 uppercase tracking-wide">Auto-Rollback</span>
-                  </div>
-                  <h3 className="text-[32px] font-bold text-gray-900 leading-[1.15] tracking-tight mb-4">
-                    Automatically revert<br />in under 500ms.
-                  </h3>
-                  <p className="text-[15px] text-gray-500 leading-relaxed mb-6">
-                    Repath continuously monitors quality in real-time and automatically rolls back traffic before your users are affected.
-                  </p>
-                  {[
-                    { label: "Sub-500ms revert", desc: "Detected and reverted before users see a second bad response." },
-                    { label: "4-response detection", desc: "Mean lag before a quality drop triggers rollback." },
-                    { label: "Full audit trail", desc: "Every decision logged with scores and timestamps." },
-                  ].map(item => (
-                    <div key={item.label} className="flex items-start gap-3 mb-4">
-                      <div className="w-4 h-4 rounded-full bg-violet-600 flex items-center justify-center shrink-0 mt-1">
-                        <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />
-                      </div>
-                      <div>
-                        <div className="text-[14px] font-semibold text-gray-900">{item.label}</div>
-                        <div className="text-[13px] text-gray-500">{item.desc}</div>
-                      </div>
-                    </div>
-                  ))}
-                  <Link href="/signup" className="inline-flex items-center gap-2 mt-2 px-5 py-2.5 bg-gray-900 text-white text-[13px] font-semibold rounded-lg hover:bg-gray-800 transition-colors">
-                    START FREE TRIAL <ArrowRight className="w-4 h-4" />
-                  </Link>
-                </div>
-
-                <div className="rounded-2xl bg-white border border-gray-200 shadow-sm overflow-hidden">
-                  {/* Header */}
-                  <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-[15px] font-semibold text-gray-900">Deployment Monitor</span>
-                      <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-50 text-[11px] font-semibold text-red-600 border border-red-100">
-                        <span className="w-1.5 h-1.5 rounded-full bg-red-500" /> Rollback
-                      </span>
-                    </div>
-                    <span className="text-[12px] text-gray-400 font-medium">Last 30 min</span>
-                  </div>
-
-                  {/* Stats */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 divide-gray-100 gap-px sm:divide-x sm:gap-0">
-                    {[
-                      { label: "QUALITY SCORE", val: "0.61", sub: "was 0.91", valColor: "text-red-500" },
-                      { label: "THRESHOLD",      val: "0.85", sub: "configured" },
-                      { label: "TRAFFIC",        val: "25%",  sub: "to support-v2", valColor: "text-gray-700" },
-                      { label: "USERS IMPACTED", val: "0",    sub: "none", valColor: "text-emerald-600" },
-                    ].map(s => (
-                      <div key={s.label} className="px-5 py-4">
-                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">{s.label}</p>
-                        <p className={`text-[22px] font-bold ${s.valColor ?? "text-gray-900"}`}>{s.val}</p>
-                        <p className="text-[11px] text-gray-400 mt-0.5">{s.sub}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Timeline */}
-                  <div className="px-6 pt-5 pb-2 border-t border-gray-100">
-                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-4">Rollback Timeline</p>
-                    <div className="flex items-start gap-0">
-                      {[
-                        { time: "03:47:12", label: "Quality regression\ndetected",    done: true },
-                        { time: "03:47:12", label: "Threshold\ncrossed",              done: true },
-                        { time: "03:47:13", label: "Rollback\ninitiated",             done: true },
-                        { time: "03:47:13", label: "Traffic\nrestored",              done: true },
-                      ].map((step, i) => (
-                        <div key={i} className="flex-1 flex flex-col items-center text-center">
-                          <div className="flex items-center w-full">
-                            <div className="flex-1 h-0.5 bg-violet-200 first:opacity-0" style={{ opacity: i === 0 ? 0 : 1 }} />
-                            <div className="w-7 h-7 rounded-full bg-violet-600 flex items-center justify-center shrink-0 z-10">
-                              <Check className="w-3.5 h-3.5 text-white" strokeWidth={2.5} />
-                            </div>
-                            <div className="flex-1 h-0.5 bg-violet-200 last:opacity-0" style={{ opacity: i === 3 ? 0 : 1 }} />
-                          </div>
-                          <p className="text-[10px] font-mono text-gray-400 mt-2">{step.time}</p>
-                          <p className="text-[11px] text-gray-600 font-medium mt-0.5 leading-tight whitespace-pre-line">{step.label}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Footer result */}
-                  <div className="mx-6 mb-5 mt-4 rounded-xl bg-violet-600 px-5 py-3.5 flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <RefreshCw className="w-4.5 h-4.5 text-white" strokeWidth={2} />
-                      <span className="text-[13px] font-bold text-white tracking-wide">AUTO-ROLLBACK COMPLETED</span>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[22px] font-bold text-white leading-none">412ms</p>
-                      <p className="text-[11px] text-violet-200">total time</p>
-                    </div>
-                  </div>
-
-                  {/* Deployment status sidebar row */}
-                  <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 grid grid-cols-2 gap-4 text-[12px]">
-                    <div><span className="text-gray-400">Restored to</span> <span className="font-semibold text-emerald-600 ml-1">support-v1</span></div>
-                    <div><span className="text-gray-400">Detection lag</span> <span className="font-semibold text-gray-700 ml-1">4 responses</span></div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-          </motion.div>
-        </div>
-      </section>
-
-      {/* ══ PROBLEM (dark) ════════════════════════════════════════════════════ */}
-      <section className="py-12 sm:py-24" style={{ background: C.dark }}>
-        <div className="max-w-7xl mx-auto px-5 sm:px-6">
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="mb-6"
-          >
-            <div className="inline-flex items-center gap-2 text-xs text-red-400 font-mono mb-4">
-              <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-              quality regressions caught live
-            </div>
-            <h2 className="text-3xl md:text-5xl font-bold text-white mb-3">AI models break silently.</h2>
-            <p className="text-gray-400 max-w-xl">Zero HTTP errors. Zero exceptions. Just worse outputs your users silently abandon — and you don&apos;t know for days.</p>
-          </motion.div>
-
-          <div className="relative mt-10">
-            <div className="flex gap-4 overflow-x-auto pb-4" style={{ scrollbarWidth: "none" }}>
-              {researchCards.map((card, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, x: 20 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.08, duration: 0.5 }}
-                  className={`shrink-0 w-72 rounded-2xl p-6 flex flex-col justify-between gap-4 ${card.highlight ? "bg-gray-600/40 border border-gray-500/40" : "bg-gray-900/60 border border-gray-800"}`}
-                  style={{ minHeight: 220 }}
-                >
-                  <div>
-                    <span className="text-[10px] font-semibold tracking-widest uppercase text-gray-400 bg-gray-800 px-2 py-1 rounded">{card.tag}</span>
-                    <h4 className="text-white font-semibold text-base mt-4 leading-snug">{card.title}</h4>
-                    <p className="text-gray-400 text-sm mt-2 leading-relaxed">{card.sub}</p>
-                  </div>
-                  <div className="text-xs text-gray-500 uppercase tracking-wider">{card.author}</div>
-                </motion.div>
-              ))}
-            </div>
-            <div className="flex gap-2 mt-6">
-              <button className="w-8 h-8 rounded-full border border-gray-700 flex items-center justify-center text-gray-400 hover:text-white hover:border-gray-500 transition-colors">
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button className="w-8 h-8 rounded-full border border-gray-700 flex items-center justify-center text-gray-400 hover:text-white hover:border-gray-500 transition-colors">
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="mt-16 rounded-2xl border border-gray-800 bg-gray-900/50 p-8"
-          >
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <div className="text-sm text-gray-400 mb-1">Quality score over time — Repath catches the drop instantly</div>
-                <div className="flex gap-4">
-                  <span className="flex items-center gap-1.5 text-xs text-gray-400"><span className="w-2 h-2 rounded-full bg-indigo-400 inline-block" />v1 stable</span>
-                  <span className="flex items-center gap-1.5 text-xs text-gray-400"><span className="w-2 h-2 rounded-full bg-orange-400 inline-block" />v2 canary</span>
-                </div>
-              </div>
-              <div className="text-right text-xs text-red-400 bg-red-900/30 border border-red-800/50 rounded-lg px-3 py-1.5">
-                Auto-rollback triggered
-              </div>
-            </div>
-            <div className="h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={qualityData} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#6366F1" stopOpacity={0.25} />
-                      <stop offset="95%" stopColor="#6366F1" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#F97316" stopOpacity={0.25} />
-                      <stop offset="95%" stopColor="#F97316" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                  <XAxis dataKey="t" tick={{ fill: "#6B7280", fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis domain={[0.4, 1.0]} tickFormatter={(v: number) => v.toFixed(2)} tick={{ fill: "#6B7280", fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<ChartTooltip />} />
-                  <ReferenceLine y={0.85} stroke="rgba(239,68,68,0.6)" strokeDasharray="4 4" label={{ value: "rollback threshold", fill: "#EF4444", fontSize: 10, position: "insideTopRight" }} />
-                  <Area type="monotone" dataKey="v1" name="v1" stroke="#6366F1" strokeWidth={2} fill="url(#g1)" dot={false} />
-                  <Area type="monotone" dataKey="v2" name="v2" stroke="#F97316" strokeWidth={2} fill="url(#g2)" dot={false} connectNulls={false} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* ══ HOW IT WORKS ══════════════════════════════════════════════════════ */}
-      <section id="how-it-works" className="max-w-7xl mx-auto px-5 sm:px-6 py-12 sm:py-24">
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-          className="mb-14"
-        >
-          <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-3">How it works</p>
-          <h2 className="text-3xl md:text-4xl font-bold tracking-tight max-w-xl">Three steps. Automatic.<br />No code changes beyond one line.</h2>
-        </motion.div>
-
-        <div className="grid md:grid-cols-3 gap-8">
-          {[
-            { n: "01", title: "Split traffic",              body: "Point your app at Repath instead of OpenAI directly. We route a small % to your new prompt or model — users see nothing different." },
-            { n: "02", title: "Score every response",       body: "An LLM judge evaluates every response against your quality criteria. Async — never adds latency to your app." },
-            { n: "03", title: "Auto-advance or rollback",   body: "Quality holding? Traffic advances to 100%. Quality drops? Rollback in under 500ms, before your users notice." },
-          ].map((step, i) => (
-            <motion.div
-              key={step.n}
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.1, duration: 0.5 }}
-              className="flex flex-col gap-4"
-            >
-              <div className="text-[11px] font-semibold tracking-widest uppercase text-violet-500">{step.n}</div>
-              <div className="w-full h-px bg-gray-200 relative">
-                <div className="absolute left-0 top-0 h-px bg-violet-400" style={{ width: i === 0 ? "100%" : i === 1 ? "50%" : "10%" }} />
-              </div>
-              <h3 className="text-xl font-semibold mt-2">{step.title}</h3>
-              <p className="text-gray-500 text-sm leading-relaxed">{step.body}</p>
-            </motion.div>
-          ))}
-        </div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-          className="mt-14 rounded-2xl border border-gray-200 bg-gray-50 p-8"
-        >
-          <div className="text-sm font-medium text-gray-700 mb-1">Rollout: <span className="font-mono text-gray-900">new-support-prompt</span></div>
-          <div className="text-xs text-gray-400 mb-6">Quality gate: score ≥ 0.85 to advance</div>
-          <div className="flex items-center gap-0">
-            {[
-              { label: "5%",   status: "passed" },
-              { label: "25%",  status: "passed" },
-              { label: "50%",  status: "live" },
-              { label: "100%", status: "pending" },
-            ].map((step, i) => (
-              <div key={step.label} className="flex items-center flex-1 last:flex-none">
-                <div className="flex flex-col items-center gap-2">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold border-2 ${step.status === "passed" ? "bg-emerald-50 border-emerald-400 text-emerald-700" : step.status === "live" ? "bg-blue-50 border-blue-400 text-blue-700 animate-pulse" : "bg-gray-100 border-gray-300 text-gray-400"}`}>
-                    {step.status === "passed" ? <Check className="w-3.5 h-3.5" /> : step.status === "live" ? "●" : "○"}
-                  </div>
-                  <div className="text-xs font-semibold text-gray-700">{step.label}</div>
-                  <div className={`text-[10px] ${step.status === "passed" ? "text-emerald-600" : step.status === "live" ? "text-blue-600" : "text-gray-400"}`}>
-                    {step.status === "passed" ? "✓ passed" : step.status === "live" ? "live" : "pending"}
-                  </div>
-                </div>
-                {i < 3 && (
-                  <div className="flex-1 h-0.5 mx-2 mb-8" style={{ background: step.status === "passed" ? "#34D399" : "#E5E7EB" }} />
-                )}
-              </div>
-            ))}
-          </div>
-        </motion.div>
-      </section>
-
-      {/* ══ FEATURES GRID ═════════════════════════════════════════════════════ */}
-      <section className="border-t border-gray-100 py-12 sm:py-24">
-        <div className="max-w-7xl mx-auto px-5 sm:px-6">
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="mb-14"
-          >
-            <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-3">Everything you need</p>
-            <h2 className="text-3xl md:text-4xl font-bold tracking-tight max-w-xl">
-              Built specifically for AI deployment safety.<br />
-              <span className="text-gray-400">Not feature flags with an AI sticker.</span>
-            </h2>
-          </motion.div>
-
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8">
-            {features.map((f, i) => (
-              <motion.div
-                key={f.title}
-                initial={{ opacity: 0, y: 12 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: (i % 3) * 0.08, duration: 0.5 }}
-                className="flex flex-col gap-3 group"
-              >
-                <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center group-hover:bg-violet-100 transition-colors">
-                  <f.icon className="w-5 h-5 text-gray-600 group-hover:text-violet-600 transition-colors" />
-                </div>
-                <h3 className="font-semibold text-[15px]">{f.title}</h3>
-                <p className="text-sm text-gray-500 leading-relaxed">{f.body}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ══ PRICING ═══════════════════════════════════════════════════════════ */}
-      <section id="pricing" className="border-t border-gray-100 py-12 sm:py-24">
-        <div className="max-w-7xl mx-auto px-5 sm:px-6">
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="text-center mb-5"
-          >
-            <p className="text-xs font-semibold tracking-widest uppercase text-gray-400 mb-3">Simple pricing</p>
-            <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-3">7-day free trial on every plan.</h2>
-            <p className="text-gray-500">No credit card required to start.</p>
-          </motion.div>
-
-          <div className="flex items-center justify-center gap-2 mb-12 text-sm text-gray-500">
-            <span>🇮🇳</span>
-            <span>Indian customers: pay in INR via UPI, cards, net banking — powered by Razorpay</span>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-6">
-            {pricingPlans.map((plan, i) => (
-              <motion.div
-                key={plan.name}
-                initial={{ opacity: 0, y: 16 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.1, duration: 0.5 }}
-                className={`relative rounded-2xl p-8 flex flex-col gap-6 border ${plan.style === "primary" ? "border-gray-900 bg-[#0A0A0B] text-white" : "border-gray-200 bg-white text-gray-900"}`}
-              >
-                {plan.badge && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="px-3 py-1 text-[10px] font-semibold tracking-widest bg-violet-600 text-white rounded-full">{plan.badge}</span>
-                  </div>
-                )}
-                <div>
-                  <div className={`text-xs font-semibold tracking-widest uppercase mb-4 ${plan.style === "primary" ? "text-gray-400" : "text-gray-500"}`}>{plan.name}</div>
-                  <div className="flex items-baseline gap-1 mb-1">
-                    <span className="text-4xl font-bold">{plan.usd}</span>
-                    {plan.period && <span className={`text-sm ${plan.style === "primary" ? "text-gray-400" : "text-gray-500"}`}>{plan.period}</span>}
-                  </div>
-                  {plan.inr && (
-                    <div className={`text-sm mt-1 ${plan.style === "primary" ? "text-gray-400" : "text-gray-500"}`}>{plan.inr}/month in India</div>
-                  )}
-                </div>
-                <ul className="flex flex-col gap-3 flex-1">
-                  {plan.features.map((f) => (
-                    <li key={f} className={`flex items-start gap-2.5 text-sm ${plan.style === "primary" ? "text-gray-300" : "text-gray-600"}`}>
-                      <Check className={`w-4 h-4 shrink-0 mt-0.5 ${plan.style === "primary" ? "text-violet-400" : "text-emerald-500"}`} />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-                <Link
-                  href={plan.name === "Enterprise" ? "mailto:hello@tryrepath.com?subject=Enterprise" : "/signup"}
-                  className={`py-2.5 px-4 rounded-lg text-sm font-medium text-center transition-all ${plan.style === "primary" ? "bg-white text-black hover:bg-gray-100" : "bg-[#0A0A0B] text-white hover:bg-gray-800"}`}
-                >
-                  {plan.cta}
-                </Link>
-              </motion.div>
-            ))}
-          </div>
-
-          <p className="text-center text-sm text-gray-400 mt-8">All plans include provider failover, auto-rollback, and real-time dashboard. Cancel anytime.</p>
-        </div>
-      </section>
-
-      {/* ══ CTA ═══════════════════════════════════════════════════════════════ */}
-      <section className="border-t border-gray-100 py-12 sm:py-24" style={{ background: C.dark }}>
-        <div className="max-w-3xl mx-auto px-6 text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-          >
-            <div className="flex items-center justify-center mb-3">
-              <Image src="/repath-logo.png" alt="Repath" width={140} height={112} className="object-contain brightness-0 invert" />
-            </div>
-            <h2 className="text-3xl md:text-5xl font-bold text-white mb-4">Stop shipping AI blind.</h2>
-            <p className="text-gray-400 text-lg mb-8 max-w-xl mx-auto">
-              Know if your prompt change is better or worse — before your users do. Start your free trial in 30 seconds.
-            </p>
-            <Link href="/signup" className="inline-flex items-center gap-2 px-6 py-3 bg-white text-black font-medium rounded-lg hover:bg-gray-100 transition-colors text-sm mb-6">
-              Start free trial — no card needed <ArrowRight className="w-4 h-4" />
-            </Link>
-            <div className="text-sm text-gray-500 mt-4">
-              Questions? <a href="mailto:hello@tryrepath.com" className="text-gray-300 hover:text-white transition-colors">hello@tryrepath.com</a>
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* ══ FOOTER ════════════════════════════════════════════════════════════ */}
-      <footer className="bg-gray-50 border-t border-gray-200 overflow-hidden">
-        <div className="max-w-7xl mx-auto px-6 pt-16 pb-0">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-12">
-            <div className="col-span-2 md:col-span-1 flex flex-col gap-3">
-              <Link href="/" className="flex items-center">
-                <Image src="/repath-logo.png" alt="Repath" width={100} height={80} className="object-contain" />
-              </Link>
-            </div>
-            {[
-              { h: "PRODUCT", links: [
-                { label: "Canary Deployments", href: "/#features" },
-                { label: "LLM-as-Judge", href: "/#features" },
-                { label: "Auto-Rollback", href: "/#features" },
-                { label: "Provider Failover", href: "/#features" },
-                { label: "Dashboard", href: "/rollouts" },
-              ]},
-              { h: "DEVELOPERS", links: [
-                { label: "Docs", href: "/docs" },
-                { label: "API Reference", href: "/docs#api" },
-                { label: "GitHub", href: "https://github.com/repathhq/repath" },
-                { label: "Status", href: "/status" },
-              ]},
-              { h: "PRICING", links: [
-                { label: "Pricing overview", href: "/pricing" },
-                { label: "Starter — $49/mo", href: "/signup?plan=starter" },
-                { label: "Pro — $149/mo", href: "/signup?plan=pro" },
-                { label: "Enterprise", href: "mailto:hello@tryrepath.com?subject=Enterprise" },
-              ]},
-              { h: "COMPANY", links: [
-                { label: "About", href: "/about" },
-                { label: "Careers", href: "/careers" },
-                { label: "Contact", href: "/contact" },
-                { label: "Privacy Policy", href: "/privacy" },
-                { label: "Terms of Service", href: "/terms" },
-              ]},
-            ].map((col) => (
-              <div key={col.h} className="flex flex-col gap-3">
-                <h4 className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">{col.h}</h4>
-                <ul className="flex flex-col gap-2">
-                  {col.links.map((l) => (
-                    <li key={l.label}>
-                      <a href={l.href} target={l.href.startsWith("http") ? "_blank" : undefined} rel="noopener noreferrer"
-                        className="text-sm text-gray-600 hover:text-gray-900 transition-colors">{l.label}</a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Watermark */}
-        <div className="relative overflow-hidden" style={{ height: 120 }}>
           <div
-            className="absolute bottom-0 left-0 right-0 text-center select-none pointer-events-none"
+            className="lp-nav-links"
+            style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 14, fontWeight: 450 }}
+          >
+            <a className="lp-navlink" href="#how">How it works</a>
+            <a className="lp-navlink" href="#demo">Live demo</a>
+            <a className="lp-navlink" href="#features">Features</a>
+            <a className="lp-navlink" href="#compare">Compare</a>
+            <a className="lp-navlink" href="#selfhost">Self-host</a>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <div
+              role="group"
+              aria-label="Colour theme"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 2,
+                padding: 3,
+                borderRadius: 999,
+                border: "1px solid var(--line2)",
+                background: "var(--chip)",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => chooseTheme("light")}
+                aria-pressed={theme === "light"}
+                style={pill(theme === "light")}
+              >
+                light
+              </button>
+              <button
+                type="button"
+                onClick={() => chooseTheme("dark")}
+                aria-pressed={theme === "dark"}
+                style={pill(theme === "dark")}
+              >
+                dark
+              </button>
+            </div>
+            <Link href="/login" style={{ fontSize: 14, fontWeight: 450, color: "var(--fg2)" }}>
+              Sign in
+            </Link>
+            <Link
+              href="/signup"
+              className="lp-btn-primary"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                height: 38,
+                padding: "0 18px",
+                borderRadius: 10,
+                background: "var(--btn-bg)",
+                color: "var(--btn-fg)",
+                fontSize: 14,
+                fontWeight: 550,
+              }}
+            >
+              Start free
+            </Link>
+          </div>
+        </div>
+      </nav>
+
+      {/* ── Hero ─────────────────────────────────────────────────────── */}
+      <header
+        className="lp-pad lp-hero"
+        style={{
+          position: "relative",
+          zIndex: 1,
+          maxWidth: 1280,
+          margin: "0 auto",
+          padding: "104px 40px 0",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          textAlign: "center",
+        }}
+      >
+        <div
+          className="lp-mono"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 10,
+            height: 34,
+            padding: "0 8px 0 14px",
+            borderRadius: 999,
+            border: "1px solid var(--line)",
+            background: "var(--chip)",
+            backdropFilter: "blur(8px)",
+            fontSize: 12,
+            color: "var(--fg2)",
+          }}
+        >
+          <span
+            aria-hidden="true"
             style={{
-              fontSize: "clamp(80px, 16vw, 180px)",
-              fontWeight: 800,
-              letterSpacing: "-0.03em",
-              lineHeight: 0.85,
-              color: "rgba(0,0,0,0.05)",
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: "var(--adv)",
+              boxShadow: "0 0 10px var(--adv)",
+              animation: "lp-pulse 2s ease-in-out infinite",
+            }}
+          />
+          <span style={{ color: "var(--fg)" }}>Controller live</span>
+          <span style={{ color: "var(--fg5)" }}>·</span>
+          <span>4,812 rollouts gated this week</span>
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              height: 22,
+              padding: "0 8px",
+              borderRadius: 999,
+              background: "var(--hover)",
+              color: "var(--fg)",
             }}
           >
-            Repath
+            v1.4
+          </span>
+        </div>
+
+        <h1
+          className="lp-h1"
+          style={{
+            fontSize: 92,
+            lineHeight: 0.96,
+            letterSpacing: "-0.048em",
+            fontWeight: 600,
+            margin: "36px 0 0",
+            maxWidth: "17ch",
+            animation: "lp-rise .9s cubic-bezier(.16,1,.3,1) .05s both",
+          }}
+        >
+          Every prompt change ships behind a{" "}
+          <span
+            style={{
+              background: "var(--grad)",
+              WebkitBackgroundClip: "text",
+              backgroundClip: "text",
+              color: "transparent",
+            }}
+          >
+            quality gate
+          </span>
+          .
+        </h1>
+
+        <p
+          className="lp-lead"
+          style={{
+            fontSize: 21,
+            lineHeight: 1.55,
+            color: "var(--fg2)",
+            margin: "28px 0 0",
+            maxWidth: "60ch",
+            textWrap: "pretty",
+            animation: "lp-rise .9s cubic-bezier(.16,1,.3,1) .15s both",
+          }}
+        >
+          Repath sits between your app and your model provider. It splits traffic, scores every
+          response with a judge model, and pulls the candidate back to zero the moment quality
+          drops — before a single user notices.
+        </p>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            marginTop: 40,
+            flexWrap: "wrap",
+            justifyContent: "center",
+            animation: "lp-rise .9s cubic-bezier(.16,1,.3,1) .25s both",
+          }}
+        >
+          <StartFree delay="1.2s" />
+          <a
+            href="#demo"
+            className="lp-btn-ghost"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 10,
+              height: 54,
+              padding: "0 26px",
+              borderRadius: 12,
+              border: "1px solid var(--line)",
+              background: "transparent",
+              color: "var(--fg)",
+              fontSize: 16,
+              fontWeight: 500,
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+            Try the controller
+          </a>
+        </div>
+
+        <div
+          className="lp-mono"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 22,
+            marginTop: 26,
+            fontSize: 12,
+            color: "var(--fg3)",
+            flexWrap: "wrap",
+            justifyContent: "center",
+            animation: "lp-rise .9s cubic-bezier(.16,1,.3,1) .35s both",
+          }}
+        >
+          <span>Free while you evaluate</span>
+          <span style={{ color: "var(--fg5)" }}>·</span>
+          <span>No card</span>
+          <span style={{ color: "var(--fg5)" }}>·</span>
+          <span>One base_url to integrate</span>
+        </div>
+      </header>
+
+      {/* ── Hero figure ──────────────────────────────────────────────── */}
+      <figure
+        data-reveal
+        className="lp-pad"
+        style={{ position: "relative", zIndex: 1, maxWidth: 1280, margin: "64px auto 0", padding: "0 40px" }}
+      >
+        <div
+          style={{
+            position: "relative",
+            borderRadius: 20,
+            padding: 1,
+            background: "var(--frame)",
+            boxShadow: "var(--shadow)",
+          }}
+        >
+          <div style={{ borderRadius: 19, background: "var(--panel-grad)", overflow: "hidden" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 16,
+                padding: "14px 20px",
+                borderBottom: "1px solid var(--line2)",
+                flexWrap: "wrap",
+              }}
+            >
+              <div
+                className="lp-mono"
+                style={{ display: "flex", alignItems: "center", gap: 14, fontSize: 12, color: "var(--fg3)" }}
+              >
+                <span aria-hidden="true" style={{ display: "flex", gap: 6 }}>
+                  {[0, 1, 2].map((i) => (
+                    <span
+                      key={i}
+                      style={{ width: 9, height: 9, borderRadius: "50%", background: "var(--line)" }}
+                    />
+                  ))}
+                </span>
+                <span style={{ color: "var(--fg)" }}>rollout / support-triage</span>
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    height: 20,
+                    padding: "0 8px",
+                    borderRadius: 6,
+                    border: "1px solid var(--line)",
+                    color: "var(--fg2)",
+                  }}
+                >
+                  v4 → candidate
+                </span>
+              </div>
+              <div
+                className="lp-mono"
+                style={{ display: "flex", alignItems: "center", gap: 16, fontSize: 12, color: "var(--fg3)" }}
+              >
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 7, color: "var(--adv)" }}>
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: "50%",
+                      background: "var(--adv)",
+                      boxShadow: "0 0 8px var(--adv)",
+                      animation: "lp-pulse 2s ease-in-out infinite",
+                    }}
+                  />
+                  live
+                </span>
+                <span>next tick {countdown}s</span>
+              </div>
+            </div>
+
+            <div className="lp-hero-panel" style={{ display: "grid", gridTemplateColumns: "1.55fr 1fr" }}>
+              <div style={{ borderRight: "1px solid var(--line2)" }}>
+                <div
+                  style={{
+                    padding: "22px 24px 6px",
+                    display: "flex",
+                    alignItems: "flex-start",
+                    justifyContent: "space-between",
+                    gap: 24,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 550, letterSpacing: "-0.01em" }}>
+                      Judge quality score
+                    </div>
+                    <div className="lp-mono" style={{ fontSize: 12, color: "var(--fg3)", marginTop: 5 }}>
+                      gpt-4o-mini · rolling 200-sample mean
+                    </div>
+                  </div>
+                  <div className="lp-mono" style={{ display: "flex", gap: 22, fontSize: 12 }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "var(--fg2)" }}>
+                      <span style={{ width: 16, height: 2, borderRadius: 2, background: "var(--baseline)" }} />
+                      baseline
+                    </span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "var(--fg2)" }}>
+                      <span style={{ width: 16, height: 2, borderRadius: 2, background: "var(--accent)" }} />
+                      candidate
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ padding: "4px 12px 0" }}>
+                  <svg
+                    viewBox="0 0 900 320"
+                    style={{ width: "100%", height: "auto", display: "block", overflow: "visible" }}
+                    role="img"
+                    aria-label="Candidate quality declining from 0.93 to 0.68 while baseline holds near 0.92, with a rollback marked at 0.68."
+                  >
+                    <defs>
+                      <linearGradient id="candFill4" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.22" />
+                        <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+                      </linearGradient>
+                    </defs>
+                    {[30, 78, 126, 174, 222].map((y) => (
+                      <line key={y} x1="60" y1={y} x2="860" y2={y} style={{ stroke: "var(--hair)", strokeWidth: 1 }} />
+                    ))}
+                    <line x1="60" y1="270" x2="860" y2="270" style={{ stroke: "var(--line2)", strokeWidth: 1 }} />
+                    {[
+                      [34, "1.00"], [82, "0.90"], [130, "0.80"], [178, "0.70"], [226, "0.60"], [274, "0.50"],
+                    ].map(([y, t]) => (
+                      <text key={t} x="48" y={y as number} textAnchor="end" fontFamily="var(--font-geist-mono), monospace" fontSize="11" style={{ fill: "var(--fg4)" }}>
+                        {t}
+                      </text>
+                    ))}
+                    <line x1="60" y1="78" x2="860" y2="78" strokeDasharray="5 6" style={{ stroke: "var(--adv)", strokeWidth: 1, opacity: 0.8 }} />
+                    <line x1="60" y1="174" x2="860" y2="174" strokeDasharray="5 6" style={{ stroke: "var(--roll)", strokeWidth: 1, opacity: 0.8 }} />
+                    <text x="866" y="75" fontFamily="var(--font-geist-mono), monospace" fontSize="11" style={{ fill: "var(--adv)" }}>advance ≥ 0.90</text>
+                    <text x="866" y="171" fontFamily="var(--font-geist-mono), monospace" fontSize="11" style={{ fill: "var(--roll)" }}>rollback &lt; 0.70</text>
+
+                    <path
+                      d="M260,58.3 L310,59.8 L360,62.6 L410,67.9 L460,76.6 L510,88.6 L560,104.4 L610,120.2 L660,139.9 L710,162.5 L760,183.1 L760,270 L260,270 Z"
+                      fill="url(#candFill4)"
+                      style={{ animation: "lp-fade 1.2s ease-out 1.1s both" }}
+                    />
+                    <polyline
+                      points="60,67.9 110,69.4 160,66 210,70.8 260,64.6 310,68.9 360,67.4 410,63.6 460,70.3 510,66.5 560,68.4 610,65 660,69.4 710,67 760,67.9 810,65.5 860,68.9"
+                      fill="none" strokeLinejoin="round" strokeLinecap="round" strokeDasharray="2000" strokeDashoffset="2000"
+                      style={{ stroke: "var(--baseline)", strokeWidth: 2, animation: "lp-draw 1.6s cubic-bezier(.4,0,.2,1) .35s forwards" }}
+                    />
+                    <polyline
+                      points="260,58.3 310,59.8 360,62.6 410,67.9 460,76.6 510,88.6 560,104.4 610,120.2 660,139.9 710,162.5 760,183.1"
+                      fill="none" strokeLinejoin="round" strokeLinecap="round" strokeDasharray="2000" strokeDashoffset="2000"
+                      style={{ stroke: "var(--accent)", strokeWidth: 2.5, animation: "lp-draw 1.5s cubic-bezier(.4,0,.2,1) .75s forwards" }}
+                    />
+                    <g style={{ animation: "lp-fade .6s ease-out 2.1s both" }}>
+                      <line x1="760" y1="183.1" x2="760" y2="284" strokeDasharray="3 4" style={{ stroke: "var(--roll)", strokeWidth: 1 }} />
+                      <circle cx="760" cy="183.1" r="10" style={{ fill: "var(--roll)", opacity: 0.16 }} />
+                      <circle cx="760" cy="183.1" r="4.5" style={{ fill: "var(--roll)" }} />
+                      <rect x="638" y="196" width="126" height="24" rx="6" style={{ fill: "var(--roll-soft)", stroke: "var(--roll-line)" }} />
+                      <text x="701" y="212" textAnchor="middle" fontFamily="var(--font-geist-mono), monospace" fontSize="11" style={{ fill: "var(--roll)" }}>0.68 → rollback</text>
+                    </g>
+                    <circle cx="860" cy="68.9" r="4" style={{ fill: "var(--baseline)" }} />
+                    {[["60", "14:00", "start"], ["260", "14:16", "middle"], ["460", "14:32", "middle"], ["660", "14:48", "middle"], ["860", "15:04", "end"]].map(([x, t, anchor]) => (
+                      <text key={t} x={x} y="292" textAnchor={anchor === "start" ? undefined : (anchor as "middle" | "end")} fontFamily="var(--font-geist-mono), monospace" fontSize="11" style={{ fill: "var(--fg4)" }}>
+                        {t}
+                      </text>
+                    ))}
+                  </svg>
+                </div>
+
+                <div
+                  className="lp-stats"
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(4,1fr)",
+                    borderTop: "1px solid var(--line2)",
+                    marginTop: 14,
+                  }}
+                >
+                  <Stat label="Quality" value="0.92" sub="0.68" subColor="var(--roll)" />
+                  <Stat label="P95 latency" value="812" sub="ms" />
+                  <Stat label="Error rate" value="0.00" sub="%" />
+                  <Stat label="Samples judged" value="14,208" last />
+                </div>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <div style={{ padding: "22px 22px 12px", fontSize: 15, fontWeight: 550, letterSpacing: "-0.01em" }}>
+                  Controller decisions
+                </div>
+                <div style={{ flex: 1 }}>
+                  <LogRow action="ROLLBACK" move="50% → 0%" reason="quality 0.68 < 0.70" when="now" color="var(--roll)" border="var(--roll-line)" />
+                  <LogRow action="HOLD" move="50% → 50%" reason="quality 0.72, drifting down" when="2m" color="var(--fg2)" border="var(--line)" />
+                  <LogRow action="ADVANCE" move="10% → 50%" reason="quality 0.93 ≥ 0.90" when="18m" color="var(--adv)" border="var(--adv-line)" />
+                  <LogRow action="ADVANCE" move="0% → 10%" reason="gate passed · 1,204 samples" when="44m" color="var(--adv)" border="var(--adv-line)" />
+                  <LogRow action="START" move="rollout created" reason="baseline gpt-4o pinned" when="1h" color="var(--fg2)" border="var(--line)" dim />
+                </div>
+                <div
+                  className="lp-mono"
+                  style={{ padding: "14px 22px", borderTop: "1px solid var(--line2)", fontSize: 11, color: "var(--fg4)", lineHeight: 1.6 }}
+                >
+                  Written to postgres with the metrics that caused it
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <figcaption
+          className="lp-mono"
+          style={{ fontSize: 11.5, color: "var(--fg4)", marginTop: 16, textAlign: "center" }}
+        >
+          A candidate degrading at constant latency and zero errors — caught and pulled at 0.68
+        </figcaption>
+      </figure>
+
+      {/* ── Logo marquee ─────────────────────────────────────────────── */}
+      <section
+        data-reveal
+        className="lp-pad lp-section"
+        style={{ position: "relative", zIndex: 1, maxWidth: 1280, margin: "96px auto 0", padding: "0 40px" }}
+      >
+        <div
+          className="lp-mono"
+          style={{
+            textAlign: "center",
+            fontSize: 11,
+            letterSpacing: "0.16em",
+            textTransform: "uppercase",
+            color: "var(--fg4)",
+            marginBottom: 34,
+          }}
+        >
+          Gating production traffic at
+        </div>
+        <div
+          style={{
+            position: "relative",
+            overflow: "hidden",
+            maskImage: "linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)",
+            WebkitMaskImage: "linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)",
+          }}
+        >
+          <div style={{ display: "flex", gap: 56, width: "max-content", animation: "lp-marquee 32s linear infinite" }}>
+            {[0, 1].map((group) => (
+              <div key={group} aria-hidden={group === 1} style={{ display: "flex", gap: 56, alignItems: "center" }}>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="lp-mono"
+                    style={{
+                      width: 150,
+                      height: 44,
+                      border: "1px dashed var(--line)",
+                      borderRadius: 8,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 10,
+                      color: "var(--fg5)",
+                    }}
+                  >
+                    logo
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── 01 The silent failure mode ───────────────────────────────── */}
+      <section
+        data-reveal
+        className="lp-pad lp-section"
+        style={{ position: "relative", zIndex: 1, maxWidth: 1280, margin: "120px auto 0", padding: "0 40px" }}
+      >
+        <SectionLabel>01 — The silent failure mode</SectionLabel>
+        <h2 className="lp-h2" style={{ fontSize: 56, lineHeight: 1.03, letterSpacing: "-0.04em", fontWeight: 600, margin: 0, maxWidth: "24ch" }}>
+          Nothing errors. Nothing alerts. The answers just get worse.
+        </h2>
+        <div className="lp-cards-3" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20, marginTop: 52 }}>
+          {[
+            {
+              stat: "97.6 → 2.4%",
+              title: "Accuracy fell off a cliff",
+              body: "A 2023 Stanford study measured GPT-4's accuracy on one coding task dropping from 97.6% to 2.4% inside a month. The API returned 200 the entire time.",
+            },
+            {
+              stat: "0 errors",
+              title: "Your dashboards stay green",
+              body: "Status codes, latency and error rates are blind to quality. A regression that halves usefulness looks identical to a clean deploy.",
+            },
+            {
+              stat: "34 days",
+              title: "Found by customers, not by you",
+              body: "A subtle prompt edit degraded responses for over a month before anyone tied the support tickets back to the deploy that caused them.",
+            },
+          ].map((c) => (
+            <div
+              key={c.title}
+              className="lp-card lp-card-warn"
+              style={{ borderRadius: 16, border: "1px solid var(--line2)", background: "var(--card)", padding: 28 }}
+            >
+              <div className="lp-mono" style={{ fontSize: 34, letterSpacing: "-0.03em", color: "var(--roll)", marginBottom: 18 }}>
+                {c.stat}
+              </div>
+              <h3 style={{ fontSize: 18, fontWeight: 550, letterSpacing: "-0.015em", margin: "0 0 10px" }}>{c.title}</h3>
+              <p style={{ fontSize: 15, lineHeight: 1.65, color: "var(--fg2)", margin: 0 }}>{c.body}</p>
+            </div>
+          ))}
+        </div>
+        <p style={{ margin: "44px 0 0", fontSize: 30, lineHeight: 1.3, letterSpacing: "-0.03em", fontWeight: 500, maxWidth: "34ch", color: "var(--fg)" }}>
+          Feature flags tell you the code deployed. Repath tells you whether it{" "}
+          <span style={{ color: "var(--accent)" }}>worked</span>.
+        </p>
+      </section>
+
+      {/* ── 02 How it works ──────────────────────────────────────────── */}
+      <section
+        id="how"
+        data-reveal
+        className="lp-pad lp-section"
+        style={{ position: "relative", zIndex: 1, maxWidth: 1280, margin: "120px auto 0", padding: "0 40px" }}
+      >
+        <SectionLabel>02 — How it works</SectionLabel>
+        <div className="lp-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 64, alignItems: "start" }}>
+          <h2 className="lp-h2" style={{ fontSize: 56, lineHeight: 1.03, letterSpacing: "-0.04em", fontWeight: 600, margin: 0 }}>
+            One line in. A gate around every change.
+          </h2>
+          <p className="lp-lead" style={{ fontSize: 19, lineHeight: 1.6, color: "var(--fg2)", margin: 0, maxWidth: "46ch", textWrap: "pretty" }}>
+            Point your existing SDK at Repath. Routing, recording, judging and deciding all happen off
+            the request path — the Rust gateway adds under 2ms, and nothing in your hot path waits on
+            an evaluation.
+          </p>
+        </div>
+
+        <div style={{ marginTop: 44, borderRadius: 16, border: "1px solid var(--line2)", background: "var(--panel)", overflow: "hidden" }}>
+          <div
+            className="lp-mono"
+            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", borderBottom: "1px solid var(--line2)", fontSize: 11, color: "var(--fg4)" }}
+          >
+            <span>python</span>
+            <span>the entire integration</span>
+          </div>
+          <div className="lp-mono" style={{ padding: "22px 24px", fontSize: 14, lineHeight: 2, overflowX: "auto" }}>
+            <div style={{ color: "var(--fg5)" }}># before</div>
+            <div style={{ color: "var(--fg)", whiteSpace: "nowrap" }}>
+              client = <span style={{ color: "var(--accent)" }}>OpenAI</span>(api_key=
+              <span style={{ color: "var(--adv)" }}>&quot;sk-…&quot;</span>)
+            </div>
+            <div style={{ color: "var(--fg5)", marginTop: 12 }}># after</div>
+            <div style={{ color: "var(--fg)", whiteSpace: "nowrap" }}>
+              client = <span style={{ color: "var(--accent)" }}>OpenAI</span>(api_key=
+              <span style={{ color: "var(--adv)" }}>&quot;sk-…&quot;</span>, base_url=
+              <span style={{ color: "var(--adv)" }}>&quot;https://api.tryrepath.com/v1&quot;</span>)
+            </div>
           </div>
         </div>
 
-        <div className="border-t border-gray-200 bg-gray-50">
-          <div className="max-w-7xl mx-auto px-6 py-5 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <p className="text-xs text-gray-400">© 2026 Repath</p>
-            <div className="flex gap-5 text-xs text-gray-400">
-              {[["Privacy Policy","/privacy"],["Terms of Service","/terms"],["Contact","/contact"],["Status","/status"]].map(([l,h]) => (
-                <a key={l} href={h} className="hover:text-gray-700 transition-colors">{l}</a>
+        {/* Architecture flow */}
+        <div style={{ marginTop: 20, borderRadius: 16, border: "1px solid var(--line2)", background: "var(--panel-grad)", padding: "40px 32px" }}>
+          <div className="lp-mono" style={{ maxWidth: 920, margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "stretch", fontSize: 12 }}>
+            <FlowBox filled>
+              YOUR APP<span style={{ color: "var(--fg3)" }}> · base_url = api.tryrepath.com/v1</span>
+            </FlowBox>
+            <Connector />
+            <FlowBox accent>
+              <div style={{ textAlign: "center", letterSpacing: "0.08em", color: "var(--accent-strong)", marginBottom: 16 }}>
+                REPATH GATEWAY · rust / axum · &lt;2ms
+              </div>
+              <div className="lp-flow-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                <div style={{ borderRadius: 10, border: "1px solid var(--line)", padding: 14, textAlign: "center", lineHeight: 1.9, color: "var(--fg)" }}>
+                  TRAFFIC ROUTER<br />
+                  <span style={{ color: "var(--fg3)" }}>90% baseline · 10% candidate</span>
+                </div>
+                <div style={{ borderRadius: 10, border: "1px solid var(--line)", padding: 14, textAlign: "center", lineHeight: 1.9, color: "var(--fg)" }}>
+                  REQUEST RECORDER<br />
+                  <span style={{ color: "var(--fg3)" }}>async · never blocks</span>
+                </div>
+              </div>
+            </FlowBox>
+            <div className="lp-flow-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                <Connector />
+                <FlowBox>
+                  OPENAI · ANTHROPIC · GEMINI · OPENROUTER<br />
+                  <span style={{ color: "var(--fg3)" }}>baseline and candidate</span>
+                </FlowBox>
+                <div style={{ flex: 1 }} />
+                <div style={{ fontSize: 11, color: "var(--fg4)", padding: "16px 0 0", textAlign: "center", lineHeight: 1.7 }}>
+                  response returns immediately<br />evaluation happens beside it
+                </div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                <Connector />
+                <FlowBox>
+                  REDIS STREAM<span style={{ color: "var(--fg3)" }}> · eval-queue</span>
+                </FlowBox>
+                <Connector h={18} />
+                <FlowBox>
+                  PYTHON EVALUATOR<br />
+                  <span style={{ color: "var(--fg3)" }}>checks + gpt-4o-mini judge</span>
+                </FlowBox>
+                <Connector h={18} />
+                <FlowBox>
+                  POSTGRES 16<span style={{ color: "var(--fg3)" }}> · scores</span>
+                </FlowBox>
+                <Connector h={18} />
+                <FlowBox filled>
+                  RUST CONTROLLER<span style={{ color: "var(--fg3)" }}> · every 30s</span><br />
+                  <span style={{ color: "var(--adv)" }}>≥ 0.90 advance</span>{" "}
+                  <span style={{ color: "var(--fg5)" }}>/</span>{" "}
+                  <span style={{ color: "var(--roll)" }}>&lt; 0.70 rollback</span>
+                </FlowBox>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="lp-cards-3" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20, marginTop: 20 }}>
+          {[
+            ["01", "Drop-in replacement", "Change a base URL. Keep the provider SDK you already use."],
+            ["02", "Traffic splitting", "Send a slice of real requests to the new prompt or model. Both sides scored on identical criteria."],
+            ["03", "Automatic rollback", "Below threshold, candidate weight goes to zero on the next tick. No pager, no human."],
+          ].map(([n, title, body]) => (
+            <div key={n} style={{ borderRadius: 14, border: "1px solid var(--line2)", padding: 24 }}>
+              <div className="lp-mono" style={{ fontSize: 11, color: "var(--accent)", marginBottom: 12 }}>{n}</div>
+              <h3 style={{ fontSize: 17, fontWeight: 550, letterSpacing: "-0.015em", margin: "0 0 8px" }}>{title}</h3>
+              <p style={{ fontSize: 15, lineHeight: 1.6, color: "var(--fg2)", margin: 0 }}>{body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── 03 Live demo ─────────────────────────────────────────────── */}
+      <section
+        id="demo"
+        data-reveal
+        className="lp-pad lp-section"
+        style={{ position: "relative", zIndex: 1, maxWidth: 1280, margin: "120px auto 0", padding: "0 40px" }}
+      >
+        <SectionLabel>03 — Live demo</SectionLabel>
+        <div className="lp-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 64, alignItems: "start", marginBottom: 44 }}>
+          <h2 className="lp-h2" style={{ fontSize: 56, lineHeight: 1.03, letterSpacing: "-0.04em", fontWeight: 600, margin: 0 }}>
+            Move the score. Watch the controller decide.
+          </h2>
+          <p className="lp-lead" style={{ fontSize: 19, lineHeight: 1.6, color: "var(--fg2)", margin: 0, maxWidth: "46ch" }}>
+            This runs the real decision rule: advance at 0.90, hold between, rollback under 0.70. Drag
+            the score and step the controller through the ladder.
+          </p>
+        </div>
+
+        <div
+          className="lp-demo"
+          style={{
+            borderRadius: 20,
+            border: "1px solid var(--line2)",
+            background: "var(--panel-grad)",
+            overflow: "hidden",
+            display: "grid",
+            gridTemplateColumns: "1.05fr 1fr",
+          }}
+        >
+          <div style={{ borderRight: "1px solid var(--line2)", padding: 32 }}>
+            <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 20 }}>
+              <label
+                htmlFor="lp-quality"
+                className="lp-mono"
+                style={{ fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--fg4)" }}
+              >
+                Candidate quality score
+              </label>
+              <div className="lp-mono" style={{ fontSize: 44, lineHeight: 1, letterSpacing: "-0.03em", color: qColor, transition: "color .3s" }}>
+                {qv.toFixed(2)}
+              </div>
+            </div>
+            <input
+              id="lp-quality"
+              className="lp-range"
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={q}
+              onChange={(e) => setQ(Number(e.target.value))}
+              aria-valuetext={qv.toFixed(2)}
+            />
+            <div className="lp-mono" style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, color: "var(--fg4)", marginBottom: 36 }}>
+              <span>0.00</span>
+              <span style={{ color: "var(--roll)" }}>0.70 rollback</span>
+              <span style={{ color: "var(--adv)" }}>0.90 advance</span>
+              <span>1.00</span>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 14 }}>
+              <div className="lp-mono" style={{ fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--fg4)" }}>
+                Traffic to candidate
+              </div>
+              <div className="lp-mono" style={{ fontSize: 11, color: "var(--fg3)" }}>step {step} of 3</div>
+            </div>
+            <div
+              className="lp-mono"
+              style={{ display: "flex", height: 44, borderRadius: 10, overflow: "hidden", border: "1px solid var(--line)", fontSize: 12 }}
+              role="img"
+              aria-label={`${100 - weight}% baseline, ${weight}% candidate`}
+            >
+              <div style={{ background: "var(--hover)", color: "var(--fg)", display: "flex", alignItems: "center", justifyContent: "center", transition: "flex 800ms cubic-bezier(.16,1,.3,1)", flex: 100 - weight || 0.0001, minWidth: 0, overflow: "hidden" }}>
+                {weight <= 88 ? `${100 - weight}%` : ""}
+              </div>
+              <div style={{ background: "var(--accent)", color: "var(--btn-fg)", display: "flex", alignItems: "center", justifyContent: "center", transition: "flex 800ms cubic-bezier(.16,1,.3,1)", flex: weight || 0.0001, minWidth: 0, overflow: "hidden" }}>
+                {weight >= 12 ? `${weight}%` : ""}
+              </div>
+            </div>
+            <div className="lp-mono" style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--fg4)", marginTop: 10 }}>
+              <span>baseline gpt-4o</span>
+              <span>candidate v4</span>
+            </div>
+
+            <div style={{ display: "flex", gap: 12, marginTop: 36, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={runTick}
+                className="lp-btn-primary"
+                style={{ height: 46, padding: "0 22px", border: "none", borderRadius: 10, background: "var(--btn-bg)", color: "var(--btn-fg)", fontFamily: "inherit", fontSize: 15, fontWeight: 550, cursor: "pointer" }}
+              >
+                Run controller tick
+              </button>
+              <button
+                type="button"
+                onClick={resetDemo}
+                className="lp-btn-ghost"
+                style={{ height: 46, padding: "0 22px", border: "1px solid var(--line)", borderRadius: 10, background: "transparent", color: "var(--fg)", fontFamily: "inherit", fontSize: 15, fontWeight: 500, cursor: "pointer" }}
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+
+          <div style={{ padding: 32, display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 18 }}>
+              <div className="lp-mono" style={{ fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--fg4)" }}>
+                Decision log
+              </div>
+              <div className="lp-mono" style={{ fontSize: 11, color: "var(--fg3)" }}>tick #{tick}</div>
+            </div>
+            <div style={{ flex: 1, minHeight: 300 }} aria-live="polite">
+              {log.map((d, i) => (
+                <div
+                  key={`${tick}-${i}`}
+                  style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 14, padding: "14px 0", borderTop: "1px solid var(--line2)", alignItems: "start", animation: "lp-rise .5s cubic-bezier(.16,1,.3,1) both" }}
+                >
+                  <span
+                    className="lp-mono"
+                    style={{ fontSize: 10, fontWeight: 500, letterSpacing: "0.08em", color: d.color, border: `1px solid ${d.border}`, borderRadius: 5, padding: "3px 7px", whiteSpace: "nowrap" }}
+                  >
+                    {d.action}
+                  </span>
+                  <span className="lp-mono" style={{ fontSize: 12, color: "var(--fg)", lineHeight: 1.7 }}>
+                    {d.move}
+                    <br />
+                    <span style={{ color: "var(--fg3)" }}>{d.reason}</span>
+                  </span>
+                </div>
               ))}
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── 04 What it does ──────────────────────────────────────────── */}
+      <section
+        id="features"
+        data-reveal
+        className="lp-pad lp-section"
+        style={{ position: "relative", zIndex: 1, maxWidth: 1280, margin: "120px auto 0", padding: "0 40px" }}
+      >
+        <SectionLabel>04 — What it does</SectionLabel>
+        <h2 className="lp-h2" style={{ fontSize: 56, lineHeight: 1.03, letterSpacing: "-0.04em", fontWeight: 600, margin: "0 0 52px", maxWidth: "22ch" }}>
+          Four primitives. Everything else is configuration.
+        </h2>
+
+        <div className="lp-cards-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+          {[
+            {
+              n: "4.1",
+              title: "Canary deployments for prompts",
+              body: "Ladder a new version 10% → 50% → 100%. Every step carries its own gate, and the controller — not a human on a Friday — decides whether it passes.",
+              file: "rollout.yaml",
+              code: 'steps:\n  - weight: 10\n    gate:\n      quality_score: ">= 0.9"\n  - weight: 100',
+            },
+            {
+              n: "4.2",
+              title: "A judge model scores every response",
+              body: "Describe what good looks like in plain English. Repath scores each response with gpt-4o-mini plus your programmatic checks. No metric schemas to design.",
+              file: "judge.yaml",
+              code: "judge_prompt: |\n  Score this response 0-1.\n  Criteria: accuracy, clarity,\n  relevance to the query.",
+            },
+            {
+              n: "4.3",
+              title: "Rollback in under 500ms",
+              body: "When the rolling score crosses your threshold, candidate weight is zero before the next request is routed. Not eventually — on that tick.",
+              file: "controller.yaml",
+              code: "controller:\n  check_interval: 30s\n  rollback_threshold: 0.7\n  action: instant",
+            },
+            {
+              n: "4.4",
+              title: "Every decision is auditable",
+              body: 'Advance, hold, rollback, promote — each stored with the exact metrics that triggered it. Enough to answer "why did this change?" months later.',
+              file: "decisions · postgres",
+              code: '{\n  "action": "rollback",\n  "reason": "quality 0.68 < 0.70",\n  "previous_weight": 50,\n  "new_weight": 0\n}',
+            },
+          ].map((f) => (
+            <div key={f.n} className="lp-card" style={{ borderRadius: 18, border: "1px solid var(--line2)", background: "var(--card)", padding: 30 }}>
+              <div className="lp-mono" style={{ fontSize: 11, color: "var(--accent)", marginBottom: 16 }}>{f.n}</div>
+              <h3 style={{ fontSize: 26, lineHeight: 1.15, letterSpacing: "-0.028em", fontWeight: 600, margin: "0 0 12px" }}>{f.title}</h3>
+              <p style={{ fontSize: 16, lineHeight: 1.65, color: "var(--fg2)", margin: "0 0 24px", maxWidth: "44ch" }}>{f.body}</p>
+              <CodeCard title={f.file} code={f.code} />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── 05 Compared ──────────────────────────────────────────────── */}
+      <section
+        id="compare"
+        data-reveal
+        className="lp-pad lp-section"
+        style={{ position: "relative", zIndex: 1, maxWidth: 1280, margin: "120px auto 0", padding: "0 40px" }}
+      >
+        <SectionLabel>05 — Compared</SectionLabel>
+        <h2 className="lp-h2" style={{ fontSize: 56, lineHeight: 1.03, letterSpacing: "-0.04em", fontWeight: 600, margin: "0 0 44px", maxWidth: "24ch" }}>
+          Flags ship it. Observability watches it. Repath decides.
+        </h2>
+        <div className="lp-table-wrap" style={{ borderRadius: 18, border: "1px solid var(--line2)", overflow: "hidden", background: "var(--panel-grad)" }}>
+          <table className="lp-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 15 }}>
+            <thead>
+              <tr>
+                <th className="lp-mono" style={{ textAlign: "left", padding: "18px 24px", borderBottom: "1px solid var(--line2)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--fg4)", fontWeight: 400 }}>
+                  Capability
+                </th>
+                <th style={{ textAlign: "center", padding: "18px 24px", borderBottom: "1px solid var(--line2)", fontSize: 15, fontWeight: 600, color: "var(--fg)", background: "var(--accent-soft)" }}>
+                  Repath
+                </th>
+                {["LaunchDarkly", "LiteLLM", "Langfuse"].map((n) => (
+                  <th key={n} className="lp-mono" style={{ textAlign: "center", padding: "18px 24px", borderBottom: "1px solid var(--line2)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--fg4)", fontWeight: 400 }}>
+                    {n}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {COMPARISON.map(([feature, a, b, c, d]) => (
+                <tr key={feature}>
+                  <td style={{ padding: "17px 24px", borderBottom: "1px solid var(--hair)", color: "var(--fg)" }}>{feature}</td>
+                  <td style={{ padding: "17px 24px", borderBottom: "1px solid var(--hair)", textAlign: "center", background: "var(--accent-soft)" }}>
+                    <CompareCell value={a} />
+                  </td>
+                  <td style={{ padding: "17px 24px", borderBottom: "1px solid var(--hair)", textAlign: "center" }}><CompareCell value={b} /></td>
+                  <td style={{ padding: "17px 24px", borderBottom: "1px solid var(--hair)", textAlign: "center" }}><CompareCell value={c} /></td>
+                  <td style={{ padding: "17px 24px", borderBottom: "1px solid var(--hair)", textAlign: "center" }}><CompareCell value={d} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* ── 06 Self-host ─────────────────────────────────────────────── */}
+      <section
+        id="selfhost"
+        data-reveal
+        className="lp-pad lp-section"
+        style={{ position: "relative", zIndex: 1, maxWidth: 1280, margin: "120px auto 0", padding: "0 40px" }}
+      >
+        <SectionLabel>06 — Self-host</SectionLabel>
+        <div className="lp-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 64, alignItems: "start", marginBottom: 44 }}>
+          <h2 className="lp-h2" style={{ fontSize: 56, lineHeight: 1.03, letterSpacing: "-0.04em", fontWeight: 600, margin: 0 }}>
+            Running locally in 60 seconds.
+          </h2>
+          <p className="lp-lead" style={{ fontSize: 19, lineHeight: 1.6, color: "var(--fg2)", margin: 0, maxWidth: "46ch" }}>
+            The hosted product is the same code. BSL 1.1, converting to Apache 2.0 after four years —
+            self-host it forever if you&rsquo;d rather.
+          </p>
+        </div>
+        <div className="lp-cards-3" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20 }}>
+          {[
+            ["01", "Clone and configure", "git clone github.com/repathhq/repath\ncd repath && cp .env.example .env"],
+            ["02", "Start the stack", "docker compose up\n# gateway :8080 · console :3000"],
+            ["03", "Create a rollout", "repath rollout create \\\n  -f examples/demo-canary.yaml"],
+          ].map(([n, title, code]) => (
+            <div key={n} style={{ borderRadius: 16, border: "1px solid var(--line2)", padding: 26 }}>
+              <div className="lp-mono" style={{ fontSize: 11, color: "var(--accent)", marginBottom: 14 }}>{n}</div>
+              <h3 style={{ fontSize: 18, fontWeight: 550, letterSpacing: "-0.015em", margin: "0 0 18px" }}>{title}</h3>
+              <pre
+                className="lp-mono"
+                style={{ margin: 0, padding: 16, borderRadius: 10, border: "1px solid var(--line2)", background: "var(--code)", fontSize: 12.5, lineHeight: 1.85, color: "var(--fg)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}
+              >
+                {code}
+              </pre>
+            </div>
+          ))}
+        </div>
+        <div className="lp-mono" style={{ marginTop: 32, fontSize: 13 }}>
+          <Link href="/docs" className="lp-doclink">Read the full documentation →</Link>
+        </div>
+      </section>
+
+      {/* ── Closing CTA ──────────────────────────────────────────────── */}
+      <section
+        data-reveal
+        className="lp-pad lp-section"
+        style={{ position: "relative", zIndex: 1, maxWidth: 1280, margin: "140px auto 0", padding: "0 40px 140px" }}
+      >
+        <div
+          className="lp-cta-box"
+          style={{ position: "relative", overflow: "hidden", borderRadius: 24, border: "1px solid var(--line)", background: "var(--cta)", padding: "88px 56px", textAlign: "center" }}
+        >
+          <div
+            aria-hidden="true"
+            style={{ position: "absolute", bottom: -320, left: "50%", width: 900, height: 600, marginLeft: -450, background: "radial-gradient(50% 50% at 50% 50%, var(--glow-a), transparent 70%)", filter: "blur(20px)", pointerEvents: "none" }}
+          />
+          <div style={{ position: "relative" }}>
+            <h2 className="lp-h2-cta" style={{ fontSize: 64, lineHeight: 1.02, letterSpacing: "-0.045em", fontWeight: 600, margin: "0 auto", maxWidth: "22ch" }}>
+              Ship the next prompt change without holding your breath.
+            </h2>
+            <p className="lp-lead" style={{ fontSize: 19, lineHeight: 1.6, color: "var(--fg2)", margin: "24px auto 0", maxWidth: "52ch" }}>
+              Connect a base URL, define one gate, and let the controller hold the line. Free while you
+              evaluate.
+            </p>
+            <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 40, flexWrap: "wrap" }}>
+              <StartFree delay="2s" />
+              <Link
+                href="/contact"
+                className="lp-btn-ghost"
+                style={{ display: "inline-flex", alignItems: "center", height: 54, padding: "0 26px", borderRadius: 12, border: "1px solid var(--line)", color: "var(--fg)", fontSize: 16, fontWeight: 500 }}
+              >
+                Talk to an engineer
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Footer ───────────────────────────────────────────────────── */}
+      <footer style={{ position: "relative", zIndex: 1, borderTop: "1px solid var(--line2)", padding: "56px 0 40px" }}>
+        <div className="lp-pad" style={{ maxWidth: 1280, margin: "0 auto", padding: "0 40px" }}>
+          <div className="lp-foot" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 48 }}>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+                <Image src="/logo-icon.png" alt="" width={22} height={22} style={{ objectFit: "contain" }} />
+                <span style={{ fontWeight: 600, letterSpacing: "-0.03em" }}>Repath</span>
+              </div>
+              <p style={{ fontSize: 14, lineHeight: 1.65, color: "var(--fg3)", margin: "0 0 10px", maxWidth: "34ch" }}>
+                Progressive delivery for AI. Canary rollouts, quality gates and automatic rollback for
+                prompts and models.
+              </p>
+              <p className="lp-mono" style={{ fontSize: 11, color: "var(--fg5)", margin: 0 }}>Rust · Python · BSL 1.1</p>
+            </div>
+            {[
+              { h: "Product", links: [["Docs", "/docs"], ["Pricing", "/pricing"], ["Status", "/status"], ["GitHub", "https://github.com/repathhq/repath"]] },
+              { h: "Company", links: [["About", "/about"], ["Careers", "/careers"], ["Contact", "/contact"]] },
+              { h: "Legal", links: [["Terms", "/terms"], ["Privacy", "/privacy"]] },
+            ].map((col) => (
+              <div key={col.h}>
+                <h4 className="lp-mono" style={{ fontSize: 10, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--fg4)", fontWeight: 400, margin: "0 0 16px" }}>
+                  {col.h}
+                </h4>
+                <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 11, fontSize: 14 }}>
+                  {col.links.map(([label, href]) => (
+                    <li key={label}>
+                      <Link href={href} className="lp-footlink">{label}</Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+          <div
+            className="lp-mono"
+            style={{ borderTop: "1px solid var(--line2)", marginTop: 44, paddingTop: 22, display: "flex", justifyContent: "space-between", gap: 24, fontSize: 11, color: "var(--fg5)", flexWrap: "wrap" }}
+          >
+            <span>© {new Date().getFullYear()} Repath</span>
+            <span>tryrepath.com</span>
           </div>
         </div>
       </footer>

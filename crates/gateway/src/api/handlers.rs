@@ -61,6 +61,10 @@ struct RolloutDetail {
     /// quality figures above are programmatic-only and cannot distinguish a
     /// better version from a worse one.
     judged_sample_count: Option<i64>,
+    /// Which period every metric above covers: "10m" for the recent window,
+    /// "all_time" when there was no recent traffic. Reported so the UI can
+    /// label the numbers honestly instead of always claiming ten minutes.
+    metrics_window: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     completed_at: Option<DateTime<Utc>>,
@@ -210,24 +214,42 @@ pub async fn get_rollout(
             r.created_at, r.updated_at, r.completed_at,
             bv.model AS baseline_model, bv.prompt_template AS baseline_prompt,
             cv.model AS candidate_model, cv.prompt_template AS candidate_prompt,
-            COALESCE(
+            -- Every metric below is reported over the SAME window.
+            --
+            -- They were not. AVG() and PERCENTILE_CONT() return NULL over an
+            -- empty window, so their COALESCE fell through to the all-time
+            -- branch — but COUNT(*) returns 0, not NULL, so its COALESCE never
+            -- fell through and kept the windowed zero. A rollout with no recent
+            -- traffic therefore showed an all-time quality score sitting next
+            -- to "Samples (10m): 0", a score apparently measured from nothing.
+            -- Worse, each version chose its branch independently, so the
+            -- baseline and candidate figures being compared were not always
+            -- drawn from the same period at all.
+            --
+            -- `recent.n` decides once for the whole rollout and every metric
+            -- follows it. `metrics_window` reports which was used, so the UI
+            -- can say so rather than always implying the last ten minutes.
+            CASE WHEN recent.n > 0 THEN '10m' ELSE 'all_time' END AS metrics_window,
+            CASE WHEN recent.n > 0 THEN
                 (SELECT AVG(e.overall_score) FROM evaluations e
                  JOIN requests req ON e.request_id = req.id
                  WHERE req.rollout_id = r.id AND req.version_id = r.baseline_version_id
-                   AND req.created_at > NOW() - INTERVAL '10 minutes'),
+                   AND req.created_at > NOW() - INTERVAL '10 minutes')
+            ELSE
                 (SELECT AVG(e.overall_score) FROM evaluations e
                  JOIN requests req ON e.request_id = req.id
                  WHERE req.rollout_id = r.id AND req.version_id = r.baseline_version_id)
-            ) AS avg_quality_baseline,
-            COALESCE(
+            END AS avg_quality_baseline,
+            CASE WHEN recent.n > 0 THEN
                 (SELECT AVG(e.overall_score) FROM evaluations e
                  JOIN requests req ON e.request_id = req.id
                  WHERE req.rollout_id = r.id AND req.version_id = r.candidate_version_id
-                   AND req.created_at > NOW() - INTERVAL '10 minutes'),
+                   AND req.created_at > NOW() - INTERVAL '10 minutes')
+            ELSE
                 (SELECT AVG(e.overall_score) FROM evaluations e
                  JOIN requests req ON e.request_id = req.id
                  WHERE req.rollout_id = r.id AND req.version_id = r.candidate_version_id)
-            ) AS avg_quality_candidate,
+            END AS avg_quality_candidate,
             -- How many of those scores came from the LLM judge. A quality
             -- score built only from programmatic checks is a flat 1.0 for any
             -- healthy response and says nothing about which version is
@@ -238,59 +260,70 @@ pub async fn get_rollout(
              WHERE req.rollout_id = r.id AND e.evaluator_type = 'llm_judge'
                AND req.version_id IN (r.baseline_version_id, r.candidate_version_id)
             ) AS judged_sample_count,
-            COALESCE(
+            CASE WHEN recent.n > 0 THEN
                 (SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY req.latency_ms)
                  FROM requests req WHERE req.rollout_id = r.id
                    AND req.version_id = r.baseline_version_id
-                   AND req.created_at > NOW() - INTERVAL '10 minutes'),
+                   AND req.created_at > NOW() - INTERVAL '10 minutes')
+            ELSE
                 (SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY req.latency_ms)
                  FROM requests req WHERE req.rollout_id = r.id
                    AND req.version_id = r.baseline_version_id)
-            )::BIGINT AS p95_latency_baseline,
-            COALESCE(
+            END::BIGINT AS p95_latency_baseline,
+            CASE WHEN recent.n > 0 THEN
                 (SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY req.latency_ms)
                  FROM requests req WHERE req.rollout_id = r.id
                    AND req.version_id = r.candidate_version_id
-                   AND req.created_at > NOW() - INTERVAL '10 minutes'),
+                   AND req.created_at > NOW() - INTERVAL '10 minutes')
+            ELSE
                 (SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY req.latency_ms)
                  FROM requests req WHERE req.rollout_id = r.id
                    AND req.version_id = r.candidate_version_id)
-            )::BIGINT AS p95_latency_candidate,
-            COALESCE(
+            END::BIGINT AS p95_latency_candidate,
+            CASE WHEN recent.n > 0 THEN
                 (SELECT COUNT(*) FROM requests req
                  WHERE req.rollout_id = r.id AND req.version_id = r.baseline_version_id
-                   AND req.created_at > NOW() - INTERVAL '10 minutes'),
+                   AND req.created_at > NOW() - INTERVAL '10 minutes')
+            ELSE
                 (SELECT COUNT(*) FROM requests req
                  WHERE req.rollout_id = r.id AND req.version_id = r.baseline_version_id)
-            ) AS sample_count_baseline,
-            COALESCE(
+            END AS sample_count_baseline,
+            CASE WHEN recent.n > 0 THEN
                 (SELECT COUNT(*) FROM requests req
                  WHERE req.rollout_id = r.id AND req.version_id = r.candidate_version_id
-                   AND req.created_at > NOW() - INTERVAL '10 minutes'),
+                   AND req.created_at > NOW() - INTERVAL '10 minutes')
+            ELSE
                 (SELECT COUNT(*) FROM requests req
                  WHERE req.rollout_id = r.id AND req.version_id = r.candidate_version_id)
-            ) AS sample_count_candidate,
-            COALESCE(
+            END AS sample_count_candidate,
+            CASE WHEN recent.n > 0 THEN
                 (SELECT SUM(CASE WHEN req.status_code >= 400 THEN 1 ELSE 0 END)::FLOAT / NULLIF(COUNT(*), 0)
                  FROM requests req WHERE req.rollout_id = r.id
                    AND req.version_id = r.baseline_version_id
-                   AND req.created_at > NOW() - INTERVAL '10 minutes'),
+                   AND req.created_at > NOW() - INTERVAL '10 minutes')
+            ELSE
                 (SELECT SUM(CASE WHEN req.status_code >= 400 THEN 1 ELSE 0 END)::FLOAT / NULLIF(COUNT(*), 0)
                  FROM requests req WHERE req.rollout_id = r.id
                    AND req.version_id = r.baseline_version_id)
-            ) AS error_rate_baseline,
-            COALESCE(
+            END AS error_rate_baseline,
+            CASE WHEN recent.n > 0 THEN
                 (SELECT SUM(CASE WHEN req.status_code >= 400 THEN 1 ELSE 0 END)::FLOAT / NULLIF(COUNT(*), 0)
                  FROM requests req WHERE req.rollout_id = r.id
                    AND req.version_id = r.candidate_version_id
-                   AND req.created_at > NOW() - INTERVAL '10 minutes'),
+                   AND req.created_at > NOW() - INTERVAL '10 minutes')
+            ELSE
                 (SELECT SUM(CASE WHEN req.status_code >= 400 THEN 1 ELSE 0 END)::FLOAT / NULLIF(COUNT(*), 0)
                  FROM requests req WHERE req.rollout_id = r.id
                    AND req.version_id = r.candidate_version_id)
-            ) AS error_rate_candidate
+            END AS error_rate_candidate
         FROM rollouts r
         JOIN versions bv ON r.baseline_version_id = bv.id
         JOIN versions cv ON r.candidate_version_id = cv.id
+        LEFT JOIN LATERAL (
+            SELECT COUNT(*) AS n FROM requests req
+             WHERE req.rollout_id = r.id
+               AND req.created_at > NOW() - INTERVAL '10 minutes'
+        ) recent ON TRUE
         WHERE (r.id::text = $1 OR r.name = $1)
           AND ($2::text IS NULL OR r.tenant_id = $2)
         LIMIT 1
@@ -325,6 +358,7 @@ pub async fn get_rollout(
                 sample_count_baseline: r.get("sample_count_baseline"),
                 sample_count_candidate: r.get("sample_count_candidate"),
                 judged_sample_count: r.get("judged_sample_count"),
+                metrics_window: r.get("metrics_window"),
                 created_at: r.get("created_at"),
                 updated_at: r.get("updated_at"),
                 completed_at: r.get("completed_at"),

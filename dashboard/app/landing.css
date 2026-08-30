@@ -1,0 +1,306 @@
+/**
+ * Landing page theme (v4).
+ *
+ * Ported from the Claude Design canvas. Everything is driven by CSS custom
+ * properties so light and dark are one set of markup with two token blocks —
+ * the design's own approach, kept because it means a new surface colour is a
+ * one-line change rather than a hunt through components.
+ *
+ * `.lp` scopes all of this. The app pages use Tailwind and their own palette,
+ * and marketing tokens leaking into the dashboard would be worse than the
+ * duplication avoided.
+ *
+ * Hover, focus and range-input styling live here rather than inline because
+ * inline styles cannot express a pseudo-class. The design used a custom
+ * `style-hover` attribute its own runtime understood; the equivalent in React
+ * is a real stylesheet.
+ */
+
+.lp {
+  --bg: #fbfbfb;
+  --nav: rgba(251, 251, 251, 0.75);
+  --panel: #ffffff;
+  --panel-grad: linear-gradient(180deg, #ffffff, #fafafb);
+  --code: #f6f7f8;
+  --fg: #0b0b0e;
+  --fg2: #55585f;
+  --fg3: #7c8089;
+  --fg4: #a0a4ac;
+  --fg5: #b8bbc2;
+  --line: rgba(11, 11, 14, 0.12);
+  --line2: rgba(11, 11, 14, 0.07);
+  --hair: rgba(11, 11, 14, 0.05);
+  --card: linear-gradient(180deg, rgba(11, 11, 14, 0.028), rgba(11, 11, 14, 0.004));
+  --frame: linear-gradient(160deg, rgba(11, 11, 14, 0.14), rgba(11, 11, 14, 0.05) 40%, rgba(11, 11, 14, 0.02));
+  --shadow: 0 40px 90px -40px rgba(11, 11, 14, 0.28);
+  --hover: rgba(11, 11, 14, 0.05);
+  --chip: rgba(11, 11, 14, 0.05);
+  --btn-bg: #0b0b0e;
+  --btn-fg: #fbfbfb;
+  --btn-shadow: rgba(11, 11, 14, 0.24);
+  --accent: oklch(0.54 0.14 215);
+  --accent-strong: oklch(0.48 0.15 215);
+  --accent-soft: oklch(0.54 0.14 215 / 0.09);
+  --accent-line: oklch(0.54 0.14 215 / 0.32);
+  --grad: linear-gradient(100deg, oklch(0.62 0.14 205), oklch(0.54 0.15 215) 45%, oklch(0.5 0.17 280));
+  --adv: oklch(0.52 0.15 152);
+  --adv-line: oklch(0.52 0.15 152 / 0.28);
+  --adv-soft: oklch(0.52 0.15 152 / 0.08);
+  --roll: oklch(0.55 0.2 25);
+  --roll-line: oklch(0.55 0.2 25 / 0.3);
+  --roll-soft: oklch(0.55 0.2 25 / 0.08);
+  --baseline: #787c86;
+  --grid: rgba(11, 11, 14, 0.05);
+  --glow-a: oklch(0.7 0.14 210 / 0.2);
+  --glow-b: oklch(0.62 0.17 285 / 0.14);
+  --cta: linear-gradient(160deg, #f4f5f6, #ffffff);
+  --sheen: rgba(255, 255, 255, 0.65);
+  --dash: rgba(11, 11, 14, 0.16);
+  --track: rgba(11, 11, 14, 0.14);
+  --thumb: #0b0b0e;
+  --thumb-ring: rgba(11, 11, 14, 0.1);
+
+  /* background-color, not the `background` shorthand. Transitioning the
+     shorthand while a custom property changes leaves the computed value
+     stuck on the previous theme's colour — the page keeps the old
+     background while every token underneath has already flipped. */
+  background-color: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-geist), "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  overflow-x: hidden;
+  position: relative;
+  transition: background-color 0.4s ease, color 0.4s ease;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+html[data-lp-theme="dark"] .lp {
+  --bg: #07070a;
+  --nav: rgba(7, 7, 10, 0.72);
+  --panel: #0c0d12;
+  --panel-grad: linear-gradient(180deg, #0c0d12, #090a0e);
+  --code: #0a0b0f;
+  --fg: #f2f3f5;
+  --fg2: #9a9ca6;
+  --fg3: #6b6d77;
+  --fg4: #565963;
+  --fg5: #4a4d57;
+  --line: rgba(255, 255, 255, 0.1);
+  --line2: rgba(255, 255, 255, 0.065);
+  --hair: rgba(255, 255, 255, 0.05);
+  --card: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.008));
+  --frame: linear-gradient(160deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.03) 40%, rgba(255, 255, 255, 0.01));
+  --shadow: 0 50px 120px -40px oklch(0.62 0.19 250 / 0.45);
+  --hover: rgba(255, 255, 255, 0.06);
+  --chip: rgba(255, 255, 255, 0.06);
+  --btn-bg: #f2f3f5;
+  --btn-fg: #07070a;
+  --btn-shadow: rgba(242, 243, 245, 0.2);
+  --accent: oklch(0.78 0.13 195);
+  --accent-strong: oklch(0.86 0.09 195);
+  --accent-soft: oklch(0.72 0.15 195 / 0.07);
+  --accent-line: oklch(0.72 0.15 195 / 0.35);
+  --grad: linear-gradient(100deg, oklch(0.86 0.09 195), oklch(0.72 0.15 195) 45%, oklch(0.66 0.17 275));
+  --adv: oklch(0.8 0.15 152);
+  --adv-line: oklch(0.75 0.17 152 / 0.3);
+  --adv-soft: oklch(0.75 0.17 152 / 0.1);
+  --roll: oklch(0.78 0.16 25);
+  --roll-line: oklch(0.68 0.19 25 / 0.35);
+  --roll-soft: oklch(0.68 0.19 25 / 0.1);
+  --baseline: #8e93a0;
+  --grid: rgba(255, 255, 255, 0.028);
+  --glow-a: oklch(0.72 0.15 195 / 0.16);
+  --glow-b: oklch(0.62 0.19 285 / 0.14);
+  --cta: linear-gradient(160deg, #0e1016, #090a0e);
+  --sheen: rgba(255, 255, 255, 0.55);
+  --dash: rgba(255, 255, 255, 0.18);
+  --track: #282b35;
+  --thumb: #f2f3f5;
+  --thumb-ring: rgba(242, 243, 245, 0.1);
+}
+
+.lp a {
+  color: var(--fg);
+  text-decoration: none;
+}
+.lp a:hover {
+  color: var(--accent);
+}
+.lp ::selection {
+  background: var(--accent-soft);
+}
+.lp-mono {
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+}
+
+/* ── Motion ────────────────────────────────────────────────────────────── */
+@keyframes lp-draw { to { stroke-dashoffset: 0; } }
+@keyframes lp-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes lp-rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
+@keyframes lp-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.82); } }
+@keyframes lp-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes lp-sheen { 0% { transform: translateX(-120%); } 60%, 100% { transform: translateX(220%); } }
+@keyframes lp-float { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(0, -24px, 0); } }
+
+/* Anyone who has asked their system not to animate gets a static page.
+   The reveal-on-scroll observer also skips, so content is never left
+   invisible waiting for a transition that will not run. */
+@media (prefers-reduced-motion: reduce) {
+  .lp *,
+  .lp *::before,
+  .lp *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ── Interaction states ────────────────────────────────────────────────── */
+.lp-navlink {
+  color: var(--fg2);
+  padding: 8px 13px;
+  border-radius: 8px;
+  transition: color 0.2s, background 0.2s;
+}
+.lp-navlink:hover {
+  color: var(--fg);
+  background: var(--hover);
+}
+
+.lp-btn-primary {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s;
+}
+.lp-btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 44px var(--btn-shadow);
+  color: var(--btn-fg);
+}
+
+.lp-btn-ghost {
+  transition: background 0.25s, border-color 0.25s, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.lp-btn-ghost:hover {
+  background: var(--hover);
+  transform: translateY(-2px);
+  color: var(--fg);
+}
+
+.lp-card {
+  transition: border-color 0.3s, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.lp-card:hover {
+  border-color: var(--accent-line);
+  transform: translateY(-4px);
+}
+.lp-card-warn:hover {
+  border-color: var(--roll-line);
+  transform: translateY(-4px);
+}
+
+.lp-footlink {
+  color: var(--fg2);
+  transition: color 0.2s;
+}
+.lp-footlink:hover {
+  color: var(--fg);
+}
+
+.lp-doclink {
+  color: var(--accent);
+  border-bottom: 1px solid var(--accent-line);
+  padding-bottom: 3px;
+  transition: color 0.2s;
+}
+.lp-doclink:hover {
+  color: var(--fg);
+}
+
+/* Keyboard users must be able to see where they are. The design had no
+   focus treatment at all, which is fine on a canvas and not fine shipped. */
+.lp a:focus-visible,
+.lp button:focus-visible,
+.lp input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* ── Range input ───────────────────────────────────────────────────────── */
+.lp-range {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  width: 100%;
+  height: 18px;
+  margin: 22px 0 10px;
+  display: block;
+  cursor: pointer;
+}
+.lp-range::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 3px;
+  background: var(--track);
+}
+.lp-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -7.5px;
+  border-radius: 50%;
+  background: var(--thumb);
+  border: none;
+  cursor: grab;
+  box-shadow: 0 0 0 6px var(--thumb-ring);
+}
+.lp-range::-webkit-slider-thumb:active {
+  cursor: grabbing;
+  box-shadow: 0 0 0 10px var(--thumb-ring);
+}
+.lp-range::-moz-range-track {
+  height: 3px;
+  border-radius: 3px;
+  background: var(--track);
+}
+.lp-range::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--thumb);
+  border: none;
+  cursor: grab;
+  box-shadow: 0 0 0 6px var(--thumb-ring);
+}
+
+/* ── Responsive ────────────────────────────────────────────────────────── */
+/* The canvas was authored at 1440px. These collapse the two-column blocks
+   and pull the display sizes down so the page is usable on a phone, which
+   a fixed-width artboard cannot express. */
+@media (max-width: 1080px) {
+  .lp-split { grid-template-columns: 1fr !important; gap: 28px !important; }
+  .lp-hero-panel { grid-template-columns: 1fr !important; }
+  .lp-hero-panel > div:first-child { border-right: none !important; border-bottom: 1px solid var(--line2); }
+  .lp-demo { grid-template-columns: 1fr !important; }
+  .lp-demo > div:first-child { border-right: none !important; border-bottom: 1px solid var(--line2); }
+  .lp-cards-3 { grid-template-columns: 1fr 1fr !important; }
+  .lp-cards-2 { grid-template-columns: 1fr !important; }
+  .lp-foot { grid-template-columns: 1fr 1fr !important; gap: 32px !important; }
+}
+
+@media (max-width: 720px) {
+  .lp-h1 { font-size: 44px !important; letter-spacing: -0.035em !important; }
+  .lp-h2 { font-size: 32px !important; letter-spacing: -0.03em !important; }
+  .lp-h2-cta { font-size: 34px !important; }
+  .lp-lead { font-size: 17px !important; }
+  .lp-pad { padding-left: 20px !important; padding-right: 20px !important; }
+  .lp-cards-3 { grid-template-columns: 1fr !important; }
+  .lp-nav-links { display: none !important; }
+  .lp-hero { padding-top: 64px !important; }
+  .lp-section { margin-top: 76px !important; }
+  .lp-cta-box { padding: 48px 24px !important; }
+  .lp-stats { grid-template-columns: 1fr 1fr !important; }
+  .lp-flow-2 { grid-template-columns: 1fr !important; }
+  .lp-table-wrap { overflow-x: auto; }
+  .lp-table { min-width: 640px; }
+}

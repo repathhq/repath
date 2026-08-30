@@ -5,7 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
-  GitBranch, CreditCard, Settings, Menu, X, Zap,
+  GitBranch, CreditCard, Settings, Menu, X, Zap, ScrollText,
   HelpCircle, ExternalLink, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,10 @@ import ProviderHealth from "@/components/ProviderHealth";
 
 const nav = [
   { href: "/rollouts",  label: "Rollouts",  icon: GitBranch },
+  // Directly under Rollouts: the log exists to answer "why did that
+  // rollout do that", so it belongs beside the thing it explains rather
+  // than filed away at the bottom.
+  { href: "/logs",      label: "Requests",  icon: ScrollText },
   { href: "/routing",   label: "Routing",   icon: Zap },
   { href: "/billing",   label: "Billing",   icon: CreditCard },
   { href: "/settings",  label: "Settings",  icon: Settings },

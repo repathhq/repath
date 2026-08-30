@@ -309,6 +309,8 @@ export default function SettingsPage() {
   // ── Gateway options ───────────────────────────────────────────────────
   const [gwTimeout, setGwTimeout] = useState(60);
   const [gwSampleRate, setGwSampleRate] = useState(1);
+  const [gwCapture, setGwCapture] = useState(true);
+  const [gwRetentionDays, setGwRetentionDays] = useState<number | null>(null);
   const [savingGateway, setSavingGateway] = useState(false);
 
   useEffect(() => {
@@ -318,6 +320,8 @@ export default function SettingsPage() {
         if (d) {
           setGwTimeout(d.request_timeout_seconds);
           setGwSampleRate(d.eval_sample_rate);
+          setGwCapture(d.capture_payloads ?? true);
+          setGwRetentionDays(d.retention_days ?? null);
         }
       })
       .catch(() => {});
@@ -333,6 +337,7 @@ export default function SettingsPage() {
         body: JSON.stringify({
           request_timeout_seconds: gwTimeout,
           eval_sample_rate: gwSampleRate,
+          capture_payloads: gwCapture,
         }),
       });
       const body = await res.json();
@@ -512,6 +517,32 @@ export default function SettingsPage() {
                       {Math.round(gwSampleRate * 100)}% of requests
                     </span>
                   </div>
+                </Field>
+                <Field
+                  label="Store prompts and responses"
+                  hint={
+                    gwRetentionDays !== null
+                      ? `Kept for ${gwRetentionDays} days on your plan, then deleted automatically.`
+                      : "Kept for your plan's retention window, then deleted automatically."
+                  }
+                >
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 accent-violet-600"
+                      checked={gwCapture}
+                      onChange={(e) => setGwCapture(e.target.checked)}
+                    />
+                    <span className="text-[13.5px] leading-relaxed text-gray-700">
+                      Show the actual request and response in the log, alongside the judge&rsquo;s
+                      reasoning.
+                      <span className="mt-1 block text-[12.5px] text-gray-500">
+                        This stores your end users&rsquo; text. Turn it off and the log still
+                        shows models, latency, cost and scores — just not the content. Existing
+                        payloads are not deleted early; they expire on their own schedule.
+                      </span>
+                    </span>
+                  </label>
                 </Field>
               </Section>
               <button className={SAVE_BTN} disabled={savingGateway} onClick={saveGateway}>

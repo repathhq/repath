@@ -2,7 +2,8 @@
 
 import { cn, formatRelative, formatPercent } from "@/lib/utils";
 import type { DecisionInfo } from "@/lib/api";
-import { ArrowUp, ArrowDown, Check, PauseCircle, PlayCircle } from "lucide-react";
+import Link from "next/link";
+import { ArrowUp, ArrowDown, Check, PauseCircle, PlayCircle, ScrollText } from "lucide-react";
 
 const actionConfig = {
   advance:  { icon: ArrowUp,     color: "text-emerald-700", bg: "bg-emerald-50 border-emerald-200" },
@@ -40,6 +41,17 @@ export default function DecisionFeed({ decisions }: { decisions: DecisionInfo[] 
                 <span className="ml-auto text-[10px] text-gray-400 shrink-0">{formatRelative(d.created_at)}</span>
               </div>
               <p className="mt-0.5 text-[12px] leading-relaxed text-gray-500 line-clamp-2">{d.reason}</p>
+              {/* The evidence behind the decision. A reason like
+                  "quality 0.68 < 0.70" is a claim; this is the set of
+                  answers that produced it, worst first. Every other tool
+                  stops at the claim. */}
+              <Link
+                href={`/logs/decision/${d.id}`}
+                className="mt-1.5 inline-flex items-center gap-1 text-[11.5px] text-violet-600 hover:text-violet-700 hover:underline"
+              >
+                <ScrollText className="h-3 w-3" strokeWidth={1.8} />
+                See the requests behind this
+              </Link>
             </div>
           </div>
         );
