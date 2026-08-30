@@ -11,6 +11,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import DashShell from "@/components/DashShell";
 import {
   api,
   type RoutingRule,
@@ -121,18 +122,15 @@ export default function RoutingPage() {
   }
 
   return (
-    <div>
-      <div className="bg-white border-b border-gray-200 px-6 sm:px-8 h-14 flex items-center justify-between sticky top-0 z-20">
-        <h1 className="text-[16px] font-semibold text-gray-900">Model routing</h1>
-        <button
-          onClick={() => setShowForm((v) => !v)}
-          className="flex items-center gap-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 px-3 py-1.5 text-[12.5px] font-medium text-white transition-all shadow-sm"
-        >
-          <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+    <DashShell
+      title="Model routing"
+      actions={
+        <button className="dash-btn-primary" onClick={() => setShowForm((v) => !v)}>
+          <Plus size={13} strokeWidth={2} />
           New rule
         </button>
-      </div>
-
+      }
+    >
       <div className="p-6 sm:p-8 max-w-[1000px] mx-auto flex flex-col gap-6">
         <p className="text-[13.5px] text-gray-500 max-w-[65ch]">
           Rules decide which model serves a request. They are checked top to bottom and the first
@@ -261,7 +259,7 @@ export default function RoutingPage() {
 
         {rules.length > 0 && <RuleTester />}
       </div>
-    </div>
+    </DashShell>
   );
 }
 
@@ -493,7 +491,7 @@ function RuleTester() {
           <button
             onClick={run}
             disabled={testing}
-            className="self-start flex items-center gap-2 px-4 py-2 bg-gray-900 text-white text-[13px] font-medium rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50"
+            className="dash-btn-primary self-start disabled:opacity-50"
           >
             {testing && <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />}
             Run test

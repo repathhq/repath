@@ -27,9 +27,11 @@ context/
 # macOS
 .DS_Store
 
-# Logs
+# Logs. Anchored to the repo root: a bare `logs/` also matched
+# dashboard/app/logs/, which silently kept the entire request-log UI
+# out of the repo — it worked locally and 404'd everywhere else.
 *.log
-logs/
+/logs/
 
 # Database
 *.db

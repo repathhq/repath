@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifySession } from "@/lib/auth";
 
-const PROTECTED = ["/rollouts", "/routing", "/billing", "/settings", "/onboarding"];
+const PROTECTED = ["/rollouts", "/routing", "/billing", "/settings", "/onboarding", "/logs"];
 const AUTH_PAGES = ["/login", "/signup"];
 
 /**
@@ -44,6 +44,7 @@ export const config = {
     "/billing/:path*",
     "/settings/:path*",
     "/onboarding/:path*",
+    "/logs/:path*",
     "/login",
     "/signup",
   ],

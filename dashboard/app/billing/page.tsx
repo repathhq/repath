@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import DashShell from "@/components/DashShell";
 import Link from "next/link";
 import {
   ArrowRight, Check, Loader2, AlertTriangle, BarChart3,
@@ -225,12 +226,7 @@ export default function BillingPage() {
   ];
 
   return (
-    <div style={FONT}>
-      {/* Page header — sticky */}
-      <div className="bg-white border-b border-gray-200 px-6 sm:px-8 h-14 flex items-center sticky top-0 z-20">
-        <h1 className="text-[16px] font-semibold text-gray-900">Billing</h1>
-      </div>
-
+    <DashShell title="Billing">
       <div className="p-6 sm:p-8 max-w-[900px] mx-auto">
 
 
@@ -465,6 +461,6 @@ export default function BillingPage() {
         </Link>
       </div>
       </div>
-    </div>
+    </DashShell>
   );
 }

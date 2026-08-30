@@ -1,47 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useRollouts, useSystemHealth } from "@/lib/hooks";
+import { useRollouts } from "@/lib/hooks";
+import DashShell from "@/components/DashShell";
 import StateBadge from "@/components/StateBadge";
-import { cn, formatRelative, formatScore } from "@/lib/utils";
-import { AlertCircle, ChevronRight, GitBranch, Plus, RefreshCw } from "lucide-react";
+import { formatRelative, formatScore } from "@/lib/utils";
+import { AlertCircle, ChevronRight, GitBranch, Plus } from "lucide-react";
 
 export default function RolloutsPage() {
   const { data, loading, error, refresh } = useRollouts();
-  const { data: health } = useSystemHealth();
 
   return (
-    <div>
-      {/* Page header — sticky */}
-      <div className="bg-white border-b border-gray-200 px-6 sm:px-8 h-14 flex items-center justify-between sticky top-0 z-20">
-        <div>
-          <h1 className="text-[16px] font-semibold text-gray-900">Rollouts</h1>
-        </div>
-        <div className="flex items-center gap-2.5">
-          {health && (
-            <div className="flex items-center gap-1.5 text-[12px] text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5">
-              <span className={cn("h-1.5 w-1.5 rounded-full",
-                health.status === "ok" ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
-              )} />
-              {health.active_rollouts} active
-            </div>
-          )}
-          <button
-            onClick={refresh}
-            className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[12.5px] text-gray-600 hover:text-gray-900 hover:border-gray-300 transition-all shadow-sm"
-          >
-            <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.8} />
-            Refresh
-          </button>
-          <Link
-            href="/rollouts/new"
-            className="flex items-center gap-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 px-3 py-1.5 text-[12.5px] font-medium text-white transition-all shadow-sm"
-          >
-            <Plus className="h-3.5 w-3.5" strokeWidth={2} />
-            New rollout
-          </Link>
-        </div>
-      </div>
+    <DashShell
+      title="Rollouts"
+      onRefresh={refresh}
+      actions={
+        <Link href="/rollouts/new" className="dash-btn-primary">
+          <Plus size={13} strokeWidth={2} />
+          New rollout
+        </Link>
+      }
+    >
       <div className="p-6 sm:p-8 max-w-[1100px] mx-auto">
 
       {/* Error state */}
@@ -148,6 +127,6 @@ export default function RolloutsPage() {
         </p>
       )}
       </div>
-    </div>
+    </DashShell>
   );
 }

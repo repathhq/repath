@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import DashShell from "@/components/DashShell";
 import Link from "next/link";
 import {
   User, Key, Bell, Shield, Trash2, Copy, Check,
@@ -379,12 +380,7 @@ export default function SettingsPage() {
   const usedPct = Math.min((usage?.usage_percent ?? 0), 100);
 
   return (
-    <div className="min-h-screen bg-gray-50" style={FONT}>
-      {/* Page header */}
-      <div className="bg-white border-b border-gray-100 px-6 h-14 flex items-center">
-        <h1 className="text-[15px] font-semibold text-gray-900">Settings</h1>
-      </div>
-
+    <DashShell title="Settings">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 flex gap-8">
         {/* Settings nav */}
         <aside className="hidden sm:block w-48 shrink-0 sticky top-20 self-start">
@@ -750,6 +746,6 @@ export default function SettingsPage() {
 
         </main>
       </div>
-    </div>
+    </DashShell>
   );
 }

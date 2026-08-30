@@ -12,6 +12,7 @@
  */
 
 import { useState } from "react";
+import DashShell from "@/components/DashShell";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, type RolloutConfigInput } from "@/lib/api";
@@ -187,19 +188,7 @@ export default function NewRolloutPage() {
   }
 
   return (
-    <div>
-      <div className="bg-white border-b border-gray-200 px-6 sm:px-8 h-14 flex items-center gap-3 sticky top-0 z-20">
-        <Link
-          href="/rollouts"
-          className="flex items-center gap-1.5 text-[13px] text-gray-500 hover:text-gray-900 transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" strokeWidth={1.8} />
-          Rollouts
-        </Link>
-        <span className="text-gray-300">/</span>
-        <h1 className="text-[16px] font-semibold text-gray-900">New rollout</h1>
-      </div>
-
+    <DashShell title="New rollout" crumb="Rollouts /" back="/rollouts">
       <form onSubmit={submit} className="p-6 sm:p-8 max-w-[860px] mx-auto flex flex-col gap-5">
         {error && (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 flex items-start gap-2.5">
@@ -354,6 +343,6 @@ export default function NewRolloutPage() {
           </p>
         </div>
       </form>
-    </div>
+    </DashShell>
   );
 }
