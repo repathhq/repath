@@ -120,10 +120,6 @@ html[data-lp-theme="dark"] .dash {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.35; transform: scale(0.82); }
 }
-@keyframes dash-rise {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: none; }
-}
 
 @media (prefers-reduced-motion: reduce) {
   .dash *, .dash *::before, .dash *::after {
