@@ -20,6 +20,11 @@ echo "Fetching docker-compose.prod.yml..."
 curl -fsSL "$REPO_RAW/docker-compose.prod.yml" -o docker-compose.prod.yml
 
 echo "Building .env from SSM Parameter Store..."
+# Create the file 0600 before any secret touches it. Under the default umask
+# it came out 0644 — every production secret readable by any local user — and
+# a `chmod` afterwards would leave a window, while `>` on an existing file
+# keeps whatever mode it already had.
+install -m 600 /dev/null .env
 {
   echo "ECR_REGISTRY=${ECR_REGISTRY}"
   echo "IMAGE_TAG=${IMAGE_TAG}"

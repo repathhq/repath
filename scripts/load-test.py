@@ -8,7 +8,7 @@ streams requests through the live gateway so you can watch the dashboard.
 
 Usage:
     python scripts/load-test.py \
-        --gateway https://repath-gateway.fly.dev \
+        --gateway https://api.tryrepath.com \
         --tenant  ten_794cb1ec \
         --api-key rp_live_... \
         --token   3f6fb762... \
@@ -376,7 +376,7 @@ async def run(gateway: str, tenant: str, api_key: str, token: str, openai_key: s
         tag = "[red]degraded[/red]" if f["degraded"] else "[green]normal[/green]"
         console.print(f"  [cyan]{f['name']}[/cyan] ({tag}): rollout [dim]{rid[:8]}...[/dim]")
 
-    console.print(f"\n[green]▶ Live traffic starting. Watch: {gateway.replace('repath-gateway.fly.dev', 'www.tryrepath.com')}/rollouts[/green]\n")
+    console.print(f"\n[green]▶ Live traffic starting. Watch: https://www.tryrepath.com/rollouts[/green]\n")
     await asyncio.sleep(1)
 
     limits = httpx.Limits(max_connections=40, max_keepalive_connections=20)
