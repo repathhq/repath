@@ -50,12 +50,31 @@ from openai import APIError, AsyncOpenAI, RateLimitError
 from tenacity import (
     before_sleep_log,
     retry,
-    retry_if_exception_type,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential,
 )
 
 log = structlog.get_logger(__name__)
+
+# Errors that waiting will not fix. OpenAI reports an empty balance as a 429,
+# the same status as a rate limit, so retrying on status alone spent up to a
+# minute of backoff per criterion — three criteria per response — on a call
+# that could never succeed, while the queue behind it stalled.
+_PERMANENT_CODES = frozenset(
+    {"insufficient_quota", "credit_balance_exhausted", "invalid_api_key", "model_not_found"}
+)
+
+
+def is_permanent(exc: BaseException) -> bool:
+    """True for judge errors that no amount of retrying will clear."""
+    return bool(
+        {getattr(exc, "code", None), getattr(exc, "type", None)} & _PERMANENT_CODES
+    )
+
+
+def _should_retry(exc: BaseException) -> bool:
+    return isinstance(exc, (RateLimitError, APIError)) and not is_permanent(exc)
 
 # Score mapping: integer 1–5 → float 0.0–1.0
 _SCORE_MAP: dict[int, float] = {1: 0.0, 2: 0.25, 3: 0.5, 4: 0.75, 5: 1.0}
@@ -241,7 +260,7 @@ class LlmJudgeEvaluator:
         )
 
     @retry(
-        retry=retry_if_exception_type((RateLimitError, APIError)),
+        retry=retry_if_exception(_should_retry),
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=60),
         before_sleep=before_sleep_log(logging.getLogger(__name__), logging.WARNING),

@@ -337,7 +337,7 @@ async fn proxy_inner(
         .unwrap_or_default();
     let fallback_chain = build_fallback_chain(&version.provider_url, &tenant_fallbacks);
 
-    let (upstream_response, actual_provider_url) = send_with_failover(
+    let sent = send_with_failover(
         &state,
         &method,
         &upstream_url,
@@ -349,7 +349,41 @@ async fn proxy_inner(
         request_id,
         &tenant_id_for_routing,
     )
-    .await?;
+    .await;
+
+    let (upstream_response, actual_provider_url) = match sent {
+        Ok(sent) => sent,
+        Err(e) => {
+            // Every provider failed. This used to return before anything was
+            // recorded, so the request log showed nothing and the controller's
+            // error rate never counted it — while a provider outage is exactly
+            // what a rollout must react to. Found live: an exhausted OpenAI
+            // balance produced 503s that left no trace.
+            let record = RecordRequest {
+                request_id,
+                tenant_id: tenant_id_for_routing.clone(),
+                eligible_for_eval: auth.tenant().map(|t| t.has_eval_quota()).unwrap_or(true),
+                rollout_id,
+                version_id: rollout_id.map(|_| version.version_id),
+                model: version.model.clone(),
+                input_tokens: None,
+                output_tokens: None,
+                latency_ms: start.elapsed().as_millis() as u32,
+                status_code: e.status_code(),
+                error: Some(e.to_string()),
+                session_id,
+                response_text: String::new(),
+                request_body_json: String::from_utf8_lossy(&body_bytes).into_owned(),
+                provider: crate::proxy::provider::Provider::from_url(&version.provider_url)
+                    .to_str()
+                    .to_string(),
+            };
+            if state.record_tx.try_send(record).is_err() {
+                state.metrics.recorder_dropped_total.inc();
+            }
+            return Err(e);
+        }
+    };
 
     let upstream_status = upstream_response.status();
     let upstream_headers_response = upstream_response.headers().clone();

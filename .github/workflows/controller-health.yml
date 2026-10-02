@@ -68,6 +68,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Idempotent: without the label, `gh issue create --label` fails and
+          # the very first outage would have gone unreported.
+          gh label create controller-down --repo "$GITHUB_REPOSITORY" --color B60205 \
+            --description "Controller health check failing" --force >/dev/null
           EXISTING=$(gh issue list \
             --repo "$GITHUB_REPOSITORY" \
             --label "controller-down" \
@@ -119,3 +123,79 @@ jobs:
       - name: Log healthy status
         if: steps.status.outputs.healthy == 'true'
         run: echo "Controller is healthy."
+
+      # The judge is what makes a rollout decision mean anything, and it can
+      # fail while every container stays healthy: on 2026-10-02 the OpenAI
+      # balance was found empty, every judge call returning 429, and nothing
+      # had noticed. A one-token call with the evaluator's own key catches an
+      # empty balance, a revoked key or a retired judge model within minutes,
+      # for well under a cent a day.
+      - name: Check the LLM judge can score
+        id: judge
+        run: |
+          PROBE=$(base64 -w0 <<'PY'
+          import json, os, urllib.error, urllib.request
+          req = urllib.request.Request(
+              "https://api.openai.com/v1/chat/completions",
+              data=json.dumps({"model": "gpt-4o-mini", "max_tokens": 1,
+                               "messages": [{"role": "user", "content": "ok"}]}).encode(),
+              headers={"Authorization": "Bearer " + os.environ["REPATH_OPENAI_API_KEY"],
+                       "Content-Type": "application/json"})
+          try:
+              urllib.request.urlopen(req, timeout=20)
+              print("JUDGE_OK")
+          except urllib.error.HTTPError as e:
+              err = json.loads(e.read() or b"{}").get("error", {})
+              print("JUDGE_DOWN", e.code, err.get("code") or err.get("type"), (err.get("message") or "")[:200])
+          except Exception as e:
+              print("JUDGE_DOWN unreachable", type(e).__name__)
+          PY
+          )
+          CMD="echo $PROBE | base64 -d | docker exec -i repath-evaluator python -"
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "${{ secrets.AWS_EC2_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "$(jq -n --arg c "$CMD" '{commands:[$c]}')" \
+            --query "Command.CommandId" --output text)
+          for i in $(seq 1 12); do
+            sleep 5
+            S=$(aws ssm get-command-invocation --command-id "$COMMAND_ID" \
+              --instance-id "${{ secrets.AWS_EC2_INSTANCE_ID }}" --query Status --output text 2>/dev/null || echo Pending)
+            if [[ "$S" == Success || "$S" == Failed ]]; then break; fi
+          done
+          OUTPUT=$(aws ssm get-command-invocation --command-id "$COMMAND_ID" \
+            --instance-id "${{ secrets.AWS_EC2_INSTANCE_ID }}" --query StandardOutputContent --output text)
+          echo "result=$(echo "$OUTPUT" | tr -d '\n' | head -c 300)" >> "$GITHUB_OUTPUT"
+          if echo "$OUTPUT" | grep -q JUDGE_OK; then echo "ok=true" >> "$GITHUB_OUTPUT"; else echo "ok=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Open issue if the judge cannot score
+        if: steps.judge.outputs.ok == 'false'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RESULT: ${{ steps.judge.outputs.result }}
+        run: |
+          gh label create judge-down --repo "$GITHUB_REPOSITORY" --color B60205 \
+            --description "LLM judge cannot score (credit, key, model)" --force >/dev/null
+          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --label judge-down --state open --json number --jq '.[0].number')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body "Still failing at $(date -u +%FT%TZ): \`$RESULT\`"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --label judge-down \
+              --title "🚨 LLM judge cannot score — rollouts cannot advance" \
+              --body "$(printf '%s\n' \
+                "The production judge call failed: \`$RESULT\`" "" \
+                "While this lasts, no response is judged: rollouts hold (they never advance on unjudged traffic) and judge-based rollback cannot trigger." "" \
+                "- \`insufficient_quota\` / \`credit_balance_exhausted\`: add credit at https://platform.openai.com/settings/organization/billing" \
+                "- \`invalid_api_key\`: update /repath/prod/OPENAI_API_KEY in SSM, then redeploy" \
+                "- \`model_not_found\`: the judge model was retired; change REPATH_LLM_JUDGE_MODEL" "" \
+                "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}")"
+          fi
+
+      - name: Close the judge issue once it recovers
+        if: steps.judge.outputs.ok == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for n in $(gh issue list --repo "$GITHUB_REPOSITORY" --label judge-down --state open --json number --jq '.[].number'); do
+            gh issue close "$n" --repo "$GITHUB_REPOSITORY" --comment "Judge recovered at $(date -u +%FT%TZ)."
+          done

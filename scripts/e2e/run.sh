@@ -160,6 +160,24 @@ OTHER=$(curl -sS -X POST "$GW/api/v1/cloud/tenants" -H "authorization: Bearer $O
 LEAK=$(curl -sS "$GW/api/v1/requests" -H "authorization: Bearer $OP" -H "x-repath-act-as-tenant: $OTHER" | jq '.requests | length')
 [[ "$LEAK" == 0 ]] && pass "isolated: other tenant sees 0 requests" || fail "other tenant sees $LEAK requests"
 
+step "9. A provider outage is answered clearly — and still logged"
+# Every provider failing used to return before anything was recorded, so an
+# outage left no trace in the log or the error rate (found live, when the
+# production OpenAI balance ran out).
+DOWN=$(jq -n '{apiVersion:"repath/v1",kind:"Rollout",metadata:{name:"provider-outage"},
+  spec:{baseline:{provider:"http://mock-llm:9998/v1",model:"gpt-5.4-mini"},
+        candidate:{provider:"http://mock-llm:9998/v1",model:"gpt-4o-mini"},
+        strategy:{type:"canary",steps:[{weight:100}],rollback:{trigger:{},action:"rollback"}}}}')
+op POST /rollouts "$DOWN" >/dev/null
+CODE=$(curl -sS -o /tmp/e2e-down.json -w '%{http_code}' -X POST "$GW/v1/chat/completions" \
+  -H "authorization: Bearer sk-e2e-mock" -H "x-repath-key: $KEY" -H "x-repath-rollout: provider-outage" \
+  -H 'content-type: application/json' -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"ping"}]}')
+[[ "$CODE" -ge 500 ]] && pass "client told the provider is down ($CODE)" || fail "outage returned $CODE"
+sleep 2
+FAILED=$(op GET "/requests?status=error&limit=50" | jq '[.requests[] | select(.status_code >= 500)] | length')
+[[ "$FAILED" -ge 1 ]] && pass "the failed request is in the log ($FAILED with 5xx)" || fail "outage request was not recorded"
+rm -f /tmp/e2e-down.json
+
 if [[ "${KEEP:-0}" == 1 ]]; then
   printf '\nStack left up. Dashboard login: %s@example.com (password: $E2E_PASSWORD)\n' "$TENANT"
   printf 'Tenant API key for a customer app: %s\n' "$KEY" > .last-key

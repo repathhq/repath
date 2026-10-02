@@ -41,7 +41,7 @@ from typing import Any
 
 import structlog
 
-from .evaluators.llm_judge import LlmJudgeEvaluator
+from .evaluators.llm_judge import LlmJudgeEvaluator, is_permanent
 from .evaluators.programmatic import ProgrammaticEvaluator
 
 log = structlog.get_logger(__name__)
@@ -184,9 +184,14 @@ class Scorer:
                 ai_response=job.response_text,
             )
         except Exception as exc:
-            # LLM judge failure is non-fatal — fall back to programmatic score
-            log.warning(
-                "LLM judge failed, falling back to programmatic score",
+            # LLM judge failure is non-fatal — fall back to programmatic score.
+            # A permanent failure (no credit, revoked key) is logged as an
+            # error, not a warning: every response is going unjudged, rollouts
+            # cannot advance, and someone has to act.
+            (log.error if is_permanent(exc) else log.warning)(
+                "LLM judge unavailable — no response can be judged until this is fixed"
+                if is_permanent(exc)
+                else "LLM judge failed, falling back to programmatic score",
                 request_id=job.request_id,
                 error=str(exc),
             )
