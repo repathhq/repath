@@ -16,6 +16,7 @@
 //! - `REPATH_CONTROLLER_METRICS_PORT`      — Prometheus metrics server port (default: 9091)
 //! - `RUST_LOG`                             — Log level filter (default: info)
 
+use repath_common::task::exit_on_panic;
 use repath_controller::{
     loop_runner::{run, ControllerConfig},
     metrics::{serve_metrics, ControllerMetrics},
@@ -68,11 +69,11 @@ async fn main() -> anyhow::Result<()> {
     let metrics = Arc::new(ControllerMetrics::new());
 
     let metrics_for_server = metrics.clone();
-    tokio::spawn(async move {
+    tokio::spawn(exit_on_panic("metrics server", async move {
         if let Err(e) = serve_metrics(metrics_port, metrics_for_server).await {
             tracing::error!(error = %e, port = metrics_port, "Metrics server failed");
         }
-    });
+    }));
 
     // Create database pool — controller only needs a small pool (1-2 conns)
     let pool = PgPoolOptions::new()
@@ -101,9 +102,10 @@ async fn main() -> anyhow::Result<()> {
     {
         Some(billing) => {
             let billing_pool = pool.clone();
-            tokio::spawn(async move {
-                repath_controller::billing_reconciler::run(billing_pool, billing).await;
-            });
+            tokio::spawn(exit_on_panic(
+                "billing reconciler",
+                repath_controller::billing_reconciler::run(billing_pool, billing),
+            ));
         }
         None => info!("Razorpay credentials not set — billing reconciler disabled"),
     }
@@ -114,9 +116,10 @@ async fn main() -> anyhow::Result<()> {
     // deployment — unlike billing, there is no configuration that makes
     // "keep customers' text forever" the correct behaviour.
     let retention_pool = pool.clone();
-    tokio::spawn(async move {
-        repath_controller::retention::run(retention_pool).await;
-    });
+    tokio::spawn(exit_on_panic(
+        "retention sweeper",
+        repath_controller::retention::run(retention_pool),
+    ));
 
     // Run the decision loop — returns only on task abort (shutdown)
     run(pool, config).await;

@@ -47,6 +47,22 @@ step "clippy (all-features, deny warnings)" \
 step "cargo check (all-features)" \
      cargo check --all-targets --all-features
 
+# ── Security Audit ───────────────────────────────────────────────────────────
+# CI's audit job gates the deploy, and it was missing here: an advisory
+# published after the last green run (RUSTSEC-2026-0285, rustls) failed CI and
+# skipped every deploy for weeks while this script stayed green. The ignore
+# list is read out of ci.yml rather than copied, so the two cannot drift.
+audit_ignores=()
+for id in $(grep -oE 'RUSTSEC-[0-9]{4}-[0-9]+' .github/workflows/ci.yml | sort -u); do
+  audit_ignores+=(--ignore "$id")
+done
+if command -v cargo-audit >/dev/null; then
+  step "cargo audit (CI's ignore list)" cargo audit "${audit_ignores[@]}"
+else
+  printf '\n\033[31m   cargo-audit missing — `cargo install cargo-audit --locked`\033[0m\n'
+  FAILED+=("cargo audit (not installed)")
+fi
+
 # ── Rust Test ────────────────────────────────────────────────────────────────
 # DATABASE_URL-dependent suites skip themselves when it is unset, so this is
 # still worth running without a database — it just covers less.

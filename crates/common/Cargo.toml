@@ -28,6 +28,7 @@ reqwest = { workspace = true }
 aws-config = { workspace = true }
 aws-sdk-sesv2 = { workspace = true }
 tokio = { workspace = true }
+futures = { workspace = true }
 tracing = { workspace = true }
 
 # AES-GCM for tenant secrets, HMAC for webhook signatures

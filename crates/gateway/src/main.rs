@@ -4,7 +4,7 @@
 //! build the application state, and serve until shutdown. All logic lives
 //! in the library so it can be tested directly.
 
-use repath_common::{Error, Result};
+use repath_common::{task::exit_on_panic, Error, Result};
 use repath_gateway::{
     circuit_breaker, config, db, observability, proxy, recorder, router, routing, server, tenant,
     AppState,
@@ -104,10 +104,9 @@ async fn main() -> Result<()> {
     // Capacity of 1024 at 50K req/s gives ~20ms of buffer before back-pressure
     // kicks in — sufficient for any normal DB hiccup.
     let (record_tx, record_rx) = tokio::sync::mpsc::channel(1024);
-    let recorder_handle = tokio::spawn(recorder::run_recorder(
-        record_rx,
-        db_pool.clone(),
-        redis.clone(),
+    let recorder_handle = tokio::spawn(exit_on_panic(
+        "recorder",
+        recorder::run_recorder(record_rx, db_pool.clone(), redis.clone()),
     ));
 
     // Initialize rollout cache (empty on startup; populated by first DB query)
@@ -117,18 +116,18 @@ async fn main() -> Result<()> {
 
     // Initialize tenant cache and spawn its refresher.
     let tenant_cache = Arc::new(arc_swap::ArcSwap::from_pointee(tenant::TenantCache::empty()));
-    let tenant_refresh_handle = tokio::spawn(tenant::run_tenant_cache_refresher(
-        db_pool.clone(),
-        tenant_cache.clone(),
+    let tenant_refresh_handle = tokio::spawn(exit_on_panic(
+        "tenant cache refresher",
+        tenant::run_tenant_cache_refresher(db_pool.clone(), tenant_cache.clone()),
     ));
 
     // Initialize routing cache (rules + provider credentials) and its refresher.
     let routing_cache = Arc::new(arc_swap::ArcSwap::from_pointee(
         routing::RoutingCache::empty(),
     ));
-    let routing_refresh_handle = tokio::spawn(routing::run_routing_cache_refresher(
-        db_pool.clone(),
-        routing_cache.clone(),
+    let routing_refresh_handle = tokio::spawn(exit_on_panic(
+        "routing cache refresher",
+        routing::run_routing_cache_refresher(db_pool.clone(), routing_cache.clone()),
     ));
 
     // Per-tenant rate limiter, plus a sweeper for buckets nobody is using.
@@ -137,21 +136,21 @@ async fn main() -> Result<()> {
     // long-running process, which is exactly what this is.
     let rate_limiter = Arc::new(repath_gateway::tenant::rate_limit::RateLimiter::new());
     let rate_limiter_sweeper = rate_limiter.clone();
-    tokio::spawn(async move {
+    tokio::spawn(exit_on_panic("rate-limit sweeper", async move {
         let mut ticker = tokio::time::interval(std::time::Duration::from_secs(600));
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             ticker.tick().await;
             rate_limiter_sweeper.evict_idle();
         }
-    });
+    }));
 
     // Spawn background rollout cache refresher.
     // Polls the DB every 5 seconds and swaps the cache atomically.
     // This decouples every request handler from direct DB reads for routing.
-    let cache_refresh_handle = tokio::spawn(router::run_cache_refresher(
-        db_pool.clone(),
-        rollout_cache.clone(),
+    let cache_refresh_handle = tokio::spawn(exit_on_panic(
+        "rollout cache refresher",
+        router::run_cache_refresher(db_pool.clone(), rollout_cache.clone()),
     ));
 
     // Build application state
@@ -189,9 +188,9 @@ async fn main() -> Result<()> {
     );
 
     // Start metrics server on separate port
-    let metrics_handle = tokio::spawn(observability::serve_metrics(
-        config.server.metrics_port,
-        metrics,
+    let metrics_handle = tokio::spawn(exit_on_panic(
+        "metrics server",
+        observability::serve_metrics(config.server.metrics_port, metrics),
     ));
 
     info!(

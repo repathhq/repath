@@ -26,7 +26,7 @@ tokio-util = { version = "0.7", features = ["io"] }
 # HTTP server & client
 axum = { version = "0.7", features = ["macros", "json"] }
 tower = { version = "0.5", features = ["full"] }
-tower-http = { version = "0.6", features = ["trace", "cors", "compression-gzip"] }
+tower-http = { version = "0.6", features = ["trace", "cors", "compression-gzip", "catch-panic"] }
 hyper = { version = "1.4", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
 reqwest = { version = "0.12", features = ["json", "stream", "gzip", "brotli"] }
@@ -109,7 +109,12 @@ opt-level = 3
 lto = "fat"
 codegen-units = 1
 strip = true
-panic = "abort"
+# Unwind, not abort. With `abort`, one panicking request handler killed the
+# gateway process and every customer's in-flight LLM traffic with it — a
+# SMALLINT read as i32 in the request log did exactly that, on every page
+# load. Handler panics are now caught per request (CatchPanicLayer in
+# server.rs); background loops still exit the process on panic via
+# `repath_common::task::exit_on_panic`, so none of them can die silently.
 
 [profile.dev]
 opt-level = 0

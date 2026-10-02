@@ -55,7 +55,11 @@ async function proxy(req: NextRequest, path: string) {
   }
 
   try {
-    const res = await fetch(`${GATEWAY}/api/v1/${path}`, init);
+    // Forward the query string. `path` comes from the route segments only, so
+    // without this every filter on the request log — status, model, score,
+    // pagination cursor — was silently dropped and the gateway always
+    // returned the unfiltered first page.
+    const res = await fetch(`${GATEWAY}/api/v1/${path}${req.nextUrl.search}`, init);
     const body = await res.text();
     return new NextResponse(body, {
       status: res.status,

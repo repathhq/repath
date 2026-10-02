@@ -33,6 +33,7 @@ use axum::{
 use serde_json::json;
 use tower::ServiceBuilder;
 use tower_http::{
+    catch_panic::CatchPanicLayer,
     cors::{Any, CorsLayer},
     trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer},
 };
@@ -82,7 +83,30 @@ pub fn create_server(state: AppState) -> Router {
         // State shared across all handlers
         .with_state(state)
         // Middleware (applied to all routes)
-        .layer(ServiceBuilder::new().layer(trace_layer).layer(cors_layer))
+        .layer(
+            ServiceBuilder::new()
+                .layer(trace_layer)
+                // Outermost after tracing: a panicking handler becomes a 500
+                // for that one request instead of a dropped connection, which
+                // the reverse proxy would report as a bare 502.
+                .layer(CatchPanicLayer::custom(panic_response))
+                .layer(cors_layer),
+        )
+}
+
+/// The response for a request whose handler panicked. Deliberately vague: the
+/// panic message can carry internal detail (column names, types) that has no
+/// business reaching a client. It is in the server log.
+fn panic_response(_: Box<dyn std::any::Any + Send + 'static>) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    tracing::error!("request handler panicked — returned 500");
+    (
+        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+        axum::Json(json!({
+            "error": { "message": "Internal error. It has been logged.", "type": "internal_error" }
+        })),
+    )
+        .into_response()
 }
 
 // ── Health handlers ────────────────────────────────────────────────────────

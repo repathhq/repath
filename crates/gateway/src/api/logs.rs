@@ -158,41 +158,48 @@ pub async fn list_requests(
     .fetch_all(&state.db_pool)
     .await;
 
-    match rows {
-        Ok(rows) => {
-            let items: Vec<LogRow> = rows.iter().map(to_log_row).collect();
-            // The cursor for the next page is the oldest row on this one.
-            let next_before = items.last().map(|r| r.created_at);
-            Json(json!({
-                "requests": items,
-                "next_before": next_before,
-                "has_more": items.len() as i64 == limit,
-            }))
-            .into_response()
-        }
-        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
-    }
+    let items =
+        match rows.and_then(|rows| rows.iter().map(to_log_row).collect::<Result<Vec<_>, _>>()) {
+            Ok(items) => items,
+            Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        };
+
+    // The cursor for the next page is the oldest row on this one.
+    let next_before = items.last().map(|r| r.created_at);
+    Json(json!({
+        "requests": items,
+        "next_before": next_before,
+        "has_more": items.len() as i64 == limit,
+    }))
+    .into_response()
 }
 
-fn to_log_row(r: &sqlx::postgres::PgRow) -> LogRow {
-    LogRow {
-        id: r.get("id"),
-        created_at: r.get("created_at"),
-        model: r.get("model"),
-        provider: r.get("provider"),
-        latency_ms: r.get("latency_ms"),
-        status_code: r.get("status_code"),
-        input_tokens: r.get("input_tokens"),
-        output_tokens: r.get("output_tokens"),
-        cost_micro_usd: r.get("cost_micro_usd"),
-        score: r.get("score"),
-        evaluator_type: r.get("evaluator_type"),
-        rollout_id: r.get("rollout_id"),
-        version_id: r.get("version_id"),
-        role: r.get("role"),
-        session_id: r.get("session_id"),
-        has_payload: r.get("has_payload"),
-    }
+/// Every read here is `try_get`, never `get`.
+///
+/// `get` panics on a type mismatch, and the release profile used to abort on
+/// panic — so reading `status_code` (SMALLINT) as `i32` took the whole gateway
+/// down, dropping every customer's in-flight LLM traffic, each time anyone
+/// opened the request log. A mismatch now costs one 500 on one request.
+fn to_log_row(r: &sqlx::postgres::PgRow) -> Result<LogRow, sqlx::Error> {
+    Ok(LogRow {
+        id: r.try_get("id")?,
+        created_at: r.try_get("created_at")?,
+        model: r.try_get("model")?,
+        provider: r.try_get("provider")?,
+        latency_ms: r.try_get("latency_ms")?,
+        // SMALLINT in the schema; widened here so the API shape is unchanged.
+        status_code: r.try_get::<i16, _>("status_code")?.into(),
+        input_tokens: r.try_get("input_tokens")?,
+        output_tokens: r.try_get("output_tokens")?,
+        cost_micro_usd: r.try_get("cost_micro_usd")?,
+        score: r.try_get("score")?,
+        evaluator_type: r.try_get("evaluator_type")?,
+        rollout_id: r.try_get("rollout_id")?,
+        version_id: r.try_get("version_id")?,
+        role: r.try_get("role")?,
+        session_id: r.try_get("session_id")?,
+        has_payload: r.try_get("has_payload")?,
+    })
 }
 
 /// GET /api/v1/requests/:id
@@ -247,49 +254,59 @@ pub async fn get_request(
     )
     .bind(id)
     .fetch_all(&state.db_pool)
-    .await
-    .unwrap_or_default();
+    .await;
 
-    let evals: Vec<Value> = evaluations
+    match detail_json(&row, evaluations) {
+        Ok(body) => Json(body).into_response(),
+        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+/// The detail payload. Fallible end to end — see `to_log_row` for why no read
+/// in this file may panic.
+fn detail_json(
+    row: &sqlx::postgres::PgRow,
+    evaluations: Result<Vec<sqlx::postgres::PgRow>, sqlx::Error>,
+) -> Result<Value, sqlx::Error> {
+    let evals = evaluations?
         .iter()
         .map(|e| {
-            json!({
-                "evaluator_type": e.get::<String, _>("evaluator_type"),
-                "overall_score":  e.get::<f64, _>("overall_score"),
-                "scores":         e.get::<Value, _>("scores"),
+            Ok(json!({
+                "evaluator_type": e.try_get::<String, _>("evaluator_type")?,
+                "overall_score":  e.try_get::<f64, _>("overall_score")?,
+                "scores":         e.try_get::<Value, _>("scores")?,
                 // Carries the judge's per-criterion reasoning — the single
                 // most useful field in the system, stored since day one and
                 // never shown to anyone until now.
-                "metadata":       e.get::<Option<Value>, _>("metadata"),
-                "created_at":     e.get::<DateTime<Utc>, _>("created_at"),
-            })
+                "metadata":       e.try_get::<Option<Value>, _>("metadata")?,
+                "created_at":     e.try_get::<DateTime<Utc>, _>("created_at")?,
+            }))
         })
-        .collect();
+        .collect::<Result<Vec<Value>, sqlx::Error>>()?;
 
-    Json(json!({
-        "id":             row.get::<Uuid, _>("id"),
-        "created_at":     row.get::<DateTime<Utc>, _>("created_at"),
-        "model":          row.get::<String, _>("model"),
-        "provider":       row.get::<Option<String>, _>("provider"),
-        "latency_ms":     row.get::<i32, _>("latency_ms"),
-        "status_code":    row.get::<i32, _>("status_code"),
-        "input_tokens":   row.get::<Option<i32>, _>("input_tokens"),
-        "output_tokens":  row.get::<Option<i32>, _>("output_tokens"),
-        "cost_micro_usd": row.get::<Option<i64>, _>("cost_micro_usd"),
-        "error":          row.get::<Option<String>, _>("error"),
-        "rollout_id":     row.get::<Option<Uuid>, _>("rollout_id"),
-        "rollout_name":   row.get::<Option<String>, _>("rollout_name"),
-        "version_id":     row.get::<Option<Uuid>, _>("version_id"),
-        "role":           row.get::<Option<String>, _>("role"),
-        "session_id":     row.get::<Option<String>, _>("session_id"),
-        "system_prompt":  row.get::<Option<String>, _>("prompt_template"),
-        "request_body":   row.get::<Option<String>, _>("request_body"),
-        "response_text":  row.get::<Option<String>, _>("response_text"),
-        "truncated":      row.get::<Option<bool>, _>("truncated").unwrap_or(false),
-        "payload_expires_at": row.get::<Option<DateTime<Utc>>, _>("expires_at"),
+    Ok(json!({
+        "id":             row.try_get::<Uuid, _>("id")?,
+        "created_at":     row.try_get::<DateTime<Utc>, _>("created_at")?,
+        "model":          row.try_get::<String, _>("model")?,
+        "provider":       row.try_get::<Option<String>, _>("provider")?,
+        "latency_ms":     row.try_get::<i32, _>("latency_ms")?,
+        "status_code":    i32::from(row.try_get::<i16, _>("status_code")?),
+        "input_tokens":   row.try_get::<Option<i32>, _>("input_tokens")?,
+        "output_tokens":  row.try_get::<Option<i32>, _>("output_tokens")?,
+        "cost_micro_usd": row.try_get::<Option<i64>, _>("cost_micro_usd")?,
+        "error":          row.try_get::<Option<String>, _>("error")?,
+        "rollout_id":     row.try_get::<Option<Uuid>, _>("rollout_id")?,
+        "rollout_name":   row.try_get::<Option<String>, _>("rollout_name")?,
+        "version_id":     row.try_get::<Option<Uuid>, _>("version_id")?,
+        "role":           row.try_get::<Option<String>, _>("role")?,
+        "session_id":     row.try_get::<Option<String>, _>("session_id")?,
+        "system_prompt":  row.try_get::<Option<String>, _>("prompt_template")?,
+        "request_body":   row.try_get::<Option<String>, _>("request_body")?,
+        "response_text":  row.try_get::<Option<String>, _>("response_text")?,
+        "truncated":      row.try_get::<Option<bool>, _>("truncated")?.unwrap_or(false),
+        "payload_expires_at": row.try_get::<Option<DateTime<Utc>>, _>("expires_at")?,
         "evaluations":    evals,
     }))
-    .into_response()
 }
 
 /// GET /api/v1/decisions/:id/requests
@@ -326,11 +343,21 @@ pub async fn requests_for_decision(
         Ok(Some(d)) => d,
     };
 
-    let action: String = d.get("action");
-    let decided_at: DateTime<Utc> = d.get("created_at");
-    let rollout_id: Uuid = d.get("rollout_id");
-    let candidate_version: Uuid = d.get("candidate_version_id");
-    let baseline_version: Uuid = d.get("baseline_version_id");
+    let decoded = (|| -> Result<_, sqlx::Error> {
+        Ok((
+            d.try_get::<String, _>("action")?,
+            d.try_get::<DateTime<Utc>, _>("created_at")?,
+            d.try_get::<Uuid, _>("rollout_id")?,
+            d.try_get::<Uuid, _>("candidate_version_id")?,
+            d.try_get::<Uuid, _>("baseline_version_id")?,
+            d.try_get::<Option<Value>, _>("metrics_snapshot")?,
+        ))
+    })();
+    let (action, decided_at, rollout_id, candidate_version, baseline_version, snapshot) =
+        match decoded {
+            Ok(v) => v,
+            Err(e) => return err(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        };
 
     // A rollback or an advance is a judgement about the candidate, so that is
     // the side worth showing. Anything else shows both.
@@ -374,15 +401,14 @@ pub async fn requests_for_decision(
     .fetch_all(&state.db_pool)
     .await;
 
-    match rows {
-        Ok(rows) => {
-            let items: Vec<LogRow> = rows.iter().map(to_log_row).collect();
+    match rows.and_then(|rows| rows.iter().map(to_log_row).collect::<Result<Vec<_>, _>>()) {
+        Ok(items) => {
             Json(json!({
                 "decision": {
                     "id": id,
                     "action": action,
                     "created_at": decided_at,
-                    "metrics_snapshot": d.get::<Option<Value>, _>("metrics_snapshot"),
+                    "metrics_snapshot": snapshot,
                 },
                 "requests": items,
                 "window_minutes": 10,
