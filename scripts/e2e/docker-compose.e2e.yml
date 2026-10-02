@@ -1,0 +1,102 @@
+# End-to-end stack: the images CI ships, wired the way production wires them.
+#
+# Built from Dockerfile.{gateway,controller,evaluator} — the files CI builds
+# and deploys — not the multi-stage Dockerfile the dev compose uses. Testing
+# an artifact next to the one that ships is how five deploys failed in a row
+# in August; this runs the real ones.
+#
+# Only two things differ from docker-compose.prod.yml: Postgres stands in for
+# RDS, and mock-llm stands in for the model providers and the judge, so a run
+# is free, offline-safe and deterministic.
+#
+# Driven by scripts/e2e/run.sh. Ports are offset (18080…) so it can run
+# beside a dev stack.
+
+name: repath-e2e
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: repath
+      POSTGRES_PASSWORD: e2e
+      POSTGRES_DB: repath
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U repath -d repath"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  mock-llm:
+    image: python:3.12-alpine
+    command: ["python", "/mock_llm.py"]
+    volumes:
+      - ./mock_llm.py:/mock_llm.py:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9999/health')"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  gateway:
+    image: repath-e2e-gateway
+    build:
+      context: ../..
+      dockerfile: Dockerfile.gateway
+    environment:
+      REPATH_SERVER_PORT: 8080
+      REPATH_DATABASE_URL: postgres://repath:e2e@postgres:5432/repath
+      REPATH_REDIS_URL: redis://redis:6379
+      REPATH_API_TOKEN: e2e-operator-token-0123456789abcdef
+      REPATH_CLOUD_MODE: "true"
+      REPATH_CLOUD_DOMAIN: localhost
+      REPATH_EMAIL_ENABLED: "0"
+      # The mock provider is a custom URL, which cloud mode refuses by default
+      # (a tenant-chosen URL inside our network is an SSRF). This is the
+      # operator opt-in, exactly as a self-hoster running cloud mode would use.
+      REPATH_ALLOW_CUSTOM_PROVIDERS: "true"
+      RUST_LOG: info
+    ports:
+      - "127.0.0.1:18080:8080"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  evaluator:
+    image: repath-e2e-evaluator
+    build:
+      context: ../..
+      dockerfile: Dockerfile.evaluator
+    environment:
+      REPATH_DATABASE_URL: postgres://repath:e2e@postgres:5432/repath
+      REPATH_REDIS_URL: redis://redis:6379
+      REPATH_OPENAI_API_KEY: sk-e2e-mock
+      # The OpenAI SDK honours this when no base_url is passed, which is how
+      # the evaluator constructs its client — so the judge calls the mock.
+      OPENAI_BASE_URL: http://mock-llm:9999/v1
+      REPATH_LOG_FORMAT: json
+    depends_on:
+      gateway: { condition: service_healthy }
+      mock-llm: { condition: service_healthy }
+
+  controller:
+    image: repath-e2e-controller
+    build:
+      context: ../..
+      dockerfile: Dockerfile.controller
+    environment:
+      REPATH_DATABASE_URL: postgres://repath:e2e@postgres:5432/repath
+      # Production decides every 30s. Five keeps a run short without changing
+      # what is decided.
+      REPATH_CONTROLLER_INTERVAL_SECS: "5"
+      RUST_LOG: info
+    depends_on:
+      gateway: { condition: service_healthy }

@@ -22,86 +22,11 @@
 //!
 //! Skipped (not failed) when `DATABASE_URL` is unset.
 
-use sqlx::{Connection, Executor, PgConnection, PgPool, Row};
+mod common;
+
+use common::TempDb;
+use sqlx::Row;
 use uuid::Uuid;
-
-/// Connect to the maintenance database so `CREATE DATABASE` is legal.
-fn admin_url(base: &str) -> String {
-    match base.rfind('/') {
-        Some(i) => format!("{}/postgres", &base[..i]),
-        None => base.to_string(),
-    }
-}
-
-fn with_database(base: &str, name: &str) -> String {
-    // Preserve any query string (?sslmode=require and friends) while swapping
-    // the database name.
-    let (head, query) = match base.split_once('?') {
-        Some((h, q)) => (h, Some(q)),
-        None => (base, None),
-    };
-    let stem = &head[..head.rfind('/').unwrap_or(head.len())];
-    match query {
-        Some(q) => format!("{stem}/{name}?{q}"),
-        None => format!("{stem}/{name}"),
-    }
-}
-
-struct TempDb {
-    name: String,
-    base: String,
-    pool: Option<PgPool>,
-}
-
-impl TempDb {
-    async fn create() -> Option<Self> {
-        let base = std::env::var("DATABASE_URL").ok()?;
-        let name = format!("mig_{}", Uuid::new_v4().simple());
-
-        let mut admin = PgConnection::connect(&admin_url(&base))
-            .await
-            .expect("connect to maintenance database");
-        admin
-            .execute(format!("CREATE DATABASE \"{name}\"").as_str())
-            .await
-            .expect("create temp database");
-
-        let pool = PgPool::connect(&with_database(&base, &name))
-            .await
-            .expect("connect to temp database");
-
-        Some(Self {
-            name,
-            base,
-            pool: Some(pool),
-        })
-    }
-}
-
-impl Drop for TempDb {
-    fn drop(&mut self) {
-        // The pool must close before the database can be dropped, and Drop
-        // cannot await — hence the short-lived runtime on its own thread.
-        if let Some(pool) = self.pool.take() {
-            let name = self.name.clone();
-            let admin = admin_url(&self.base);
-            std::thread::spawn(move || {
-                if let Ok(rt) = tokio::runtime::Runtime::new() {
-                    rt.block_on(async {
-                        pool.close().await;
-                        if let Ok(mut c) = PgConnection::connect(&admin).await {
-                            let _ = c
-                                .execute(format!("DROP DATABASE IF EXISTS \"{name}\"").as_str())
-                                .await;
-                        }
-                    });
-                }
-            })
-            .join()
-            .ok();
-        }
-    }
-}
 
 #[tokio::test]
 async fn every_migration_applies_to_an_empty_database() {
@@ -293,5 +218,43 @@ async fn payload_retention_sweep_deletes_only_expired_rows() {
     assert_eq!(
         remaining, 1,
         "a payload inside its retention window must survive the sweep"
+    );
+}
+
+#[tokio::test]
+async fn every_plan_the_code_writes_is_accepted() {
+    let Some(db) = TempDb::create().await else {
+        return;
+    };
+    let pool = db.pool.as_ref().unwrap();
+    repath_gateway::db::migrate::run_migrations(pool)
+        .await
+        .expect("migrate");
+
+    // Each of these is written by running code: 'indie' by
+    // activate_subscription after a successful payment, 'free' by the billing
+    // reconciler when a subscription lapses. Migration 002's CHECK allowed
+    // neither, so the $20 plan could be paid for but never activated. A plan
+    // added to the code without a migration fails here, not at checkout.
+    for plan in ["free", "trial", "indie", "starter", "pro", "enterprise"] {
+        let id = format!("ten_plan_{plan}");
+        sqlx::query(
+            "INSERT INTO tenants (id, name, email, plan) VALUES ($1, $1, $1 || '@example.com', $2)",
+        )
+        .bind(&id)
+        .bind(plan)
+        .execute(pool)
+        .await
+        .unwrap_or_else(|e| panic!("plan '{plan}' must be accepted by tenants_plan_check: {e}"));
+    }
+
+    let bogus = sqlx::query(
+        "INSERT INTO tenants (id, name, email, plan) VALUES ('ten_bogus', 'b', 'b@example.com', 'platinum')",
+    )
+    .execute(pool)
+    .await;
+    assert!(
+        bogus.is_err(),
+        "the plan constraint must still reject unknown plans"
     );
 }
