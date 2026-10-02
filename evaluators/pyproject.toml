@@ -13,7 +13,9 @@ dependencies = [
     # PostgreSQL async driver
     "asyncpg>=0.29",
     # OpenAI SDK for LLM-as-judge
-    "openai>=1.30",
+    # Bounded: an unbounded range shipped openai 3.x (httpx → httpx2) to
+    # production unnoticed. A new major must be a deliberate change, tested.
+    "openai>=3.23,<4",
     # Retry logic with exponential backoff
     "tenacity>=8.3",
     # Structured logging
