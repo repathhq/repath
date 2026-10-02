@@ -165,7 +165,7 @@ pub async fn get_tenant_by_email(
         r#"
         SELECT id, name, email, plan, password_hash, trial_ends_at,
                eval_quota_monthly, evals_used_this_month, active, created_at
-        FROM tenants WHERE email = $1 AND active = true
+        FROM tenants WHERE LOWER(email) = LOWER(TRIM($1)) AND active = true
         "#,
     )
     .bind(&email)
@@ -204,6 +204,9 @@ pub async fn create_tenant(
 
     let trial_ends_at = Utc::now() + Duration::days(7);
     let gateway_url = build_gateway_url(&body.id);
+    // Stored normalised so one person cannot end up with two accounts by
+    // typing their address differently; idx_tenants_email_lower enforces it.
+    let email = body.email.trim().to_lowercase();
 
     // Mint the tenant's API key here. The plaintext is returned exactly once,
     // in this response, and never stored — only its SHA-256 hash goes to the
@@ -226,7 +229,7 @@ pub async fn create_tenant(
     )
     .bind(&body.id)
     .bind(&body.name)
-    .bind(&body.email)
+    .bind(&email)
     .bind(trial_ends_at)
     .bind(&body.password_hash)
     .bind(&key.hash)
@@ -260,6 +263,18 @@ pub async fn create_tenant(
                     json!("Store this now — it is shown once and cannot be recovered.");
             }
             (StatusCode::CREATED, Json(payload)).into_response()
+        }
+        // An existing email is the customer's mistake, not ours: a 409 the
+        // signup page can explain, rather than a 500 that reads as an outage
+        // and pages whoever watches the error rate.
+        Err(e)
+            if e.as_database_error()
+                .is_some_and(|d| d.code().as_deref() == Some("23505")) =>
+        {
+            cloud_error(
+                StatusCode::CONFLICT,
+                "An account with this email already exists".into(),
+            )
         }
         Err(e) => cloud_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }

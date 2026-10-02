@@ -38,8 +38,9 @@ export async function POST(req: NextRequest) {
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     const msg = (err as { error?: { message?: string } })?.error?.message ?? "Failed to create account";
-    // Duplicate email check
-    if (msg.toLowerCase().includes("unique") || msg.toLowerCase().includes("duplicate")) {
+    // The gateway answers a duplicate email with 409. The text match stays as
+    // a fallback for a gateway older than that change.
+    if (res.status === 409 || msg.toLowerCase().includes("unique") || msg.toLowerCase().includes("duplicate")) {
       return NextResponse.json({ error: "An account with this email already exists" }, { status: 409 });
     }
     return NextResponse.json({ error: msg }, { status: 500 });
