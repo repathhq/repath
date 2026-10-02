@@ -353,6 +353,11 @@ pub struct RolloutSpec {
     pub evaluation: Vec<EvaluationSpec>,
     #[serde(default)]
     pub routing: RoutingConfig,
+    /// Explicit decision thresholds. Optional: omitted fields take
+    /// `RolloutPolicy`'s defaults, and the step gates and rollback trigger in
+    /// `strategy` override the two quality thresholds when they are set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy: Option<RolloutPolicy>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

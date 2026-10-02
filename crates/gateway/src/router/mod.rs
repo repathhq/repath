@@ -55,6 +55,12 @@ pub struct RolloutCache {
 #[derive(Debug, Clone)]
 pub struct ActiveRollout {
     pub rollout_id: Uuid,
+    /// The rollout's name, unique per tenant. Clients may address a rollout
+    /// by name in `X-Repath-Rollout` as well as by id.
+    pub name: String,
+    /// False while the rollout is `created`: it serves its baseline when
+    /// named explicitly, but never takes over a tenant's default traffic.
+    pub started: bool,
     pub baseline_version_id: Uuid,
     pub candidate_version_id: Uuid,
     /// Fraction of traffic to route to the candidate (0.0 – 1.0).
@@ -80,9 +86,23 @@ impl RolloutCache {
         }
     }
 
-    /// Return the first active rollout for this tenant (for simple cases).
+    /// The rollout serving this tenant's traffic when a request names none:
+    /// the newest one that has started. A just-created rollout must not take
+    /// over default traffic before its canary has even opened.
     pub fn active_for(&self, tenant_id: &str) -> Option<&ActiveRollout> {
-        self.by_tenant.get(tenant_id).and_then(|v| v.first())
+        self.by_tenant
+            .get(tenant_id)
+            .and_then(|v| v.iter().find(|r| r.started))
+    }
+
+    /// The rollout a request named in `X-Repath-Rollout`, by id or by name,
+    /// started or not. An unstarted rollout has a candidate weight of 0, so
+    /// naming it serves its baseline — what "created, paused at 0%" promises.
+    pub fn named_for(&self, tenant_id: &str, key: &str) -> Option<&ActiveRollout> {
+        let id = Uuid::parse_str(key).ok();
+        self.all_for(tenant_id)
+            .iter()
+            .find(|r| Some(r.rollout_id) == id || r.name == key)
     }
 
     /// Return all active rollouts for this tenant.
@@ -159,28 +179,43 @@ pub async fn run_cache_refresher(db_pool: PgPool, cache: Arc<ArcSwap<RolloutCach
 /// started) is excluded. `ORDER BY created_at DESC` + `.first()` in
 /// `active_for` means a newer rollout for the same tenant always takes
 /// precedence over an older promoted/rolled-back one.
-async fn fetch_active_rollout(pool: &PgPool) -> Result<RolloutCache> {
-    let rows = sqlx::query(
-        r#"
+/// Columns for one routable rollout. Shared by the periodic refresher and the
+/// single-rollout fallback so the two can never disagree about a row.
+const ROLLOUT_SELECT: &str = r#"
         SELECT
             r.id                    AS rollout_id,
+            r.name                  AS rollout_name,
+            (r.state <> 'created')  AS started,
             r.baseline_version_id,
             r.candidate_version_id,
             r.current_weight        AS candidate_weight,
             bv.model                AS baseline_model,
             bv.prompt_template      AS baseline_prompt,
-            COALESCE(bv.provider_url, 'https://api.openai.com/v1') AS baseline_provider_url,
+            -- The version's own provider, never a silent default. This used
+            -- to COALESCE a missing URL to OpenAI, which is how every rollout
+            -- naming another provider quietly sent its traffic to OpenAI.
+            COALESCE(bv.provider_url, bp.base_url) AS baseline_provider_url,
             cv.model                AS candidate_model,
             cv.prompt_template      AS candidate_prompt,
-            COALESCE(cv.provider_url, 'https://api.openai.com/v1') AS candidate_provider_url,
+            COALESCE(cv.provider_url, cp.base_url) AS candidate_provider_url,
             COALESCE(r.tenant_id, 'default') AS tenant_id
         FROM rollouts r
         JOIN versions bv ON r.baseline_version_id = bv.id
         JOIN versions cv ON r.candidate_version_id = cv.id
-        WHERE r.state IN ('shadow', 'canary', 'paused', 'promoted', 'rolled_back')
-        ORDER BY r.created_at DESC
-        "#,
-    )
+        JOIN providers bp ON bv.provider_id = bp.id
+        JOIN providers cp ON cv.provider_id = cp.id
+"#;
+
+/// Every state that still routes traffic. `created` is included so a rollout
+/// can be addressed by name before its canary opens; `active_for` keeps it
+/// out of default routing.
+const ROUTABLE_STATES: &str =
+    "r.state IN ('created', 'shadow', 'canary', 'paused', 'promoted', 'rolled_back')";
+
+async fn fetch_active_rollout(pool: &PgPool) -> Result<RolloutCache> {
+    let rows = sqlx::query(&format!(
+        "{ROLLOUT_SELECT} WHERE {ROUTABLE_STATES} ORDER BY r.created_at DESC"
+    ))
     .fetch_all(pool)
     .await
     .map_err(|e| repath_common::Error::Database {
@@ -190,29 +225,74 @@ async fn fetch_active_rollout(pool: &PgPool) -> Result<RolloutCache> {
 
     let mut by_tenant: HashMap<String, Vec<ActiveRollout>> = HashMap::new();
 
-    for r in rows {
-        use sqlx::Row;
-        let tenant_id: String = r.get("tenant_id");
-        let rollout = ActiveRollout {
-            rollout_id: r.get("rollout_id"),
-            baseline_version_id: r.get("baseline_version_id"),
-            candidate_version_id: r.get("candidate_version_id"),
-            candidate_weight: r.get("candidate_weight"),
-            baseline_model: r.get("baseline_model"),
-            baseline_prompt: r.get("baseline_prompt"),
-            baseline_provider_url: r.get("baseline_provider_url"),
-            candidate_model: r.get("candidate_model"),
-            candidate_prompt: r.get("candidate_prompt"),
-            candidate_provider_url: r.get("candidate_provider_url"),
-            tenant_id: tenant_id.clone(),
-        };
-        by_tenant.entry(tenant_id).or_default().push(rollout);
+    for r in &rows {
+        // One undecodable row costs that row, not the whole cache — a failed
+        // refresh would freeze every tenant's routing on stale data.
+        match row_to_rollout(r) {
+            Ok(rollout) => by_tenant
+                .entry(rollout.tenant_id.clone())
+                .or_default()
+                .push(rollout),
+            Err(e) => error!(error = %e, "Skipping undecodable rollout row"),
+        }
     }
 
     Ok(RolloutCache {
         by_tenant,
         refreshed_at: std::time::Instant::now(),
     })
+}
+
+fn row_to_rollout(r: &sqlx::postgres::PgRow) -> std::result::Result<ActiveRollout, sqlx::Error> {
+    use sqlx::Row;
+    Ok(ActiveRollout {
+        rollout_id: r.try_get("rollout_id")?,
+        name: r.try_get("rollout_name")?,
+        started: r.try_get("started")?,
+        baseline_version_id: r.try_get("baseline_version_id")?,
+        candidate_version_id: r.try_get("candidate_version_id")?,
+        candidate_weight: r.try_get("candidate_weight")?,
+        baseline_model: r.try_get("baseline_model")?,
+        baseline_prompt: r.try_get("baseline_prompt")?,
+        baseline_provider_url: r.try_get("baseline_provider_url")?,
+        candidate_model: r.try_get("candidate_model")?,
+        candidate_prompt: r.try_get("candidate_prompt")?,
+        candidate_provider_url: r.try_get("candidate_provider_url")?,
+        tenant_id: r.try_get("tenant_id")?,
+    })
+}
+
+/// Look up one rollout a request named, for when the cache has not caught up.
+///
+/// The cache refreshes every five seconds, so a rollout created — or a canary
+/// opened — moments ago is not in it yet. Requests naming it fell through to
+/// unrouted passthrough: sent to OpenAI with whatever model the client wrote,
+/// whatever provider the rollout actually uses. One indexed query on a cache
+/// miss is cheap; misrouting a customer's first requests is not.
+pub async fn fetch_named_rollout(
+    pool: &PgPool,
+    tenant_id: &str,
+    key: &str,
+) -> Option<ActiveRollout> {
+    let sql = format!(
+        "{ROLLOUT_SELECT} WHERE {ROUTABLE_STATES} \
+           AND COALESCE(r.tenant_id, 'default') = $1 \
+           AND (r.id::text = $2 OR r.name = $2) \
+         ORDER BY r.created_at DESC LIMIT 1"
+    );
+    match sqlx::query(&sql)
+        .bind(tenant_id)
+        .bind(key)
+        .fetch_optional(pool)
+        .await
+    {
+        Ok(Some(row)) => row_to_rollout(&row).ok(),
+        Ok(None) => None,
+        Err(e) => {
+            error!(error = %e, "Named rollout lookup failed");
+            None
+        }
+    }
 }
 
 #[cfg(test)]
@@ -437,6 +517,101 @@ mod tests {
             cache.active_for("default").is_none(),
             "a rollout that was never started should not serve traffic"
         );
+    }
+
+    async fn name_of(db: &TestDb, id: Uuid) -> String {
+        sqlx::query_scalar("SELECT name FROM rollouts WHERE id = $1")
+            .bind(id)
+            .fetch_one(&db.pool)
+            .await
+            .expect("name")
+    }
+
+    #[tokio::test]
+    async fn an_unstarted_rollout_serves_its_baseline_when_named() {
+        let Some(db) = TestDb::new().await else {
+            return;
+        };
+        let id = db.seed_rollout("created", 0.0).await;
+        let name = name_of(&db, id).await;
+
+        let cache = fetch_active_rollout(&db.pool).await.expect("fetch");
+        // Default traffic is untouched until the canary opens...
+        assert!(cache.active_for("default").is_none());
+        // ...but a client that names it gets it, at 0% candidate: baseline.
+        let named = cache
+            .named_for("default", &name)
+            .expect("reachable by name");
+        assert_eq!(named.rollout_id, id);
+        assert_eq!(named.candidate_weight, 0.0);
+        assert!(!named.started);
+    }
+
+    #[tokio::test]
+    async fn a_rollout_is_addressable_by_id_or_name() {
+        let Some(db) = TestDb::new().await else {
+            return;
+        };
+        let older = db.seed_rollout("canary", 0.2).await;
+        let newer = db.seed_rollout("canary", 0.5).await;
+        let cache = fetch_active_rollout(&db.pool).await.expect("fetch");
+
+        // The older rollout, by name — the header used to accept only UUIDs
+        // and send a name to whichever rollout was newest.
+        let by_name = cache
+            .named_for("default", &name_of(&db, older).await)
+            .unwrap();
+        assert_eq!(by_name.rollout_id, older);
+        let by_id = cache.named_for("default", &older.to_string()).unwrap();
+        assert_eq!(by_id.rollout_id, older);
+        assert_eq!(cache.active_for("default").unwrap().rollout_id, newer);
+        assert!(cache.named_for("default", "no-such-rollout").is_none());
+    }
+
+    #[tokio::test]
+    async fn a_rollout_newer_than_the_cache_is_found_in_the_database() {
+        // The cache refreshes every 5s; a request naming a rollout created a
+        // moment ago must not fall through to unrouted passthrough.
+        let Some(db) = TestDb::new().await else {
+            return;
+        };
+        let id = db.seed_rollout("canary", 0.1).await;
+        let name = name_of(&db, id).await;
+
+        let found = fetch_named_rollout(&db.pool, "default", &name)
+            .await
+            .expect("found by name");
+        assert_eq!(found.rollout_id, id);
+        let found = fetch_named_rollout(&db.pool, "default", &id.to_string())
+            .await
+            .expect("found by id");
+        assert_eq!(found.rollout_id, id);
+        // Scoped to the tenant: another tenant naming it gets nothing.
+        assert!(fetch_named_rollout(&db.pool, "ten_someone_else", &name)
+            .await
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn a_version_without_a_url_routes_to_its_own_provider_not_openai() {
+        // A NULL provider_url used to become https://api.openai.com/v1.
+        let Some(db) = TestDb::new().await else {
+            return;
+        };
+        let id = db.seed_rollout("canary", 0.5).await;
+        sqlx::query(
+            "UPDATE providers SET base_url = 'https://api.anthropic.com/v1' \
+              WHERE id = (SELECT provider_id FROM versions v JOIN rollouts r \
+                           ON v.id = r.candidate_version_id WHERE r.id = $1)",
+        )
+        .bind(id)
+        .execute(&db.pool)
+        .await
+        .unwrap();
+
+        let cache = fetch_active_rollout(&db.pool).await.expect("fetch");
+        let r = cache.active_for("default").unwrap();
+        assert_eq!(r.candidate_provider_url, "https://api.anthropic.com/v1");
     }
 
     #[tokio::test]

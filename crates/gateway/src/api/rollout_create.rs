@@ -28,7 +28,7 @@ use axum::{
     Extension,
 };
 use repath_common::types::{
-    RolloutConfig, RolloutPolicy, RolloutStep, RolloutStrategy, VersionSpec,
+    RolloutConfig, RolloutPolicy, RolloutStep, RolloutStrategy, StrategyType, VersionSpec,
 };
 use serde_json::json;
 use sqlx::{Postgres, Row, Transaction};
@@ -51,6 +51,9 @@ pub async fn create_rollout(
     let tenant_id = auth.owning_tenant().to_string();
 
     if let Err(message) = validate_config(&config) {
+        return error(StatusCode::BAD_REQUEST, message);
+    }
+    if let Err(message) = check_providers(&config, custom_providers_allowed()) {
         return error(StatusCode::BAD_REQUEST, message);
     }
 
@@ -112,8 +115,9 @@ async fn insert_rollout(
 
     let mut tx = state.db_pool.begin().await?;
 
-    let baseline_provider = upsert_provider(&mut tx, &config.spec.baseline.provider).await?;
-    let candidate_provider = upsert_provider(&mut tx, &config.spec.candidate.provider).await?;
+    let baseline_provider = upsert_provider(&mut tx, config.spec.baseline.provider.trim()).await?;
+    let candidate_provider =
+        upsert_provider(&mut tx, config.spec.candidate.provider.trim()).await?;
 
     // Version names carry the rollout id so that recreating a same-named
     // rollout after deleting the old one cannot collide.
@@ -121,19 +125,19 @@ async fn insert_rollout(
     let baseline_version = insert_version(
         &mut tx,
         &format!("{name}-baseline-{suffix}"),
-        baseline_provider,
+        &baseline_provider,
         &config.spec.baseline,
     )
     .await?;
     let candidate_version = insert_version(
         &mut tx,
         &format!("{name}-candidate-{suffix}"),
-        candidate_provider,
+        &candidate_provider,
         &config.spec.candidate,
     )
     .await?;
 
-    let policy = serde_json::to_value(RolloutPolicy::default()).unwrap_or_else(|_| json!({}));
+    let policy = serde_json::to_value(derive_policy(config)).unwrap_or_else(|_| json!({}));
     let strategy = serde_json::to_value(build_strategy(config)).unwrap_or_else(|_| json!({}));
 
     sqlx::query(
@@ -191,11 +195,9 @@ async fn insert_rollout(
     Ok(rollout_id)
 }
 
-async fn upsert_provider(
-    tx: &mut Transaction<'_, Postgres>,
-    provider_name: &str,
-) -> Result<Uuid, sqlx::Error> {
-    let (base_url, provider_type) = match provider_name {
+/// Base URL and wire type for a provider the gateway knows by name.
+fn known_provider(name: &str) -> Option<(&'static str, &'static str)> {
+    Some(match name {
         "openai" => ("https://api.openai.com/v1", "openai"),
         "anthropic" => ("https://api.anthropic.com/v1", "anthropic"),
         "gemini" => (
@@ -203,18 +205,62 @@ async fn upsert_provider(
             "gemini",
         ),
         "openrouter" => ("https://openrouter.ai/api/v1", "openrouter"),
-        // Anything else is treated as a custom base URL. It is typed as
-        // `openai` because a custom endpoint is only usable here if it speaks
-        // the OpenAI wire format — that is what the proxy will send it.
-        other => (other, "openai"),
-    };
+        _ => return None,
+    })
+}
+
+/// Whether a rollout may name an arbitrary base URL as its provider.
+///
+/// Self-hosted: yes — the operator owns the network. Cloud: no, unless the
+/// operator opts in. The proxy forwards the client's method and path to that
+/// URL from inside our network, so a tenant who could choose it could aim the
+/// gateway at the instance metadata service (and its credentials), at Redis,
+/// or at anything else only the gateway can reach.
+fn custom_providers_allowed() -> bool {
+    !crate::tenant::middleware::cloud_mode()
+        || std::env::var("REPATH_ALLOW_CUSTOM_PROVIDERS")
+            .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
+            .unwrap_or(false)
+}
+
+fn check_providers(config: &RolloutConfig, custom_allowed: bool) -> Result<(), String> {
+    for (label, spec) in [
+        ("baseline", &config.spec.baseline),
+        ("candidate", &config.spec.candidate),
+    ] {
+        let p = spec.provider.trim();
+        if known_provider(p).is_some() {
+            continue;
+        }
+        if !custom_allowed {
+            return Err(format!(
+                "The {label} provider must be one of openai, anthropic, gemini or openrouter \
+                 (got '{p}'). OpenRouter reaches most other models; custom endpoints are \
+                 available on self-hosted Repath."
+            ));
+        }
+        if !(p.starts_with("https://") || p.starts_with("http://")) {
+            return Err(format!(
+                "The {label} provider '{p}' is neither a known provider nor an http(s) URL."
+            ));
+        }
+    }
+    Ok(())
+}
+
+async fn upsert_provider(
+    tx: &mut Transaction<'_, Postgres>,
+    provider_name: &str,
+) -> Result<(Uuid, String), sqlx::Error> {
+    let (base_url, provider_type) =
+        known_provider(provider_name).unwrap_or((provider_name, "openai"));
 
     let row = sqlx::query(
         r#"
         INSERT INTO providers (id, name, base_url, api_key_encrypted, provider_type)
         VALUES ($1, $2, $3, 'CONFIGURED_VIA_GATEWAY', $4)
         ON CONFLICT (name) DO UPDATE SET updated_at = NOW()
-        RETURNING id
+        RETURNING id, base_url
         "#,
     )
     .bind(Uuid::new_v4())
@@ -224,13 +270,13 @@ async fn upsert_provider(
     .fetch_one(&mut **tx)
     .await?;
 
-    Ok(row.get("id"))
+    Ok((row.try_get("id")?, row.try_get("base_url")?))
 }
 
 async fn insert_version(
     tx: &mut Transaction<'_, Postgres>,
     name: &str,
-    provider_id: Uuid,
+    (provider_id, provider_url): &(Uuid, String),
     spec: &VersionSpec,
 ) -> Result<Uuid, sqlx::Error> {
     let version_id = Uuid::new_v4();
@@ -238,13 +284,18 @@ async fn insert_version(
 
     sqlx::query(
         r#"
-        INSERT INTO versions (id, name, provider_id, model, prompt_template, parameters)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO versions (id, name, provider_id, provider_url, model, prompt_template, parameters)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         "#,
     )
     .bind(version_id)
     .bind(name)
     .bind(provider_id)
+    // The router reads this column on the hot path. It was never written, and
+    // the router defaulted a NULL to OpenAI — so every rollout created here
+    // sent its traffic to api.openai.com whatever provider it named, and
+    // every Anthropic, Gemini and OpenRouter rollout failed.
+    .bind(provider_url)
     .bind(&spec.model)
     .bind(spec.prompt.system.as_deref())
     .bind(&parameters)
@@ -301,6 +352,66 @@ fn parse_duration_secs(s: &str) -> Option<u32> {
 
 /// Reject configurations that would produce a rollout the controller cannot
 /// drive. Messages are written for the person who wrote the config.
+/// The thresholds the controller will actually decide with.
+///
+/// The controller reads `rollouts.policy` and nothing else. This used to be
+/// `RolloutPolicy::default()` regardless of the request, so the dashboard's
+/// "roll back below" and per-step "minimum quality" fields — and the same
+/// keys in YAML — were stored and then ignored. Worse, the form pre-filled a
+/// 0.8 gate while the controller silently required 0.9, so a candidate
+/// scoring 0.85 held forever with its owner believing the gate was met.
+///
+/// Precedence, most specific first: the rollback trigger and step gates, then
+/// an explicit `spec.policy`, then defaults. The controller applies one
+/// advance threshold to every step, so differing step gates resolve to the
+/// strictest — it may hold longer than one step asked, never advance sooner.
+fn derive_policy(config: &RolloutConfig) -> RolloutPolicy {
+    let mut policy = config.spec.policy.clone().unwrap_or_default();
+
+    if let Some(t) = config
+        .spec
+        .strategy
+        .rollback
+        .trigger
+        .get("quality_score")
+        .and_then(|e| parse_threshold(e))
+    {
+        policy.rollback_threshold = t;
+    }
+
+    // `error_rate: "> 0.10"` in the rollback trigger is the error ceiling the
+    // controller holds the candidate to, for advancing and for rolling back.
+    if let Some(t) = config
+        .spec
+        .strategy
+        .rollback
+        .trigger
+        .get("error_rate")
+        .and_then(|e| parse_threshold(e))
+    {
+        policy.max_error_rate = t;
+    }
+
+    if let Some(t) = config
+        .spec
+        .strategy
+        .steps
+        .iter()
+        .filter_map(|s| s.gate.get("quality_score").and_then(|e| parse_threshold(e)))
+        .reduce(f64::max)
+    {
+        policy.advance_threshold = t;
+    }
+
+    policy
+}
+
+/// The number in a gate expression like `">= 0.8"`, `"<0.7"` or `"0.75"`.
+fn parse_threshold(expr: &str) -> Option<f64> {
+    let n = expr.trim().trim_start_matches(['<', '>', '=', ' ']).trim();
+    n.parse::<f64>().ok().filter(|v| v.is_finite())
+}
+
 fn validate_config(config: &RolloutConfig) -> Result<(), String> {
     let name = config.metadata.name.trim();
     if name.is_empty() {
@@ -315,6 +426,19 @@ fn validate_config(config: &RolloutConfig) -> Result<(), String> {
     {
         return Err(
             "Rollout name may contain only letters, numbers, hyphens and underscores.".into(),
+        );
+    }
+
+    // Only canary is implemented end to end. Shadow and blue-green parse, but
+    // nothing downstream treats them differently, so they ran as a canary —
+    // and shadow's whole promise is that users never see the candidate. A
+    // customer choosing it for zero risk got real exposure instead. Refuse
+    // until they exist, rather than quietly doing something else.
+    if !matches!(config.spec.strategy.strategy_type, StrategyType::Canary) {
+        return Err(
+            "Only canary rollouts are available today. Shadow and blue-green are on the roadmap \
+             — use `type: canary` with a small first step (e.g. 5%) to limit exposure."
+                .into(),
         );
     }
 
@@ -366,6 +490,29 @@ fn validate_config(config: &RolloutConfig) -> Result<(), String> {
 
     validate_version("baseline", &config.spec.baseline)?;
     validate_version("candidate", &config.spec.candidate)?;
+
+    // Validate what will actually be stored, after the gates are applied.
+    let policy = derive_policy(config);
+    for (label, v) in [
+        ("rollback threshold", policy.rollback_threshold),
+        ("quality gate", policy.advance_threshold),
+    ] {
+        if !(0.0..=1.0).contains(&v) {
+            return Err(format!(
+                "The {label} must be between 0 and 1 — scores are 0–1 (got {v})."
+            ));
+        }
+    }
+    if policy.rollback_threshold >= policy.advance_threshold {
+        return Err(format!(
+            "The rollback threshold ({}) must be below the quality gate ({}); otherwise every \
+             score that is good enough to advance is also bad enough to roll back.",
+            policy.rollback_threshold, policy.advance_threshold
+        ));
+    }
+    if policy.min_samples == 0 {
+        return Err("min_samples must be at least 1 — a decision needs evidence.".into());
+    }
 
     Ok(())
 }
@@ -443,8 +590,145 @@ mod tests {
                 },
                 evaluation: vec![],
                 routing: Default::default(),
+                policy: None,
             },
         }
+    }
+
+    fn gated(gates: &[&str], rollback: Option<&str>) -> RolloutConfig {
+        let weights = [10u8, 50, 100];
+        let steps = gates
+            .iter()
+            .zip(weights.iter().skip(weights.len() - gates.len()))
+            .map(|(g, w)| StepSpec {
+                weight: *w,
+                duration: None,
+                gate: HashMap::from([("quality_score".to_string(), g.to_string())]),
+            })
+            .collect();
+        let mut c = config_with("gated", steps);
+        if let Some(r) = rollback {
+            c.spec
+                .strategy
+                .rollback
+                .trigger
+                .insert("quality_score".into(), r.into());
+        }
+        c
+    }
+
+    #[test]
+    fn the_customers_thresholds_are_the_ones_stored() {
+        // The dashboard sends these. They used to be stored and ignored, with
+        // the controller deciding on 0.9 / 0.7 regardless.
+        let p = derive_policy(&gated(&[">= 0.8", ">= 0.8"], Some("< 0.6")));
+        assert_eq!(p.advance_threshold, 0.8);
+        assert_eq!(p.rollback_threshold, 0.6);
+    }
+
+    #[test]
+    fn differing_step_gates_resolve_to_the_strictest() {
+        // One threshold covers every step, so it must never advance on
+        // quality lower than any step asked for.
+        let p = derive_policy(&gated(&[">= 0.75", ">= 0.85", ">=0.8"], None));
+        assert_eq!(p.advance_threshold, 0.85);
+    }
+
+    #[test]
+    fn explicit_policy_supplies_what_gates_do_not() {
+        let mut c = gated(&[">= 0.8"], None);
+        c.spec.policy = Some(RolloutPolicy {
+            min_samples: 10,
+            ..Default::default()
+        });
+        let p = derive_policy(&c);
+        assert_eq!(p.min_samples, 10);
+        assert_eq!(
+            p.advance_threshold, 0.8,
+            "the gate still wins over the policy default"
+        );
+    }
+
+    #[test]
+    fn no_gates_keeps_the_defaults() {
+        let p = derive_policy(&valid());
+        assert_eq!(
+            p.advance_threshold,
+            RolloutPolicy::default().advance_threshold
+        );
+        assert_eq!(
+            p.rollback_threshold,
+            RolloutPolicy::default().rollback_threshold
+        );
+    }
+
+    #[test]
+    fn rejects_a_rollback_threshold_at_or_above_the_gate() {
+        let c = gated(&[">= 0.7"], Some("< 0.8"));
+        assert!(validate_config(&c)
+            .unwrap_err()
+            .contains("must be below the quality gate"));
+    }
+
+    #[test]
+    fn rejects_out_of_range_thresholds() {
+        let c = gated(&[">= 80"], None);
+        assert!(validate_config(&c).unwrap_err().contains("between 0 and 1"));
+    }
+
+    #[test]
+    fn rejects_strategies_that_are_not_implemented() {
+        // Shadow used to run as a canary, serving the candidate to real users.
+        let mut c = valid();
+        c.spec.strategy.strategy_type = StrategyType::Shadow;
+        assert!(validate_config(&c).unwrap_err().contains("Only canary"));
+    }
+
+    #[test]
+    fn rollback_error_rate_sets_the_ceiling() {
+        let mut c = valid();
+        c.spec
+            .strategy
+            .rollback
+            .trigger
+            .insert("error_rate".into(), "> 0.10".into());
+        assert_eq!(derive_policy(&c).max_error_rate, 0.10);
+    }
+
+    #[test]
+    fn cloud_refuses_arbitrary_provider_urls() {
+        // The proxy forwards the client's method and path to this URL from
+        // inside our network: the metadata service is one request away.
+        let mut c = valid();
+        c.spec.candidate.provider = "http://169.254.169.254".into();
+        let err = check_providers(&c, false).unwrap_err();
+        assert!(err.contains("must be one of"), "{err}");
+    }
+
+    #[test]
+    fn named_providers_are_always_allowed() {
+        for p in ["openai", "anthropic", "gemini", "openrouter"] {
+            let mut c = valid();
+            c.spec.candidate.provider = p.into();
+            assert!(check_providers(&c, false).is_ok(), "{p}");
+        }
+    }
+
+    #[test]
+    fn self_hosted_may_use_a_custom_endpoint_but_it_must_be_a_url() {
+        let mut c = valid();
+        c.spec.candidate.provider = "https://llm.internal.example/v1".into();
+        assert!(check_providers(&c, true).is_ok());
+        c.spec.candidate.provider = "my-llm".into();
+        assert!(check_providers(&c, true).is_err());
+    }
+
+    #[test]
+    fn parses_gate_expressions() {
+        assert_eq!(parse_threshold(">= 0.8"), Some(0.8));
+        assert_eq!(parse_threshold("<0.7"), Some(0.7));
+        assert_eq!(parse_threshold("0.75"), Some(0.75));
+        assert_eq!(parse_threshold(">= high"), None);
     }
 
     fn valid() -> RolloutConfig {

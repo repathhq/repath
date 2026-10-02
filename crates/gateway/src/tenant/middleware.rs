@@ -52,7 +52,7 @@ pub const ACT_AS_HEADER: &str = "x-repath-act-as-tenant";
 /// In cloud mode an unauthenticated proxy request is rejected. Self-hosted
 /// installs (the default) keep working with no key at all, attributed to the
 /// `default` tenant, so the open-source path stays a one-line base URL change.
-fn cloud_mode() -> bool {
+pub(crate) fn cloud_mode() -> bool {
     std::env::var("REPATH_CLOUD_MODE")
         .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
         .unwrap_or(false)

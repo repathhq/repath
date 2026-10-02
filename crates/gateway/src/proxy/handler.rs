@@ -192,11 +192,18 @@ async fn proxy_inner(
     // X-Repath-Rollout header, honour it; otherwise use the first active
     // rollout for the tenant (round-robin across features is handled by the
     // caller passing the rollout ID explicitly).
-    let requested_rollout_id = parts
+    //
+    // The header takes a rollout id or its name. It used to accept only a
+    // UUID and silently drop anything else — so a client sending the name
+    // (the natural thing, and what the example app does) was routed to
+    // whichever rollout happened to be newest.
+    let requested_rollout = parts
         .headers
         .get("x-repath-rollout")
         .and_then(|v| v.to_str().ok())
-        .and_then(|s| uuid::Uuid::parse_str(s).ok());
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned);
 
     // ── Conditional routing rules ─────────────────────────────────────────
     //
@@ -212,16 +219,33 @@ async fn proxy_inner(
         None
     };
 
+    // A rollout fetched from the database on a cache miss. Owned here so the
+    // borrow below can point at either it or a cached entry.
+    let mut fetched: Option<crate::router::ActiveRollout> = None;
+    if entitled && matched_rule.is_none() {
+        if let Some(key) = requested_rollout.as_deref() {
+            if cache.named_for(&tenant_id_for_routing, key).is_none() {
+                fetched =
+                    crate::router::fetch_named_rollout(&state.db_pool, &tenant_id_for_routing, key)
+                        .await;
+                if fetched.is_none() {
+                    warn!(
+                        tenant_id = %tenant_id_for_routing,
+                        rollout = %key,
+                        "X-Repath-Rollout names no rollout for this tenant — using default routing"
+                    );
+                }
+            }
+        }
+    }
+
     let active_rollout = if !entitled || matched_rule.is_some() {
         None
     } else {
-        requested_rollout_id
-            .and_then(|rid| {
-                cache
-                    .all_for(&tenant_id_for_routing)
-                    .iter()
-                    .find(|r| r.rollout_id == rid)
-            })
+        requested_rollout
+            .as_deref()
+            .and_then(|key| cache.named_for(&tenant_id_for_routing, key))
+            .or(fetched.as_ref())
             .or_else(|| cache.active_for(&tenant_id_for_routing))
     };
 
@@ -250,7 +274,7 @@ async fn proxy_inner(
         }
         (None, None) => {
             // No rule and no active rollout — pass straight through.
-            let version = default_version(&state)?;
+            let version = default_version(&state, requested_model(&raw_body).as_deref())?;
             (version, None)
         }
     };
@@ -468,15 +492,51 @@ fn active_version(rollout: &ActiveRollout, assignment: VersionAssignment) -> Req
     }
 }
 
-fn default_version(state: &AppState) -> Result<RequestVersion> {
-    // If a provider is configured in repath.toml, use it.
-    // Otherwise fall back to OpenAI (the client's Authorization header passes through).
-    let provider_url = state
-        .config
-        .providers
-        .iter()
-        .next()
-        .map(|(_, p)| p.base_url.clone())
+/// The `model` a client asked for, if the body is JSON and names one.
+fn requested_model(body: &[u8]) -> Option<String> {
+    serde_json::from_slice::<serde_json::Value>(body)
+        .ok()?
+        .get("model")?
+        .as_str()
+        .map(str::to_owned)
+}
+
+/// The provider a model id belongs to, when the id alone says so.
+///
+/// With no rollout and no rule, a request used to go to OpenAI whatever it
+/// asked for, so `model: "claude-sonnet-5-5"` — the docs' own example —
+/// failed at OpenAI until the customer had created a rollout. The model name
+/// is unambiguous for these families; anything else keeps the default.
+fn provider_for_model(model: &str) -> Option<&'static str> {
+    let m = model.to_ascii_lowercase();
+    if m.contains('/') {
+        // Vendor-namespaced ("anthropic/claude-…", "x-ai/grok-…") is
+        // OpenRouter's id format.
+        Some("https://openrouter.ai/api/v1")
+    } else if m.starts_with("claude") {
+        Some("https://api.anthropic.com/v1")
+    } else if m.starts_with("gemini") {
+        Some("https://generativelanguage.googleapis.com/v1beta/openai")
+    } else {
+        None
+    }
+}
+
+fn default_version(state: &AppState, model: Option<&str>) -> Result<RequestVersion> {
+    // The model's own provider first; then a provider configured in
+    // repath.toml; then OpenAI. The client's Authorization header passes
+    // through, translated for Anthropic.
+    let provider_url = model
+        .and_then(provider_for_model)
+        .map(str::to_owned)
+        .or_else(|| {
+            state
+                .config
+                .providers
+                .iter()
+                .next()
+                .map(|(_, p)| p.base_url.clone())
+        })
         .unwrap_or_else(|| "https://api.openai.com/v1".to_string());
 
     Ok(RequestVersion {
@@ -954,6 +1014,30 @@ fn error_response(status: u16, message: String) -> Response<Body> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn unrouted_requests_go_to_the_models_own_provider() {
+        assert_eq!(
+            provider_for_model("claude-sonnet-5-5"),
+            Some("https://api.anthropic.com/v1")
+        );
+        assert_eq!(
+            provider_for_model("gemini-3.8-flash"),
+            Some("https://generativelanguage.googleapis.com/v1beta/openai")
+        );
+        assert_eq!(
+            provider_for_model("x-ai/grok-4.7"),
+            Some("https://openrouter.ai/api/v1")
+        );
+        // OpenAI and unknown ids keep the configured default.
+        assert_eq!(provider_for_model("gpt-5.4-mini"), None);
+        assert_eq!(provider_for_model("o4-mini"), None);
+        assert_eq!(
+            requested_model(br#"{"model":"claude-haiku-4-5","messages":[]}"#).as_deref(),
+            Some("claude-haiku-4-5")
+        );
+        assert_eq!(requested_model(b"not json"), None);
+    }
     use super::*;
 
     #[test]

@@ -81,6 +81,8 @@ mod tests {
 
     fn make_rollout(weight: f64) -> ActiveRollout {
         ActiveRollout {
+            name: "test".into(),
+            started: true,
             rollout_id: Uuid::new_v4(),
             baseline_version_id: Uuid::new_v4(),
             candidate_version_id: Uuid::new_v4(),
