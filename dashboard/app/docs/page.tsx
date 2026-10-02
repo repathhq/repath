@@ -246,7 +246,7 @@ const result = streamText({
           </p>
           <Code lang="typescript">{`// OpenRouter — model ids are namespaced
 const result = streamText({
-  model: repath("anthropic/claude-3.5-sonnet"),
+  model: repath("anthropic/claude-sonnet-5-5"),
   prompt: "…",
 });`}</Code>
           <Note type="info">
@@ -278,28 +278,22 @@ spec:
   strategy:
     type: canary
     steps:
-      - weight: 0.05   # 5% to candidate
-        duration: 5m
+      - weight: 5        # percent of traffic on the candidate
+        duration: 5m     # minimum time at this step
         gate: { quality_score: ">= 0.80" }
-      - weight: 0.25
+      - weight: 25
         duration: 10m
-        gate: { quality_score: ">= 0.82" }
-      - weight: 1.0     # 100% promote
+        gate: { quality_score: ">= 0.80" }
+      - weight: 100      # promoted
 
     rollback:
       trigger: { quality_score: "< 0.70" }
-      action: instant
+      action: rollback
 
-  evaluation:
-    - type: llm_judge
-      model: gpt-4o-mini
-      criteria:
-        - name: helpfulness
-          prompt: "Rate 1-5: Does the response give actionable help?"
-          weight: 0.6
-        - name: clarity
-          prompt: "Rate 1-5: Is the response clear and well-structured?"
-          weight: 0.4`}</Code>
+  # Optional. Decisions wait for this many judged responses on the
+  # candidate (default 100) — lower it while your traffic is light.
+  policy:
+    min_samples: 30`}</Code>
 
           {/* ────────────────────────────────────────── */}
           <H2 id="integrate">Integration</H2>
@@ -320,7 +314,7 @@ spec:
                   ["Anthropic", "https://api.tryrepath.com/v1", "Request translation automatic"],
                   ["Google Gemini", "https://api.tryrepath.com/v1", "Via OpenAI-compat endpoint"],
                   ["OpenRouter", "https://api.tryrepath.com/v1", "Auto-failover hub"],
-                  ["Any OpenAI-compat", "https://api.tryrepath.com/v1", "Works with any compatible API"],
+                  ["Other models", "https://api.tryrepath.com/v1", "Through OpenRouter (e.g. x-ai/grok-4.7); custom endpoints on self-hosted Repath"],
                 ].map(([p, u, n]) => (
                   <tr key={p} className="hover:bg-gray-50">
                     <td className="px-4 py-2.5 border border-gray-200 font-medium text-gray-800">{p}</td>
@@ -334,7 +328,12 @@ spec:
 
           <H3>Specifying which model to use</H3>
           <p className="text-[14px] text-gray-600 mb-2">
-            Pass the model in the request body as normal. For Anthropic, use the Claude model name — Repath auto-translates the request format:
+            Pass the model in the request body as normal. Repath sends it to the model&apos;s own provider:
+            <code className="bg-gray-100 px-1 rounded font-mono text-[13px]">claude-*</code> to Anthropic (with the request
+            format translated), <code className="bg-gray-100 px-1 rounded font-mono text-[13px]">gemini-*</code> to Google, a
+            vendor-prefixed id like <code className="bg-gray-100 px-1 rounded font-mono text-[13px]">x-ai/grok-4.7</code> to
+            OpenRouter, and everything else to OpenAI. Your provider key goes in{" "}
+            <code className="bg-gray-100 px-1 rounded font-mono text-[13px]">Authorization</code> as usual.
           </p>
           <Code lang="python">{`# OpenAI model
 response = client.chat.completions.create(
@@ -344,9 +343,24 @@ response = client.chat.completions.create(
 
 # Anthropic model — same syntax, Repath translates
 response = client.chat.completions.create(
-    model="claude-3-5-sonnet-20241022",
+    model="claude-sonnet-5-5",
     messages=[{"role": "user", "content": "Hello"}]
 )`}</Code>
+
+          <H3>Sending traffic to a rollout</H3>
+          <p className="text-[14px] text-gray-600 mb-2">
+            Name the rollout in the <code className="bg-gray-100 px-1 rounded font-mono text-[13px]">X-Repath-Rollout</code>{" "}
+            header, by name or id. Repath then chooses the baseline or the candidate for each request, and the rollout&apos;s
+            own model and prompt apply. Without the header, a request uses your most recently started rollout, if any.
+          </p>
+          <Code lang="typescript">{`const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,          // your provider key
+  baseURL: "https://api.tryrepath.com/v1",
+  defaultHeaders: {
+    "X-Repath-Key": process.env.REPATH_KEY!,   // your Repath key
+    "X-Repath-Rollout": "checkout-assistant",  // which experiment
+  },
+});`}</Code>
 
           {/* ════ CORE CONCEPTS ════ */}
           <H2 id="concepts">Core Concepts</H2>
@@ -407,48 +421,47 @@ response = client.chat.completions.create(
 
           <H2 id="gates">Quality Gates</H2>
           <p className="text-[14px] text-gray-600 mb-2">
-            Each step in a rollout has a gate that must pass before traffic advances. Gates are evaluated every 30 seconds against the rolling 10-minute average.
+            The controller checks every rollout every 30 seconds against the last 10 minutes of judged traffic. It advances
+            to the next step when the candidate&apos;s judged quality meets the gate, its error rate is under the ceiling and
+            the step&apos;s minimum duration has passed. It rolls back the moment quality falls below the rollback trigger.
           </p>
           <Code lang="yaml">{`strategy:
+  type: canary
   steps:
-    - weight: 0.05
-      duration: 5m
+    - weight: 5                    # percent of traffic on the candidate
+      duration: 5m                 # minimum time at this step
       gate:
-        quality_score: ">= 0.80"   # Must score ≥ 0.80 avg over last 10m
-        error_rate: "< 0.05"       # Less than 5% errors
+        quality_score: ">= 0.80"   # judged quality needed to advance
 
-    - weight: 0.25
+    - weight: 25
       duration: 10m
       gate:
-        quality_score: ">= 0.82"
+        quality_score: ">= 0.80"
 
-    - weight: 1.0                  # Final step — no gate needed
+    - weight: 100                  # final step: promoted
 
   rollback:
     trigger:
-      quality_score: "< 0.70"      # Instant rollback if below this
-    action: instant                # instant | gradual
-    cooldown: 10m                  # Wait 10m before trying again`}</Code>
+      quality_score: "< 0.70"      # roll back below this
+      error_rate: "> 0.05"         # or above this error rate (default 5%)
+    action: rollback`}</Code>
+          <Note type="info">
+            One gate applies to every step. If your steps set different values, the strictest is used, so a rollout can
+            hold longer than one step asked for but never advance on lower quality than any step allowed.
+          </Note>
           <Note type="warning">
-            <strong>Minimum samples:</strong> The controller requires at least 10 evaluated responses before making any advance/rollback decision. This prevents false positives from tiny sample sizes.
+            <strong>Minimum samples:</strong> no decision is made until the candidate has <strong>100 judged
+            responses</strong> in the window, so a handful of answers can never trigger a rollback. Lower it with{" "}
+            <code className="bg-gray-100 px-1 rounded font-mono text-[13px]">policy.min_samples</code> while traffic is light.
           </Note>
 
           <H2 id="shadow">Shadow Mode</H2>
-          <p className="text-[14px] text-gray-600 mb-4">
-            Shadow mode runs the candidate <em>in parallel</em> without serving its responses to users. All requests go to baseline (users see nothing different), but the candidate also processes every request for evaluation purposes.
-          </p>
-          <p className="text-[14px] text-gray-600 mb-2">Use shadow mode when:</p>
-          <ul className="list-disc list-inside space-y-1 text-[14px] text-gray-600 ml-2 mb-4">
-            <li>You want to evaluate a new prompt with zero risk before any canary exposure</li>
-            <li>Your model is expensive — you need to validate cost before scaling</li>
-            <li>You&apos;re testing a significantly different prompt that might confuse users if they see it</li>
-          </ul>
-          <Code lang="yaml">{`strategy:
-  type: shadow   # shadow mode — no user impact
-  duration: 30m
-  gate:
-    quality_score: ">= 0.85"
-  # After shadow completes successfully, can be manually promoted to canary`}</Code>
+          <Note type="info">
+            Shadow mode, where the candidate answers every request in parallel but no user ever sees its output, is on the
+            roadmap. Until it ships, the API rejects <code className="bg-gray-100 px-1 rounded font-mono text-[13px]">type: shadow</code>{" "}
+            rather than silently running a canary. For the lowest-risk start today, use a canary with a small first step,
+            such as 1% or 5%.
+          </Note>
 
           {/* ════ LLM-AS-JUDGE ════ */}
           <H2 id="eval">LLM-as-Judge: How It Works</H2>
@@ -462,54 +475,52 @@ response = client.chat.completions.create(
           </div>
           <p className="text-[14px] text-gray-500">Evaluation latency: ~120ms. User-visible latency added: 0ms.</p>
 
-          <H2 id="criteria">Writing Evaluation Criteria</H2>
-          <p className="text-[14px] text-gray-600 mb-2">
-            Criteria are plain-English prompts sent to the judge model. The judge rates each criterion 1–5, which is normalized to 0–1.
+          <H2 id="criteria">Evaluation Criteria</H2>
+          <p className="text-[14px] text-gray-600 mb-3">
+            The judge scores every sampled response against three criteria, each rated 1–5 and normalized to 0–1. Each
+            score comes with a one-sentence reason, which you can read for any request in the request log.
           </p>
-          <Code lang="yaml">{`evaluation:
-  - type: llm_judge
-    model: gpt-4o-mini    # Fast and cheap — ideal for judging
-    sample_rate: 1.0       # Score 100% of responses (or set 0.5 for 50%)
-    criteria:
-      - name: helpfulness
-        prompt: "Rate 1-5: Does this response give specific, actionable help?"
-        weight: 0.5
-
-      - name: accuracy
-        prompt: "Rate 1-5: Is the information factually correct and complete?"
-        weight: 0.3
-
-      - name: tone
-        prompt: "Rate 1-5: Is the tone professional and appropriate?"
-        weight: 0.2`}</Code>
-          <Note type="info">
-            <strong>Cost tip:</strong> gpt-4o-mini costs ~$0.14 per 1,000 evaluations. For 10,000 requests/day at 100% sample rate, evaluation costs ~$1.40/day.
-          </Note>
-
-          <H2 id="judge-models">Supported Judge Models</H2>
           <div className="overflow-x-auto my-4">
             <table className="w-full text-[14px] border-collapse">
               <thead><tr className="bg-gray-50">
-                <th className="text-left px-4 py-2.5 font-semibold text-gray-700 border border-gray-200">Model</th>
-                <th className="text-left px-4 py-2.5 font-semibold text-gray-700 border border-gray-200">Quality</th>
-                <th className="text-left px-4 py-2.5 font-semibold text-gray-700 border border-gray-200">Cost / 1K evals</th>
-                <th className="text-left px-4 py-2.5 font-semibold text-gray-700 border border-gray-200">Recommended for</th>
+                {["Criterion", "Weight", "What the judge is asked"].map(h => (
+                  <th key={h} className="text-left px-4 py-2.5 font-semibold text-gray-700 border border-gray-200">{h}</th>
+                ))}
               </tr></thead>
               <tbody>
                 {[
-                  ["gpt-4o-mini", "Good", "~$0.14", "Default — best cost/quality"],
-                  ["gpt-4o", "Excellent", "~$2.00", "High-stakes rollouts"],
-                  ["claude-3-5-haiku", "Good", "~$0.20", "Anthropic-only stacks"],
-                  ["claude-3-5-sonnet", "Excellent", "~$3.00", "Complex evaluation criteria"],
-                  ["gemini-1.5-flash", "Good", "~$0.10", "Budget evaluation"],
+                  ["helpfulness", "0.5", "Does the response directly answer the question with specific, actionable information?"],
+                  ["accuracy", "0.3", "Is the response factually correct and free from hallucinations?"],
+                  ["clarity", "0.2", "Is the response clear, well organized and easy to follow?"],
                 ].map(r => (
                   <tr key={r[0]} className="hover:bg-gray-50">
-                    {r.map((cell, i) => <td key={i} className={`px-4 py-2.5 border border-gray-200 ${i===0?"font-mono text-[13px] text-violet-600":"text-gray-600"}`}>{cell}</td>)}
+                    {r.map((c, i) => (
+                      <td key={i} className={`px-4 py-2.5 border border-gray-200 ${i === 0 ? "font-mono text-[13px]" : ""}`}>{c}</td>
+                    ))}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          <Note type="info">
+            Custom criteria per rollout are on the roadmap. A fixed rubric means a quality score means the same thing
+            across all of your rollouts.
+          </Note>
+          <Note type="info">
+            <strong>Cost tip:</strong> judging costs roughly $0.15 per 1,000 evaluated responses. At 10,000 requests a day,
+            that is about $1.50 a day.
+          </Note>
+
+          <H2 id="judge-models">The Judge Model</H2>
+          <p className="text-[14px] text-gray-600 mb-3">
+            Every judged request is scored by <code className="bg-gray-100 px-1 rounded font-mono text-[13px]">gpt-4o-mini</code>,
+            the same judge for every account, so a score of 0.82 means the same thing in every rollout you run. The judge
+            is independent of the models you are comparing: your baseline and candidate can be any provider and any model.
+          </p>
+          <Note type="info">
+            Choosing your own judge model is on the roadmap. Until then, scores are comparable across all your rollouts,
+            which is the property progressive delivery depends on.
+          </Note>
 
           <H2 id="scoring">Composite Scoring</H2>
           <p className="text-[14px] text-gray-600 mb-2">
@@ -520,9 +531,9 @@ response = client.chat.completions.create(
 Example:
   helpfulness: 0.85 × 0.5 = 0.425
   accuracy:    0.92 × 0.3 = 0.276
-  tone:        0.78 × 0.2 = 0.156
+  clarity:     0.78 × 0.2 = 0.156
   ─────────────────────────────────
-  composite:               0.857 → PASS (threshold: 0.80)`}</Code>
+  composite:               0.857 → meets a 0.80 gate`}</Code>
 
           {/* ════ AUTO-ROLLBACK ════ */}
           <H2 id="rollback-how">Auto-Rollback: How It Works</H2>
@@ -544,13 +555,15 @@ Example:
           <H2 id="rollback-config">Rollback Configuration</H2>
           <Code lang="yaml">{`rollback:
   trigger:
-    quality_score: "< 0.70"    # Rollback when avg drops below 0.70
-    error_rate: "> 0.10"       # Or when error rate > 10%
-  action: instant              # instant | gradual (gradual: stepwise reduction)
-  cooldown: 10m                # Don't attempt canary again for 10 minutes
-  notify:
-    slack: "#ai-deployments"   # Slack webhook (optional)
-    email: "team@company.com"  # Email alert (optional)`}</Code>
+    quality_score: "< 0.70"    # roll back when judged quality drops below 0.70
+    error_rate: "> 0.10"       # or when more than 10% of requests fail
+  action: rollback`}</Code>
+          <p className="text-[14px] text-gray-600 mt-3">
+            Rollback is immediate: within one controller cycle the candidate gets 0% of traffic, and every rollback is
+            recorded with the metrics that caused it. To be told when it happens, add a Slack webhook or email address in{" "}
+            <strong>Settings → Notifications</strong>, or a signed webhook in <strong>Settings → Webhooks</strong>. Those
+            apply to all of your rollouts.
+          </p>
 
           <H2 id="audit">Audit Trail</H2>
           <p className="text-[14px] text-gray-600 mb-4">
@@ -588,18 +601,41 @@ curl -H "Authorization: Bearer $REPATH_API_TOKEN" \\
           </Note>
 
           <H2 id="failover-config">Failover Configuration</H2>
-          <Code lang="yaml">{`providers:
-  primary:
-    provider: openai
-    model: gpt-4o-mini
-
-  fallback:
-    - provider: anthropic
-      model: claude-3-5-haiku-20241022
-    - provider: openrouter              # Catches everything else
-      api_key_env: OPENROUTER_API_KEY`}</Code>
+          <p className="text-[14px] text-gray-600 mb-3">
+            In <strong>Settings → Providers</strong>, save a key for each provider you want to fail over to, then order them
+            in the failover chain (up to four). When your primary returns a 5xx or 429, Repath retries once, then walks the
+            chain in order.
+          </p>
+          <p className="text-[14px] text-gray-600 mb-3">
+            A fallback provider cannot serve the model you asked the primary for, so Repath picks the current model of the
+            same size there. A nano request never starts billing at flagship rates, and a flagship request is never
+            answered by a nano model:
+          </p>
+          <div className="overflow-x-auto my-4">
+            <table className="w-full text-[14px] border-collapse">
+              <thead><tr className="bg-gray-50">
+                {["You asked for", "Anthropic fallback", "Gemini fallback", "OpenAI fallback"].map(h => (
+                  <th key={h} className="text-left px-4 py-2.5 font-semibold text-gray-700 border border-gray-200">{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {[
+                  ["A small model (mini, nano, lite, haiku)", "claude-haiku-4-5", "gemini-3.5-flash-lite", "gpt-5.4-mini"],
+                  ["A standard model", "claude-sonnet-5-5", "gemini-3.8-flash", "gpt-5.4"],
+                  ["A flagship (pro, opus, astra)", "claude-opus-5-5", "gemini-3.8-flash", "gpt-5.5"],
+                ].map(r => (
+                  <tr key={r[0]} className="hover:bg-gray-50">
+                    {r.map((c, i) => (
+                      <td key={i} className={`px-4 py-2.5 border border-gray-200 ${i ? "font-mono text-[13px]" : ""}`}>{c}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <p className="text-[14px] text-gray-600 mt-3">
-            Or set <code className="bg-gray-100 px-1 rounded font-mono text-[13px]">OPENROUTER_API_KEY</code> in your environment — Repath automatically adds OpenRouter as a last-resort fallback for any provider outage.
+            OpenRouter needs no mapping: Repath namespaces the model for it (<code className="bg-gray-100 px-1 rounded font-mono text-[13px]">gpt-5.4</code> becomes{" "}
+            <code className="bg-gray-100 px-1 rounded font-mono text-[13px]">openai/gpt-5.4</code>), which makes it a good last entry in the chain.
           </p>
 
           <H2 id="circuit">Circuit Breaker</H2>
