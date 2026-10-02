@@ -18,15 +18,9 @@ import Link from "next/link";
 import { api, type RolloutConfigInput } from "@/lib/api";
 import { AlertCircle, ArrowLeft, Plus, Trash2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import ModelPicker from "@/components/ModelPicker";
+import { DEFAULT_MODEL } from "@/lib/models";
 
-const MODELS = [
-  { provider: "openai", model: "gpt-4o" },
-  { provider: "openai", model: "gpt-4o-mini" },
-  { provider: "openai", model: "gpt-4-turbo" },
-  { provider: "anthropic", model: "claude-3-5-sonnet-20241022" },
-  { provider: "anthropic", model: "claude-3-5-haiku-20241022" },
-  { provider: "gemini", model: "gemini-1.5-pro" },
-];
 
 interface StepDraft {
   weight: number;
@@ -59,37 +53,13 @@ function Card({ title, desc, children }: { title: string; desc?: string; childre
   );
 }
 
-function ModelPicker({
-  value,
-  onChange,
-}: {
-  value: { provider: string; model: string };
-  onChange: (v: { provider: string; model: string }) => void;
-}) {
-  return (
-    <select
-      className={input}
-      value={`${value.provider}/${value.model}`}
-      onChange={(e) => {
-        const [provider, ...rest] = e.target.value.split("/");
-        onChange({ provider, model: rest.join("/") });
-      }}
-    >
-      {MODELS.map((m) => (
-        <option key={`${m.provider}/${m.model}`} value={`${m.provider}/${m.model}`}>
-          {m.provider} · {m.model}
-        </option>
-      ))}
-    </select>
-  );
-}
 
 export default function NewRolloutPage() {
   const router = useRouter();
 
   const [name, setName] = useState("");
-  const [baseline, setBaseline] = useState(MODELS[1]);
-  const [candidate, setCandidate] = useState(MODELS[1]);
+  const [baseline, setBaseline] = useState<{ provider: string; model: string }>(DEFAULT_MODEL);
+  const [candidate, setCandidate] = useState<{ provider: string; model: string }>(DEFAULT_MODEL);
   const [baselinePrompt, setBaselinePrompt] = useState("");
   const [candidatePrompt, setCandidatePrompt] = useState("");
   const [steps, setSteps] = useState<StepDraft[]>(DEFAULT_STEPS);
@@ -114,6 +84,10 @@ export default function NewRolloutPage() {
   /** Client-side checks that mirror the server's, for a faster, clearer error. */
   function validate(): string | null {
     if (!name.trim()) return "Give the rollout a name.";
+    // A custom model starts empty; sending "" would create a rollout whose
+    // every request fails at the provider.
+    if (!baseline.model) return "Enter the baseline model id.";
+    if (!candidate.model) return "Enter the candidate model id.";
     if (!/^[A-Za-z0-9_-]+$/.test(name.trim()))
       return "The name may contain only letters, numbers, hyphens and underscores.";
     if (!candidatePrompt.trim() && !baselinePrompt.trim())
@@ -214,7 +188,7 @@ export default function NewRolloutPage() {
           <div className="flex flex-col gap-4">
             <div>
               <label className={label}>Model</label>
-              <ModelPicker value={baseline} onChange={setBaseline} />
+              <ModelPicker className={input} value={baseline} onChange={setBaseline} ariaLabel="Baseline model" />
             </div>
             <div>
               <label className={label}>System prompt</label>
@@ -232,7 +206,7 @@ export default function NewRolloutPage() {
           <div className="flex flex-col gap-4">
             <div>
               <label className={label}>Model</label>
-              <ModelPicker value={candidate} onChange={setCandidate} />
+              <ModelPicker className={input} value={candidate} onChange={setCandidate} ariaLabel="Candidate model" />
             </div>
             <div>
               <label className={label}>System prompt</label>

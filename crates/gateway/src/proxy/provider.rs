@@ -137,8 +137,33 @@ pub fn normalize_headers(
 pub fn translate_request_body(body: &Bytes, provider: &Provider) -> Bytes {
     match provider {
         Provider::Anthropic => translate_to_anthropic(body),
+        // OpenAI-compatible on the wire, so only the model name needs to fit.
+        // Without this, failing over from OpenAI forwarded "gpt-4o" to Gemini
+        // or OpenRouter, which reject it with a 400 — and a 400 is not
+        // retried, so the failover that should have rescued the request
+        // turned a provider outage into a client error instead.
+        Provider::Gemini | Provider::OpenRouter | Provider::OpenAI => {
+            rewrite_model(body, |m| map_model_for(provider, m))
+        }
         _ => body.clone(),
     }
+}
+
+/// Replace the request's `model` with `f(model)`, leaving the body untouched
+/// when it is not JSON or the model is already right.
+fn rewrite_model(body: &Bytes, f: impl Fn(&str) -> String) -> Bytes {
+    let Ok(mut json) = serde_json::from_slice::<Value>(body) else {
+        return body.clone();
+    };
+    let Some(current) = json.get("model").and_then(|m| m.as_str()) else {
+        return body.clone();
+    };
+    let mapped = f(current);
+    if mapped == current {
+        return body.clone();
+    }
+    json["model"] = Value::String(mapped);
+    Bytes::from(serde_json::to_vec(&json).unwrap_or_else(|_| body.to_vec()))
 }
 
 /// Translate an OpenAI chat.completions request to Anthropic Messages format.
@@ -157,7 +182,7 @@ pub fn translate_request_body(body: &Bytes, provider: &Provider) -> Bytes {
 /// Anthropic format:
 /// ```json
 /// {
-///   "model": "claude-3-5-sonnet-20241022",
+///   "model": "claude-sonnet-5-5",
 ///   "messages": [{"role": "user", "content": "Hello"}],
 ///   "max_tokens": 256,
 ///   "temperature": 0.7,
@@ -180,8 +205,8 @@ fn translate_to_anthropic(body: &Bytes) -> Bytes {
 
     // Map model names: OpenAI → Anthropic equivalents
     if let Some(model) = json.get("model").and_then(|m| m.as_str()) {
-        let anthropic_model = map_model_to_anthropic(model);
-        json["model"] = Value::String(anthropic_model.to_string());
+        let anthropic_model = map_model_for(&Provider::Anthropic, model);
+        json["model"] = Value::String(anthropic_model);
     }
 
     // Ensure max_tokens is present (required by Anthropic, optional in OpenAI)
@@ -282,16 +307,103 @@ fn extract_system_from_messages(json: &mut Value) -> Option<String> {
     system_msg.get("content")?.as_str().map(str::to_string)
 }
 
-fn map_model_to_anthropic(openai_model: &str) -> &str {
-    // If the caller already specified a claude model, use it as-is
-    if openai_model.starts_with("claude") {
-        return openai_model;
+/// How capable a model is, as far as choosing a stand-in on another provider.
+///
+/// Failover has to send *some* model to the fallback provider, and the
+/// customer's choice of size is the one thing worth preserving: a request
+/// written for a nano model should not quietly start billing at Opus rates,
+/// and one written for a flagship should not be answered by a nano model.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Tier {
+    Small,
+    Standard,
+    Top,
+}
+
+fn tier(model: &str) -> Tier {
+    let m = model
+        .rsplit('/')
+        .next()
+        .unwrap_or(model)
+        .to_ascii_lowercase();
+    // Whole name segments, never substrings: "gemini" contains "mini", and a
+    // substring match filed every Gemini model as small.
+    let has = |words: &[&str]| m.split('-').any(|seg| words.contains(&seg));
+    if has(&["mini", "nano", "luna", "haiku", "lite"]) || m.starts_with("gpt-3.5") {
+        Tier::Small
+    } else if has(&["pro", "astra", "opus", "fable", "mythos"]) || m == "o1" {
+        Tier::Top
+    } else {
+        Tier::Standard
     }
-    // Map common OpenAI models to Anthropic equivalents
-    match openai_model {
-        "gpt-4o" | "gpt-4" | "gpt-4-turbo" => "claude-3-5-sonnet-20241022",
-        "gpt-4o-mini" | "gpt-3.5-turbo" => "claude-3-5-haiku-20241022",
-        _ => "claude-3-5-sonnet-20241022",
+}
+
+/// The model to send to `provider` for a request that named `model`.
+///
+/// A model that already belongs to the target provider passes through
+/// untouched — this runs on the primary request too, not only on failover.
+/// Stand-ins are current models: the previous table mapped everything to
+/// claude-3-5-sonnet and claude-3-5-haiku, both retired, so every OpenAI →
+/// Anthropic failover failed on arrival.
+fn map_model_for(provider: &Provider, model: &str) -> String {
+    let bare = model.rsplit('/').next().unwrap_or(model);
+    let is_openai = bare.starts_with("gpt-")
+        || bare.starts_with("chatgpt")
+        || bare.starts_with("o1")
+        || bare.starts_with("o3")
+        || bare.starts_with("o4");
+    match provider {
+        Provider::Anthropic => {
+            if bare.starts_with("claude") {
+                return bare.to_string();
+            }
+            match tier(model) {
+                Tier::Small => "claude-haiku-4-5",
+                Tier::Standard => "claude-sonnet-5-5",
+                Tier::Top => "claude-opus-5-5",
+            }
+            .to_string()
+        }
+        Provider::Gemini => {
+            if bare.starts_with("gemini") {
+                return bare.to_string();
+            }
+            match tier(model) {
+                Tier::Small => "gemini-3.5-flash-lite",
+                Tier::Standard | Tier::Top => "gemini-3.8-flash",
+            }
+            .to_string()
+        }
+        Provider::OpenAI => {
+            if is_openai {
+                return bare.to_string();
+            }
+            match tier(model) {
+                Tier::Small => "gpt-5.4-mini",
+                Tier::Standard => "gpt-5.4",
+                Tier::Top => "gpt-5.5",
+            }
+            .to_string()
+        }
+        // OpenRouter routes on vendor-namespaced ids ("openai/gpt-5.4"). A
+        // bare id is namespaced by family; an already-namespaced one, or one
+        // we cannot place, is left for OpenRouter to judge.
+        Provider::OpenRouter => {
+            if model.contains('/') {
+                return model.to_string();
+            }
+            let vendor = if is_openai {
+                "openai"
+            } else if bare.starts_with("claude") {
+                "anthropic"
+            } else if bare.starts_with("gemini") {
+                "google"
+            } else {
+                return model.to_string();
+            };
+            format!("{vendor}/{model}")
+        }
+        _ => model.to_string(),
     }
 }
 
@@ -330,7 +442,7 @@ mod tests {
         let result: Value = serde_json::from_slice(&translated).unwrap();
 
         assert_eq!(result["system"], "You are helpful.");
-        assert_eq!(result["model"], "claude-3-5-sonnet-20241022");
+        assert_eq!(result["model"], "claude-sonnet-5-5");
         // System message removed from messages array
         let messages = result["messages"].as_array().unwrap();
         assert_eq!(messages.len(), 1);
@@ -402,5 +514,133 @@ mod openrouter_tests {
             "OpenRouter speaks OpenAI natively — the body must be untouched"
         );
         assert_eq!(translate_response_body(&body, &Provider::OpenRouter), body);
+    }
+
+    #[test]
+    fn failover_keeps_the_size_the_customer_chose() {
+        // A nano request must not start billing at Opus rates on failover,
+        // and a flagship request must not be answered by a nano model.
+        assert_eq!(
+            map_model_for(&Provider::Anthropic, "gpt-5-nano"),
+            "claude-haiku-4-5"
+        );
+        assert_eq!(
+            map_model_for(&Provider::Anthropic, "gpt-4o-mini"),
+            "claude-haiku-4-5"
+        );
+        assert_eq!(
+            map_model_for(&Provider::Anthropic, "gpt-5.4"),
+            "claude-sonnet-5-5"
+        );
+        assert_eq!(
+            map_model_for(&Provider::Anthropic, "gpt-6-astra"),
+            "claude-opus-5-5"
+        );
+        assert_eq!(
+            map_model_for(&Provider::Anthropic, "gpt-5.5-pro"),
+            "claude-opus-5-5"
+        );
+        assert_eq!(
+            map_model_for(&Provider::Gemini, "gpt-4.1-mini"),
+            "gemini-3.5-flash-lite"
+        );
+        assert_eq!(
+            map_model_for(&Provider::Gemini, "claude-sonnet-5-5"),
+            "gemini-3.8-flash"
+        );
+        assert_eq!(
+            map_model_for(&Provider::OpenAI, "claude-haiku-4-5"),
+            "gpt-5.4-mini"
+        );
+        assert_eq!(
+            map_model_for(&Provider::OpenAI, "gemini-3.8-flash"),
+            "gpt-5.4"
+        );
+        // "gemini" contains "mini"; it must not make every Gemini model small.
+        assert_eq!(tier("gemini-2.5-pro"), Tier::Top);
+        assert_eq!(tier("gemini-3.5-flash-lite"), Tier::Small);
+    }
+
+    #[test]
+    fn a_native_model_passes_through_untouched() {
+        // This runs on the primary request, not only on failover. Rewriting
+        // a model the customer chose for this provider would be a bug.
+        for (p, m) in [
+            (Provider::Anthropic, "claude-opus-5-5"),
+            (Provider::Gemini, "gemini-2.5-pro"),
+            (Provider::OpenAI, "gpt-6-astra"),
+            (Provider::OpenAI, "o4-mini"),
+            (Provider::OpenRouter, "meta-llama/llama-4-maverick"),
+        ] {
+            assert_eq!(map_model_for(&p, m), m, "{m} on {p:?} must be left alone");
+        }
+    }
+
+    #[test]
+    fn openrouter_gets_vendor_namespaced_ids() {
+        assert_eq!(
+            map_model_for(&Provider::OpenRouter, "gpt-5.4"),
+            "openai/gpt-5.4"
+        );
+        assert_eq!(
+            map_model_for(&Provider::OpenRouter, "claude-sonnet-5-5"),
+            "anthropic/claude-sonnet-5-5"
+        );
+        assert_eq!(
+            map_model_for(&Provider::OpenRouter, "gemini-3.8-flash"),
+            "google/gemini-3.8-flash"
+        );
+        // Unplaceable: leave it for OpenRouter to judge rather than guess.
+        assert_eq!(
+            map_model_for(&Provider::OpenRouter, "mystery-model"),
+            "mystery-model"
+        );
+    }
+
+    #[test]
+    fn failover_never_targets_a_retired_model() {
+        // The old table pointed every Anthropic failover at claude-3-5-*,
+        // retired by Anthropic, so failover failed exactly when it was needed.
+        const RETIRED: &[&str] = &[
+            "claude-3-5-sonnet",
+            "claude-3-5-haiku",
+            "claude-3-opus",
+            "claude-3-haiku",
+            "claude-3-7-sonnet",
+            "gemini-1.5",
+            "gemini-2.0",
+            "o1-mini",
+            "gpt-4.5",
+        ];
+        let probes = [
+            "gpt-5-nano",
+            "gpt-4o",
+            "gpt-6-astra",
+            "claude-haiku-4-5",
+            "gemini-2.5-pro",
+            "o3",
+        ];
+        for p in [Provider::Anthropic, Provider::Gemini, Provider::OpenAI] {
+            for m in probes {
+                let out = map_model_for(&p, m);
+                // A model native to the target passes through by design; only
+                // stand-ins we choose are held to this.
+                if out == m {
+                    continue;
+                }
+                assert!(
+                    !RETIRED.iter().any(|r| out.starts_with(r)),
+                    "{m} -> {out} on {p:?} is a retired model"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn gemini_body_gets_a_gemini_model() {
+        let body = Bytes::from(r#"{"model":"gpt-4o","messages":[]}"#);
+        let out: Value =
+            serde_json::from_slice(&translate_request_body(&body, &Provider::Gemini)).unwrap();
+        assert_eq!(out["model"], "gemini-3.8-flash");
     }
 }

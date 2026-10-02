@@ -12,6 +12,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import DashShell from "@/components/DashShell";
+import ModelPicker from "@/components/ModelPicker";
 import {
   api,
   type RoutingRule,
@@ -27,14 +28,6 @@ import {
 import { cn } from "@/lib/utils";
 import { useResource } from "@/lib/hooks";
 
-const MODELS = [
-  { provider: "openai", model: "gpt-4o" },
-  { provider: "openai", model: "gpt-4o-mini" },
-  { provider: "anthropic", model: "claude-3-5-sonnet-20241022" },
-  { provider: "anthropic", model: "claude-3-5-haiku-20241022" },
-  { provider: "gemini", model: "gemini-1.5-pro" },
-  { provider: "openrouter", model: "auto" },
-];
 
 /** Field labels written for the person, not the schema. */
 const FIELDS: { value: RuleField; label: string; hint: string }[] = [
@@ -272,7 +265,10 @@ function RuleForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: () => 
   const [op, setOp] = useState<RuleOperator>("lt");
   const [value, setValue] = useState("500");
   const [header, setHeader] = useState("");
-  const [target, setTarget] = useState(MODELS[3]);
+  const [target, setTarget] = useState<{ provider: string; model: string }>({
+    provider: "anthropic",
+    model: "claude-haiku-4-5",
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -286,6 +282,10 @@ function RuleForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: () => 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (!target.model) {
+      setError("Enter the model id to route to.");
+      return;
+    }
     setSaving(true);
 
     const condition: RuleCondition = {
@@ -394,20 +394,7 @@ function RuleForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: () => 
 
       <div className="rounded-lg border border-gray-200 bg-white p-4">
         <p className="text-[12px] font-semibold uppercase tracking-wider text-gray-400 mb-3">Route to</p>
-        <select
-          className={input}
-          value={`${target.provider}/${target.model}`}
-          onChange={(e) => {
-            const [provider, ...rest] = e.target.value.split("/");
-            setTarget({ provider, model: rest.join("/") });
-          }}
-        >
-          {MODELS.map((m) => (
-            <option key={`${m.provider}/${m.model}`} value={`${m.provider}/${m.model}`}>
-              {m.provider} · {m.model}
-            </option>
-          ))}
-        </select>
+        <ModelPicker className={input} value={target} onChange={setTarget} ariaLabel="Route to model" />
         <p className="text-[11.5px] text-gray-500 mt-2">
           Routing to a different provider needs that provider&apos;s API key saved in{" "}
           <Link href="/settings" className="text-violet-600 hover:underline">Settings</Link>.
@@ -442,7 +429,7 @@ function RuleForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: () => 
  */
 function RuleTester() {
   const [open, setOpen] = useState(false);
-  const [model, setModel] = useState("gpt-4o");
+  const [model, setModel] = useState("gpt-5.4-mini");
   const [content, setContent] = useState("How do I reset my password?");
   const [result, setResult] = useState<RuleTestResult | null>(null);
   const [testing, setTesting] = useState(false);
