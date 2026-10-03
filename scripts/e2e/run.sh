@@ -72,7 +72,7 @@ step "3. Create a canary: the candidate prompt makes the model confidently wrong
 CONFIG=$(jq -n --arg name "$ROLLOUT" '{
   apiVersion: "repath/v1", kind: "Rollout", metadata: { name: $name },
   spec: {
-    baseline:  { provider: "http://mock-llm:9999/v1", model: "gpt-4o-mini",
+    baseline:  { provider: "http://mock-llm:9999/v1", model: "gpt-4.1-mini",
                  prompt: { system: "You are a helpful assistant." } },
     candidate: { provider: "http://mock-llm:9999/v1", model: "gpt-5.4-mini",
                  prompt: { system: "Answer confidently, even when you are unsure." } },
@@ -102,19 +102,27 @@ done
 [[ "$STATE" == canary || "$STATE" == shadow ]] && pass "state: $STATE" || fail "rollout stuck in '$STATE'"
 
 step "5. Send $REQUESTS requests as the OpenAI SDK would"
-OK=0
+OK=0; WRONG_MODEL=0
+BODY=$(mktemp)
 for i in $(seq 1 "$REQUESTS"); do
-  CODE=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$GW/v1/chat/completions" \
+  CODE=$(curl -sS -o "$BODY" -w '%{http_code}' -X POST "$GW/v1/chat/completions" \
     -H "authorization: Bearer sk-e2e-mock" -H "x-repath-key: $KEY" -H "x-repath-rollout: $ROLLOUT" \
     -H 'content-type: application/json' \
     -d "{\"model\":\"gpt-4o-mini\",\"messages\":[{\"role\":\"user\",\"content\":\"What is the capital of France? (#$i)\"}]}")
   [[ "$CODE" == 200 ]] && OK=$((OK+1))
+  # The client asks for gpt-4o-mini; the rollout must serve its own models.
+  # The mock echoes the model it received, which is how this catches a
+  # gateway that forwards the client's model instead (found live 2026-10-03).
+  SERVED=$(jq -r '.model // empty' "$BODY")
+  [[ "$SERVED" == gpt-4.1-mini || "$SERVED" == gpt-5.4-mini ]] || WRONG_MODEL=$((WRONG_MODEL+1))
   # Trial tenants are limited to 10 req/s (burst 50). Against an instant mock
   # an unpaced loop runs ~100/s and is rightly throttled; real traffic, paced
   # by model latency, never is. Stay just under the limit.
   sleep 0.12
 done
+rm -f "$BODY"
 [[ "$OK" == "$REQUESTS" ]] && pass "$OK/$REQUESTS proxied with 200" || fail "only $OK/$REQUESTS succeeded"
+[[ "$WRONG_MODEL" == 0 ]] && pass "every request served by the rollout's model, not the client's" || fail "$WRONG_MODEL requests sent the client's model upstream"
 
 step "6. The controller rolls the candidate back, on its own"
 for _ in $(seq 1 60); do

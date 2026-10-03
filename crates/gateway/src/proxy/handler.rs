@@ -315,6 +315,14 @@ async fn proxy_inner(
     let detected_provider = Provider::from_url(&version.provider_url);
 
     // Read body; optionally inject system prompt for candidate version
+    // What the request log records as the model: the version's, or for
+    // unrouted passthrough the client's own (which used to be left blank,
+    // showing no model and no cost).
+    let served_model = if version.model.is_empty() {
+        requested_model(&raw_body).unwrap_or_default()
+    } else {
+        version.model.clone()
+    };
     let (body_bytes_raw, is_streaming) = prepare_request_body(raw_body, &version);
 
     // Translate request body for non-OpenAI providers (e.g. Anthropic format)
@@ -365,7 +373,7 @@ async fn proxy_inner(
                 eligible_for_eval: auth.tenant().map(|t| t.has_eval_quota()).unwrap_or(true),
                 rollout_id,
                 version_id: rollout_id.map(|_| version.version_id),
-                model: version.model.clone(),
+                model: served_model.clone(),
                 input_tokens: None,
                 output_tokens: None,
                 latency_ms: start.elapsed().as_millis() as u32,
@@ -448,7 +456,7 @@ async fn proxy_inner(
         rollout_id,
         // Only attribute a version when a rollout actually chose one.
         version_id: rollout_id.map(|_| version.version_id),
-        model: version.model.clone(),
+        model: served_model,
         input_tokens: stream_result.input_tokens,
         output_tokens: stream_result.output_tokens,
         latency_ms,
@@ -596,6 +604,18 @@ fn prepare_request_body(body_bytes: Bytes, version: &RequestVersion) -> (Bytes, 
         .and_then(|v| v.get("stream").and_then(|s| s.as_bool()))
         .unwrap_or(false);
 
+    // The chosen version's model replaces the client's. This was missing:
+    // only the system prompt was applied, so a rollout comparing two *models*
+    // served whatever model the client named on both sides, a routing rule's
+    // target model was ignored, and the log recorded — and priced — a model
+    // that was never called. Found live, through the Vercel AI Gateway, on
+    // 2026-10-03. An empty model (unrouted passthrough) keeps the client's.
+    let body_bytes = if version.model.is_empty() {
+        body_bytes
+    } else {
+        set_model(&body_bytes, &version.model).unwrap_or(body_bytes)
+    };
+
     // If the chosen version overrides the system prompt, inject it.
     if let Some(ref system_prompt) = version.prompt_override {
         let bytes =
@@ -604,6 +624,14 @@ fn prepare_request_body(body_bytes: Bytes, version: &RequestVersion) -> (Bytes, 
     }
 
     (body_bytes, is_streaming)
+}
+
+/// The body with its `model` replaced, or `None` when it is not a JSON object.
+fn set_model(body: &Bytes, model: &str) -> Option<Bytes> {
+    let mut json: serde_json::Value = serde_json::from_slice(body).ok()?;
+    json.as_object_mut()?
+        .insert("model".into(), serde_json::Value::String(model.to_owned()));
+    serde_json::to_vec(&json).ok().map(Bytes::from)
 }
 
 /// Build the facts a routing rule matches against.
@@ -1049,6 +1077,42 @@ fn error_response(status: u16, message: String) -> Response<Body> {
 
 #[cfg(test)]
 mod tests {
+
+    fn version_with(model: &str, prompt: Option<&str>) -> RequestVersion {
+        RequestVersion {
+            version_id: Uuid::nil(),
+            provider_url: "https://ai-gateway.vercel.sh/v1".into(),
+            model: model.into(),
+            prompt_override: prompt.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn the_versions_model_replaces_the_clients() {
+        let body =
+            Bytes::from(r#"{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hi"}]}"#);
+        let (out, _) = prepare_request_body(
+            body,
+            &version_with("google/gemini-3.5-flash-lite", Some("Be brief.")),
+        );
+        let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
+        assert_eq!(
+            v["model"], "google/gemini-3.5-flash-lite",
+            "the rollout's model must be the one sent"
+        );
+        assert_eq!(
+            v["messages"][0]["role"], "system",
+            "the prompt override still applies"
+        );
+    }
+
+    #[test]
+    fn unrouted_passthrough_keeps_the_clients_model() {
+        let body = Bytes::from(r#"{"model":"gpt-4o-mini","messages":[]}"#);
+        let (out, _) = prepare_request_body(body, &version_with("", None));
+        let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
+        assert_eq!(v["model"], "gpt-4o-mini");
+    }
 
     #[test]
     fn unrouted_requests_go_to_the_models_own_provider() {
