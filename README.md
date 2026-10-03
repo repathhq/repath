@@ -53,7 +53,7 @@ Repath is a transparent proxy between your application and AI providers. Every r
                                               │   Python Evaluator     │
                                               │                        │
                                               │  programmatic checks   │
-                                              │  + gpt-4o-mini judge   │
+                                              │  + LLM judge           │
                                               └──────────┬─────────────┘
                                                          │
                                                          ▼
@@ -72,7 +72,7 @@ Repath is a transparent proxy between your application and AI providers. Every r
                                               │  → advance to 50%      │
                                               │                        │
                                               │  quality < 0.7?        │
-                                              │  → instant rollback    │
+                                              │  → rollback on tick    │
                                               └────────────────────────┘
 ```
 
@@ -203,18 +203,17 @@ spec:
 
 ## Comparison
 
-| Capability | Repath | LaunchDarkly | LiteLLM | Langfuse |
+Compared by kind of tool rather than by vendor — products change faster than a README does.
+
+| Capability | Repath | Feature flags | LLM gateway | LLM observability |
 |---|---|---|---|---|
-| Transparent proxy (drop-in) | Yes | No | Yes | No |
-| Canary traffic splitting | Yes | Yes (feature flags) | No | No |
+| Drop-in for OpenAI-compatible clients | Yes | No | Yes | Via SDK |
+| Split traffic between prompt or model versions | Yes | Yes | Weighted routing | No |
 | Shadow mode (zero user impact) | Yes | No | No | No |
-| Automated quality evaluation | Yes | No | No | Partial (manual review) |
-| LLM-as-judge scoring | Yes | No | No | Yes |
-| Automated rollback on quality drop | Yes | No | No | No |
-| Controller with configurable gates | Yes | No | No | No |
-| <2ms proxy overhead | Yes | N/A | ~5ms | N/A |
-| Self-hosted | Yes | No | Yes | Yes |
-| Open source | Yes | No | Yes | Yes |
+| Score live responses (LLM judge + checks) | Yes | No | No | Yes |
+| Advance or roll back on quality, automatically | Yes | On error metrics | No | No |
+| Every rollout decision logged with its scores | Yes | No | No | No |
+| Self-hosted | Yes (source-available, BSL 1.1) | Varies | Varies | Varies |
 
 ---
 

@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
   const GATEWAY = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
   const API_TOKEN = process.env.REPATH_API_TOKEN ?? "";
 
-  const { name, email, password, plan } = await req.json();
+  const { name, email, password } = await req.json();
 
   if (!name || !email || !password) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });

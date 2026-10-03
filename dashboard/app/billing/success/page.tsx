@@ -9,7 +9,6 @@ import { useSearchParams } from "next/navigation";
 function SuccessContent() {
   const params = useSearchParams();
   const plan = params.get("plan") ?? "starter";
-  const label = plan.charAt(0).toUpperCase() + plan.slice(1);
 
   const [confirmedPlan, setConfirmedPlan] = useState<string | null>(null);
 

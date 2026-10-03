@@ -5,17 +5,20 @@ import Image from "next/image";
 import { useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowRight, Check, Eye, EyeOff, Loader2 } from "lucide-react";
+import { PLANS, isPlanId } from "@/lib/plans";
+import { NEW_KEY_STORAGE } from "@/lib/new-api-key";
 
 function SignupForm() {
   const params = useSearchParams();
-  const plan = params.get("plan") ?? "starter";
+  // The plan picked on /pricing. Every account starts on the same trial, so
+  // this only shapes the note below; it is chosen for real on Billing.
+  const requested = params.get("plan");
+  const chosen = isPlanId(requested) ? PLANS[requested] : null;
 
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,10 +28,16 @@ function SignupForm() {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, plan }),
+        body: JSON.stringify(form),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "Signup failed. Please try again."); return; }
+      // The key is returned exactly once; onboarding shows it from here.
+      try {
+        if (data.apiKey) sessionStorage.setItem(NEW_KEY_STORAGE, data.apiKey);
+      } catch {
+        // Storage blocked: onboarding points to Settings to generate one.
+      }
       window.location.href = "/onboarding";
     } catch {
       setError("Network error. Please try again.");
@@ -59,8 +68,10 @@ function SignupForm() {
               <Check className="w-3.5 h-3.5 text-white" strokeWidth={2.5} />
             </div>
             <div>
-              <p className="text-[13.5px] font-semibold text-violet-900">7-day free trial — {planLabel} plan</p>
-              <p className="text-[12px] text-violet-600 mt-0.5">No credit card required. Cancel anytime.</p>
+              <p className="text-[13.5px] font-semibold text-violet-900">7-day free trial · 1,000 judged evaluations</p>
+              <p className="text-[12px] text-violet-600 mt-0.5">
+                No card required.{chosen && ` Switch to ${chosen.name} from Billing whenever you're ready.`}
+              </p>
             </div>
           </div>
 
@@ -74,7 +85,7 @@ function SignupForm() {
                 <input
                   type="text" required value={form.name}
                   onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-                  placeholder="Abhi Sharma"
+                  placeholder="Your name"
                   className="w-full px-3.5 py-2.5 rounded-lg border border-gray-200 text-gray-900 placeholder-gray-400 text-[14px] focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all bg-white"
                 />
               </div>

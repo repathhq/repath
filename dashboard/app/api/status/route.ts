@@ -12,8 +12,6 @@
  */
 import { NextResponse } from "next/server";
 
-const GATEWAY =
-  process.env.REPATH_GATEWAY_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 type ServiceStatus = "operational" | "degraded" | "down" | "unknown";
 
@@ -26,6 +24,12 @@ interface Service {
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  // Read per request, never at module load: on Amplify's SSR compute a
+  // top-level read can be frozen at cold start before env vars are injected,
+  // silently pointing this page at localhost forever — the same bug fixed in
+  // the other API routes in August.
+  const GATEWAY =
+    process.env.REPATH_GATEWAY_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
   const services: Service[] = [];
   let gatewayReachable = false;
 

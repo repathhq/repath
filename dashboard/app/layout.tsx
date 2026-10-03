@@ -35,9 +35,21 @@ const geistMono = localFont({
   display: "swap",
 });
 
+const DESCRIPTION = "Canary rollouts for prompts and models: real traffic, judged quality, automatic rollback.";
+
 export const metadata: Metadata = {
-  title: "Repath — Progressive Delivery for AI",
-  description: "Canary deployments, quality evaluation, and instant rollback for LLM systems.",
+  metadataBase: new URL("https://tryrepath.com"),
+  title: { default: "Repath — Progressive Delivery for AI", template: "%s — Repath" },
+  description: DESCRIPTION,
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    siteName: "Repath",
+    url: "https://tryrepath.com",
+    title: "Repath — Progressive Delivery for AI",
+    description: DESCRIPTION,
+  },
+  twitter: { card: "summary_large_image", title: "Repath — Progressive Delivery for AI", description: DESCRIPTION },
   icons: {
     icon: "/favicon.ico",
     apple: "/repath.png",

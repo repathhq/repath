@@ -21,6 +21,13 @@ export interface Plan {
   /** Price in paise. The provider's own integer — never a float. */
   amountMinor: number;
   evaluations: number;
+  /** Shown beside the rupee price for reference; checkout charges INR. */
+  usd: string;
+  inr: string;
+  /** What else the plan varies by, as the code enforces it: request-log
+   *  retention (retention_days), the rate-limit backstop (limit_for_plan),
+   *  and support. Shared by Pricing and Billing so the two cannot disagree. */
+  facts: string[];
 }
 
 export const PLANS: Record<PlanId, Plan> = {
@@ -30,6 +37,9 @@ export const PLANS: Record<PlanId, Plan> = {
     razorpayPlanId: "plan_TVVWYHISVkBolC",
     amountMinor: 169_900,
     evaluations: 3_000,
+    usd: "$20",
+    inr: "₹1,699",
+    facts: ["7-day request log", "Up to 10 requests/second", "Email support"],
   },
   starter: {
     id: "starter",
@@ -37,6 +47,9 @@ export const PLANS: Record<PlanId, Plan> = {
     razorpayPlanId: "plan_TVVWYSxAUyDgGG",
     amountMinor: 409_900,
     evaluations: 10_000,
+    usd: "$49",
+    inr: "₹4,099",
+    facts: ["7-day request log", "Up to 30 requests/second", "Email support"],
   },
   pro: {
     id: "pro",
@@ -44,6 +57,9 @@ export const PLANS: Record<PlanId, Plan> = {
     razorpayPlanId: "plan_TVVWYdCz0n00zi",
     amountMinor: 1_249_900,
     evaluations: 100_000,
+    usd: "$149",
+    inr: "₹12,499",
+    facts: ["90-day request log", "Up to 100 requests/second", "Priority support"],
   },
 };
 

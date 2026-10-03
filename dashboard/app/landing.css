@@ -296,6 +296,8 @@ html[data-lp-theme="dark"] .lp {
   .lp-pad { padding-left: 20px !important; padding-right: 20px !important; }
   .lp-cards-3 { grid-template-columns: 1fr !important; }
   .lp-nav-links { display: none !important; }
+  [data-nav-row] { gap: 12px !important; padding-top: 12px !important; padding-bottom: 12px !important; }
+  .lp-nav-actions { gap: 10px !important; }
   .lp-hero { padding-top: 64px !important; }
   .lp-section { margin-top: 76px !important; }
   .lp-cta-box { padding: 48px 24px !important; }
@@ -303,4 +305,56 @@ html[data-lp-theme="dark"] .lp {
   .lp-flow-2 { grid-template-columns: 1fr !important; }
   .lp-table-wrap { overflow-x: auto; }
   .lp-table { min-width: 640px; }
+}
+
+/* A phone has room for the logo and the two actions that matter; the theme
+   pill drops out and the page follows the saved or system theme. */
+@media (max-width: 440px) {
+  .lp-theme-pill { display: none !important; }
+}
+
+/* ── Docs ─────────────────────────────────────────────────────────────────
+   The documentation's 700 lines of content were written in Tailwind against
+   a fixed light palette. Rather than hand-edit every occurrence, the colour
+   utilities it uses are re-pointed at the landing tokens inside .lp-docs, so
+   the docs read correctly in both themes — the same technique dashboard.css
+   uses for the app. Tailwind's utilities live in a cascade layer; these
+   unlayered rules win regardless of specificity. */
+
+.lp-docs-navitem { color: var(--fg2); transition: color 0.2s, background 0.2s; }
+.lp-docs-navitem:hover { color: var(--fg); background: var(--hover); }
+.lp-docs-navitem[data-active="true"] { color: var(--fg); background: var(--accent-soft); }
+
+.lp-docs .text-gray-900, .lp-docs .text-gray-800 { color: var(--fg); }
+.lp-docs .text-gray-700, .lp-docs .text-gray-600 { color: var(--fg2); }
+.lp-docs .text-gray-500 { color: var(--fg3); }
+.lp-docs .text-gray-400, .lp-docs .text-gray-300, .lp-docs .text-gray-200 { color: var(--fg4); }
+.lp-docs .hover\:text-gray-900:hover { color: var(--fg); }
+.lp-docs .bg-white { background-color: var(--panel); }
+.lp-docs .bg-gray-50 { background-color: var(--code); }
+.lp-docs .bg-gray-100 { background-color: var(--chip); }
+.lp-docs .hover\:bg-gray-50:hover { background-color: var(--hover); }
+.lp-docs .border-gray-100 { border-color: var(--line2); }
+.lp-docs .border-gray-200 { border-color: var(--line); }
+.lp-docs .text-violet-600, .lp-docs .text-violet-700, .lp-docs .text-indigo-600 { color: var(--accent); }
+.lp-docs .bg-violet-50 { background-color: var(--accent-soft); }
+.lp-docs .text-emerald-500, .lp-docs .text-emerald-600, .lp-docs .text-emerald-800 { color: var(--adv); }
+.lp-docs .bg-emerald-50 { background-color: var(--adv-soft); }
+.lp-docs .border-emerald-200 { border-color: var(--adv-line); }
+.lp-docs .text-blue-500, .lp-docs .text-blue-600, .lp-docs .text-blue-800 { color: var(--accent); }
+.lp-docs .bg-blue-50 { background-color: var(--accent-soft); }
+.lp-docs .border-blue-200 { border-color: var(--accent-line); }
+.lp-docs code { font-family: var(--font-geist-mono), ui-monospace, monospace; }
+.lp-docs table { color: var(--fg2); }
+.lp-docs strong { color: var(--fg); }
+
+@media (max-width: 1000px) {
+  .lp-docs-side { display: none; }
+}
+
+/* Docs tables are wider than a phone; they scroll inside themselves rather
+   than being clipped by the page. */
+.lp-docs article { min-width: 0; }
+@media (max-width: 720px) {
+  .lp-docs table { display: block; overflow-x: auto; }
 }

@@ -2,12 +2,23 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
+import { NEW_KEY_STORAGE } from "@/lib/new-api-key";
 import { Check, Copy, ArrowRight, ExternalLink, Terminal, Plug, Eye, Rocket } from "lucide-react";
 
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL ?? "https://api.tryrepath.com";
 
-const steps = [
+function readNewKey(): string | null {
+  try {
+    return sessionStorage.getItem(NEW_KEY_STORAGE);
+  } catch {
+    return null;
+  }
+}
+
+const noSubscribe = () => () => {};
+
+const buildSteps = (apiKey: string | null) => [
   {
     num: "1",
     icon: Plug,
@@ -19,9 +30,9 @@ const steps = [
   {
     num: "2",
     icon: Terminal,
-    title: "Change one line in your app",
-    description: "Replace your OpenAI base URL. Everything else stays the same — models, API keys, streaming.",
-    code: `from openai import OpenAI\n\nclient = OpenAI(\n    api_key="sk-...",  # Your OpenAI key (unchanged)\n    base_url="${GATEWAY_URL}/v1",\n    default_headers={\n        "X-Repath-Key": "rp_live_YOUR_KEY"\n    }\n)`,
+    title: "Point your client at Repath",
+    description: "Change the base URL and add your Repath key as a header. Everything else stays the same — models, streaming, your provider key.",
+    code: `from openai import OpenAI\n\nclient = OpenAI(\n    api_key="sk-...",  # Your OpenAI key (unchanged)\n    base_url="${GATEWAY_URL}/v1",\n    default_headers={\n        "X-Repath-Key": "${apiKey ?? "rp_live_YOUR_KEY"}"\n    }\n)`,
     lang: "python",
   },
   {
@@ -44,6 +55,8 @@ const steps = [
 
 export default function OnboardingPage() {
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+  const apiKey = useSyncExternalStore(noSubscribe, readNewKey, () => null);
+  const steps = buildSteps(apiKey);
 
   const copy = (idx: number, text: string) => {
     navigator.clipboard.writeText(text);
@@ -98,6 +111,33 @@ export default function OnboardingPage() {
               )}
             </div>
           ))}
+        </div>
+
+        {/* API key */}
+        <div className={`mb-4 rounded-xl border p-5 ${apiKey ? "border-amber-200 bg-amber-50" : "border-gray-200 bg-white"}`}>
+          <p className="text-[13.5px] font-semibold text-gray-900 mb-1">Your Repath API key</p>
+          {apiKey ? (
+            <>
+              <p className="text-[12.5px] text-amber-800 mb-3">
+                Shown once — copy it somewhere safe now. Lost it later? Regenerate it in{" "}
+                <Link href="/settings" className="underline">Settings</Link>.
+              </p>
+              <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2">
+                <code className="flex-1 min-w-0 truncate font-mono text-[12.5px] text-gray-900">{apiKey}</code>
+                <button
+                  onClick={() => copy(-1, apiKey)}
+                  className="flex items-center gap-1.5 text-[11.5px] text-gray-500 hover:text-gray-900 px-2 py-1 rounded hover:bg-gray-100 shrink-0"
+                >
+                  {copiedIdx === -1 ? <><Check className="w-3.5 h-3.5 text-emerald-500" />Copied</> : <><Copy className="w-3.5 h-3.5" />Copy</>}
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="text-[12.5px] text-gray-500">
+              For security it is only shown when it is created. Generate a new one in{" "}
+              <Link href="/settings" className="text-violet-600 underline">Settings</Link> and use it in step 2.
+            </p>
+          )}
         </div>
 
         {/* Steps */}
@@ -169,8 +209,8 @@ export default function OnboardingPage() {
             {[
               { label: "Example rollout YAML", href: "https://github.com/repathhq/repath/blob/main/examples/demo-canary.yaml" },
               { label: "CLI reference", href: "https://github.com/repathhq/repath/blob/main/README.md#cli-reference" },
-              { label: "Anthropic / Gemini setup", href: "https://github.com/repathhq/repath/blob/main/README.md" },
-              { label: "Ask a question", href: "https://github.com/repathhq/repath/discussions" },
+              { label: "Anthropic, Gemini and other providers", href: "/docs#providers" },
+              { label: "Ask a question", href: "/contact" },
             ].map(({ label, href }, i) => (
               <a
                 key={i}

@@ -16,7 +16,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useState, useSyncExternalStore } from "react";
+import { useState } from "react";
 import {
   CreditCard,
   GitBranch,
@@ -29,32 +29,8 @@ import {
   Zap,
 } from "lucide-react";
 import { useSystemHealth } from "@/lib/hooks";
+import { useTheme } from "@/lib/theme";
 import "../app/dashboard.css";
-
-// ── Theme, shared with the landing page ──────────────────────────────────
-type Theme = "light" | "dark";
-const THEME_KEY = "repath-landing-theme";
-const listeners = new Set<() => void>();
-
-function subscribeTheme(cb: () => void) {
-  listeners.add(cb);
-  return () => listeners.delete(cb);
-}
-function readTheme(): Theme {
-  return document.documentElement.dataset.lpTheme === "dark" ? "dark" : "light";
-}
-function readThemeOnServer(): Theme {
-  return "light";
-}
-function writeTheme(next: Theme) {
-  document.documentElement.dataset.lpTheme = next;
-  try {
-    localStorage.setItem(THEME_KEY, next);
-  } catch {
-    // Storage disabled. The choice still applies for this visit.
-  }
-  listeners.forEach((l) => l());
-}
 
 const NAV_MAIN = [
   { href: "/rollouts", label: "Rollouts", icon: GitBranch },
@@ -87,8 +63,7 @@ export default function DashShell({
   back?: string;
 }) {
   const pathname = usePathname();
-  const theme = useSyncExternalStore(subscribeTheme, readTheme, readThemeOnServer);
-  const setTheme = useCallback((t: Theme) => writeTheme(t), []);
+  const [theme, setTheme] = useTheme();
   const [railOpen, setRailOpen] = useState(false);
 
   const { data: health } = useSystemHealth();

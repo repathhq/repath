@@ -1,37 +1,81 @@
+"use client";
+
 import Link from "next/link";
-import Image from "next/image";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Card, MarketingShell, PageHero, SectionLabel } from "@/components/marketing/Marketing";
 
 export default function AboutPage() {
   return (
-    <div className="min-h-screen bg-white" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
-      <nav className="border-b border-gray-100 px-6 py-4 flex items-center justify-between sticky top-0 bg-white z-40">
-        <Link href="/" className="flex items-center gap-2.5">
-          <Image src="/repath.png" alt="Repath" width={32} height={32} className="rounded-lg" />
-          <span className="font-bold text-[18px] text-gray-900">Repath</span>
-        </Link>
-        <Link href="/signup" className="px-4 py-2 bg-gray-900 text-white text-[13px] font-medium rounded-lg hover:bg-gray-800 transition-colors">Start free trial</Link>
-      </nav>
-      <div className="max-w-3xl mx-auto px-6 py-20">
-        <h1 className="text-[44px] font-bold text-gray-900 mb-6 tracking-tight">About Repath</h1>
-        <div className="prose prose-gray max-w-none space-y-6">
-          <p className="text-[18px] text-gray-500 leading-relaxed">Repath is the deployment safety layer for AI. We believe the biggest unsolved problem in production AI is not capability — it&apos;s reliability. AI models break silently, and teams have no safe way to roll out changes.</p>
-          <p className="text-[16px] text-gray-500 leading-relaxed">We built Repath to fix that. A transparent proxy that splits traffic between prompt versions, scores every response with an AI judge, and reverts automatically when quality drops — all before your users notice.</p>
-          <div className="rounded-2xl bg-gray-50 border border-gray-200 p-8 my-10">
-            <h2 className="text-[22px] font-bold text-gray-900 mb-3">Our mission</h2>
-            <p className="text-[16px] text-gray-600 leading-relaxed italic">&ldquo;Make it safe to ship AI. Every team that builds with LLMs should have the same deployment safety primitives that top tech companies use for traditional software.&rdquo;</p>
+    <MarketingShell>
+      <PageHero
+        eyebrow="About"
+        title="Shipping AI should be as safe as shipping code."
+        lead="Repath is the deployment layer for AI. It routes a slice of real traffic to a new prompt or model, judges every answer, and rolls back on its own when quality drops — before most of your users ever see the change."
+      />
+
+      <section className="lp-pad" style={{ maxWidth: 1280, margin: "0 auto", padding: "80px 40px 0" }}>
+        <div className="lp-split" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 56, alignItems: "start" }}>
+          <div>
+            <SectionLabel>The problem</SectionLabel>
+            <div style={{ display: "flex", flexDirection: "column", gap: 16, fontSize: 17, lineHeight: 1.65, color: "var(--fg2)" }}>
+              <p style={{ margin: 0 }}>
+                Software teams stopped shipping changes to everyone at once years ago. Canary releases, feature flags
+                and automatic rollback are standard for code.
+              </p>
+              <p style={{ margin: 0 }}>
+                AI changes still go out all at once. A reworded prompt or a new model version reaches every user the
+                moment it is deployed, and when it is worse, nothing errors — the answers are just wrong, politely.
+                Teams find out from support tickets.
+              </p>
+            </div>
           </div>
-          <h2 className="text-[24px] font-bold text-gray-900">Why we built this</h2>
-          <p className="text-[16px] text-gray-500 leading-relaxed">We watched GPT-4 drop from 97% accuracy to 2% on coding tasks — silently, with zero API errors. We watched Unity lose $110M from an ML model regression that went undetected. We saw teams discover prompt regressions 34 days after they shipped.</p>
-          <p className="text-[16px] text-gray-500 leading-relaxed">Feature flags solve deployment. Observability tools show you what happened. But nothing existed to prevent quality regressions from reaching users in the first place. That&apos;s the gap Repath fills.</p>
+          <div>
+            <SectionLabel>What Repath does</SectionLabel>
+            <div style={{ display: "flex", flexDirection: "column", gap: 16, fontSize: 17, lineHeight: 1.65, color: "var(--fg2)" }}>
+              <p style={{ margin: 0 }}>
+                It brings the same discipline to prompts and models. One line points your existing OpenAI-compatible
+                client at Repath. From then on, every change can go out as a canary: a few percent of traffic first, a
+                quality gate at each step, and a rollback the moment the judge says the new version is worse.
+              </p>
+              <p style={{ margin: 0 }}>
+                Every decision comes with its evidence — the answers that moved the score, and the judge&apos;s reasons.
+              </p>
+            </div>
+          </div>
         </div>
-        <div className="mt-14 pt-10 border-t border-gray-100 flex items-center justify-between">
-          <Link href="/careers" className="text-[14px] text-violet-600 hover:underline font-medium">Join our team →</Link>
-          <Link href="/signup" className="inline-flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white text-[14px] font-medium rounded-lg hover:bg-gray-800 transition-colors">
-            Start building <ArrowRight className="w-4 h-4" />
-          </Link>
+      </section>
+
+      <section className="lp-pad" style={{ maxWidth: 1280, margin: "0 auto", padding: "96px 40px 0" }}>
+        <SectionLabel>How we build it</SectionLabel>
+        <div className="lp-cards-3" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
+          {[
+            ["Out of your way", "The gateway is written in Rust and sits in your request path, so it is built to add milliseconds, not seconds — and if it ever cannot serve, it says so rather than degrading your traffic."],
+            ["Evidence over vibes", "A rollout advances on judged quality from real traffic, and never on a health check alone. Every decision is logged with the numbers that made it."],
+            ["Yours to run", "Repath is source-available. Use the cloud, or run the whole stack inside your own network when data must not leave it."],
+          ].map(([h, d]) => (
+            <Card key={h}>
+              <h3 style={{ fontSize: 17, fontWeight: 600, margin: "0 0 10px" }}>{h}</h3>
+              <p style={{ fontSize: 15, lineHeight: 1.65, color: "var(--fg3)", margin: 0 }}>{d}</p>
+            </Card>
+          ))}
         </div>
-      </div>
-    </div>
+      </section>
+
+      <section className="lp-pad" style={{ maxWidth: 1280, margin: "0 auto", padding: "96px 40px 120px", display: "flex", gap: 14, flexWrap: "wrap" }}>
+        <Link
+          href="/signup"
+          className="lp-btn-primary"
+          style={{ display: "inline-flex", alignItems: "center", gap: 8, height: 48, padding: "0 22px", borderRadius: 11, background: "var(--btn-bg)", color: "var(--btn-fg)", fontSize: 15, fontWeight: 550 }}
+        >
+          Start free <ArrowRight />
+        </Link>
+        <Link
+          href="/contact"
+          className="lp-btn-ghost"
+          style={{ display: "inline-flex", alignItems: "center", gap: 8, height: 48, padding: "0 22px", borderRadius: 11, border: "1px solid var(--line)", fontSize: 15, fontWeight: 550 }}
+        >
+          Get in touch
+        </Link>
+      </section>
+    </MarketingShell>
   );
 }

@@ -168,6 +168,7 @@ pub async fn reconcile_once(pool: &PgPool, config: &ReconcilerConfig) -> Result<
             "UPDATE tenants \
                 SET plan = 'free', eval_quota_monthly = 0, \
                     subscription_status = $1, current_period_end = $2, \
+                    cancel_at_period_end = FALSE, \
                     last_synced_at = NOW(), updated_at = NOW() \
               WHERE id = $3",
         )

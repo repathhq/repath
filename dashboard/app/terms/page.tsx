@@ -1,36 +1,141 @@
-import Link from "next/link";
-import Image from "next/image";
+"use client";
+
+/**
+ * Terms of Service.
+ *
+ * Matches how billing and the service actually work (checked 2026-10-03).
+ * The previous terms promised annual billing (only monthly exists), USD
+ * payment through Paddle (not configured — every customer pays through
+ * Razorpay in INR), a 99.9% uptime target on a single-instance deployment,
+ * and a status.tryrepath.com that does not exist.
+ *
+ * Not legal advice: have counsel review before relying on it, and add the
+ * contracting entity and governing law once those are settled.
+ */
+
+import { LegalPage } from "@/components/marketing/LegalPage";
+
+const P = ({ children }: { children: React.ReactNode }) => <p style={{ margin: 0 }}>{children}</p>;
 
 export default function TermsPage() {
   return (
-    <div className="min-h-screen bg-white" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
-      <nav className="border-b border-gray-100 px-6 py-4 flex items-center justify-between sticky top-0 bg-white z-40">
-        <Link href="/" className="flex items-center gap-2.5">
-          <Image src="/repath.png" alt="Repath" width={32} height={32} className="rounded-lg" />
-          <span className="font-bold text-[18px] text-gray-900">Repath</span>
-        </Link>
-      </nav>
-      <div className="max-w-3xl mx-auto px-6 py-16">
-        <p className="text-[13px] text-gray-400 mb-2">Last updated: June 20, 2026</p>
-        <h1 className="text-[36px] font-bold text-gray-900 mb-8 tracking-tight">Terms of Service</h1>
-        <div className="space-y-8 text-[15px] text-gray-600 leading-relaxed">
-          {[
-            { h: "1. Acceptance", body: "By using Repath, you agree to these terms. If you are using Repath on behalf of a company, you represent that you have authority to bind that company." },
-            { h: "2. Service description", body: "Repath is a cloud-based AI deployment safety platform. We provide canary deployments, LLM-as-judge evaluation, automatic rollback, and provider failover for LLM applications." },
-            { h: "3. Free trial", body: "New accounts receive a 7-day free trial with full access. No credit card is required to start. After the trial, a paid plan is required to continue using the service." },
-            { h: "4. Payment", body: "Paid plans are billed monthly or annually. Indian customers pay in INR via Razorpay. International customers pay in USD via Paddle. All payments are non-refundable except as required by law." },
-            { h: "5. Acceptable use", body: "You may not use Repath to violate any laws, infringe third-party rights, transmit harmful content, or attempt to reverse engineer the service. We reserve the right to suspend accounts for violations." },
-            { h: "6. Uptime and SLAs", body: "Repath targets 99.9% uptime for Starter/Pro plans. Enterprise plans include a custom SLA. Scheduled maintenance will be communicated in advance via status.tryrepath.com." },
-            { h: "7. Limitation of liability", body: "Repath is provided as-is. We are not liable for indirect, incidental, or consequential damages arising from use of the service." },
-            { h: "8. Contact", body: "For terms questions: hello@tryrepath.com" },
-          ].map(s => (
-            <div key={s.h}>
-              <h2 className="text-[18px] font-semibold text-gray-900 mb-2">{s.h}</h2>
-              <p>{s.body}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
+    <LegalPage
+      title="Terms of Service"
+      updated="3 October 2026"
+      intro="The agreement between you and Repath when you use tryrepath.com and the Repath service."
+      sections={[
+        {
+          h: "Acceptance",
+          body: <P>By creating an account or using Repath you agree to these terms. If you use Repath for an organisation, you confirm you may bind it to them.</P>,
+        },
+        {
+          h: "The service",
+          body: (
+            <P>
+              Repath sits between your application and your model providers. It routes requests, runs canary
+              rollouts, evaluates response quality with an automated judge, and advances or rolls back rollouts based
+              on the results. Automated evaluation is a signal, not a guarantee: you remain responsible for what your
+              application does.
+            </P>
+          ),
+        },
+        {
+          h: "Your account and keys",
+          body: (
+            <P>
+              Keep your credentials and Repath API key secret; activity under them is yours. You use your own model
+              provider accounts and keys, and the fees those providers charge are between you and them.
+            </P>
+          ),
+        },
+        {
+          h: "Free trial",
+          body: (
+            <P>
+              New accounts get a 7-day trial with every feature and 1,000 judged evaluations, with no card required.
+              When it ends, requests continue to pass through Repath but rollouts stop routing until you choose a
+              paid plan.
+            </P>
+          ),
+        },
+        {
+          h: "Plans and payment",
+          body: (
+            <>
+              <P>
+                Paid plans are monthly subscriptions, billed in Indian rupees through Razorpay and renewed
+                automatically each month until cancelled. Prices in other currencies are shown for reference only.
+                Applicable taxes are added where required.
+              </P>
+              <P>We may change prices with at least 30 days&apos; notice by email; a change applies from your next billing period after that notice.</P>
+            </>
+          ),
+        },
+        {
+          h: "Cancellation and refunds",
+          body: (
+            <P>
+              You can cancel at any time from the Billing page. Your plan stays active until the end of the period you
+              have paid for and you are not charged again. Payments already made are not refunded except where the
+              law requires it.
+            </P>
+          ),
+        },
+        {
+          h: "Evaluation limits",
+          body: (
+            <P>
+              Each plan includes a monthly number of judged evaluations. When you reach it, judging pauses until the
+              next month or an upgrade; requests continue to be proxied and health checks continue to run.
+            </P>
+          ),
+        },
+        {
+          h: "Acceptable use",
+          body: (
+            <P>
+              Do not use Repath to break the law, infringe others&apos; rights, send harmful content, attack or overload
+              the service or other users, or try to access data that is not yours. We may suspend accounts that do.
+            </P>
+          ),
+        },
+        {
+          h: "Your data",
+          body: (
+            <P>
+              Your data stays yours. You give us permission to process it only to provide the service, as described
+              in the Privacy Policy, including its retention periods.
+            </P>
+          ),
+        },
+        {
+          h: "Availability",
+          body: (
+            <P>
+              We work to keep Repath available and publish its state at tryrepath.com/status, but the service is
+              provided without an uptime guarantee unless one is agreed in writing, for example in an Enterprise
+              agreement.
+            </P>
+          ),
+        },
+        {
+          h: "Liability",
+          body: (
+            <P>
+              Repath is provided as is. To the extent the law allows, we are not liable for indirect or consequential
+              losses, and our total liability is limited to the fees you paid us in the three months before the claim.
+            </P>
+          ),
+        },
+        {
+          h: "Ending the agreement",
+          body: <P>You can stop using Repath and cancel at any time. We may end or suspend your access for a serious breach of these terms, with notice where we reasonably can.</P>,
+        },
+        {
+          h: "Changes and contact",
+          body: <P>If these terms change materially we will email account owners before the change takes effect. Questions: hello@tryrepath.com.</P>,
+        },
+      ]}
+    />
   );
 }

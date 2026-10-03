@@ -69,6 +69,7 @@ async fn schema_matches_what_the_code_queries() {
         ("tenants", "capture_payloads"),
         ("tenants", "subscription_id"),
         ("tenants", "current_period_end"),
+        ("tenants", "cancel_at_period_end"),
         ("password_reset_tokens", "token_hash"),
         ("payments", "provider_payment_id"),
         ("evaluations", "evaluator_type"),

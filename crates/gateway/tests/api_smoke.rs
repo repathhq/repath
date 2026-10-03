@@ -476,3 +476,109 @@ async fn a_rollout_routes_to_the_provider_it_names() {
         );
     }
 }
+
+async fn post_as_operator(router: &axum::Router, uri: &str, body: Value) -> (StatusCode, Value) {
+    let res = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header("authorization", format!("Bearer {OPERATOR_TOKEN}"))
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .expect("request");
+    let status = res.status();
+    let bytes = axum::body::to_bytes(res.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
+}
+
+/// Subscribe, cancel, subscribe again — what Billing does, against the real
+/// schema. Pricing and the terms promise that cancelling keeps the plan to the
+/// end of the paid period; this pins that the flag is recorded without
+/// touching the plan, that only the account's current subscription can be
+/// flagged, and that a new subscription clears it.
+#[tokio::test]
+async fn a_subscription_can_be_cancelled_at_period_end() {
+    let Some(db) = TempDb::migrated().await else {
+        eprintln!("skipping: DATABASE_URL not set");
+        return;
+    };
+    std::env::set_var("REPATH_API_TOKEN", OPERATOR_TOKEN);
+    sqlx::query("INSERT INTO tenants (id, name, email, plan) VALUES ('ten_smoke', 'Smoke', 'smoke@example.com', 'trial')")
+        .execute(db.pool())
+        .await
+        .unwrap();
+    let state = repath_gateway::test_support::app_state_for_tests(db.pool().clone()).await;
+    let router = repath_gateway::server::create_server(state);
+    let usage = format!("/api/v1/cloud/tenants/{TENANT}/usage");
+
+    let (status, _) = post_as_operator(
+        &router,
+        &format!("/api/v1/cloud/tenants/{TENANT}/subscription"),
+        json!({ "plan": "starter", "subscription_id": "sub_one", "subscription_status": "active",
+                "current_period_end": "2030-01-01T00:00:00Z" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, u) = get(&router, &usage).await;
+    assert_eq!(u["subscription_id"], "sub_one");
+    assert_eq!(u["cancel_at_period_end"], false);
+
+    // A subscription the account is not on cannot be flagged.
+    let cancel = format!("/api/v1/cloud/tenants/{TENANT}/subscription/cancel");
+    let (status, _) =
+        post_as_operator(&router, &cancel, json!({ "subscription_id": "sub_other" })).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let (status, body) =
+        post_as_operator(&router, &cancel, json!({ "subscription_id": "sub_one" })).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (_, u) = get(&router, &usage).await;
+    assert_eq!(u["cancel_at_period_end"], true);
+    assert_eq!(
+        u["plan"], "starter",
+        "cancelling must not take away the paid period"
+    );
+    assert_eq!(u["eval_quota_monthly"], 10_000);
+
+    // Subscribing again starts clean.
+    post_as_operator(
+        &router,
+        &format!("/api/v1/cloud/tenants/{TENANT}/subscription"),
+        json!({ "plan": "pro", "subscription_id": "sub_two", "subscription_status": "active",
+                "current_period_end": "2030-02-01T00:00:00Z" }),
+    )
+    .await;
+    let (_, u) = get(&router, &usage).await;
+    assert_eq!(u["subscription_id"], "sub_two");
+    assert_eq!(u["cancel_at_period_end"], false);
+
+    // A tenant cannot mark its own subscription; only the dashboard's
+    // server-side route, after Razorpay accepted the cancellation, can.
+    let res = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(&cancel)
+                .header("authorization", format!("Bearer {OPERATOR_TOKEN}"))
+                .header("x-repath-act-as-tenant", TENANT)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({ "subscription_id": "sub_two" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+}

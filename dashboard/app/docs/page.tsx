@@ -1,12 +1,8 @@
 "use client";
-import Link from "next/link";
-import Image from "next/image";
 import { useState } from "react";
-import {
-  Search, ChevronRight, GitBranch, Zap, Shield, BarChart2,
-  RefreshCw, Cloud, Code2, Terminal, BookOpen, Copy, Check,
-  AlertTriangle, Info, CheckCircle2
-} from "lucide-react";
+import { MarketingShell } from "@/components/marketing/Marketing";
+import Link from "next/link";
+import { AlertTriangle, Check, CheckCircle2, Copy, Info, Search } from "lucide-react";
 
 /* ── Copy button ─────────────────────────────────────────────────────── */
 function CopyButton({ text }: { text: string }) {
@@ -14,9 +10,10 @@ function CopyButton({ text }: { text: string }) {
   return (
     <button
       onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
-      className="absolute top-3 right-3 p-1.5 rounded-md bg-gray-700 hover:bg-gray-600 transition-colors"
+      aria-label={copied ? "Copied" : "Copy code"}
+      style={{ position: "absolute", top: 10, right: 10, padding: 6, borderRadius: 7, border: "1px solid var(--line2)", background: "var(--panel)", cursor: "pointer", color: "var(--fg3)", display: "flex" }}
     >
-      {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5 text-gray-300" />}
+      {copied ? <Check size={14} color="var(--adv)" /> : <Copy size={14} />}
     </button>
   );
 }
@@ -24,9 +21,13 @@ function CopyButton({ text }: { text: string }) {
 /* ── Code block ──────────────────────────────────────────────────────── */
 function Code({ lang, children }: { lang?: string; children: string }) {
   return (
-    <div className="relative rounded-xl bg-gray-900 overflow-hidden my-4">
-      {lang && <div className="px-4 py-2 border-b border-gray-800 text-[11px] text-gray-400 font-mono uppercase tracking-wider">{lang}</div>}
-      <pre className="p-4 text-[13px] text-gray-200 font-mono leading-relaxed overflow-x-auto whitespace-pre">{children.trim()}</pre>
+    <div style={{ position: "relative", borderRadius: 14, border: "1px solid var(--line2)", background: "var(--code)", overflow: "hidden", margin: "16px 0" }}>
+      {lang && (
+        <div className="lp-mono" style={{ padding: "8px 16px", borderBottom: "1px solid var(--line2)", fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--fg4)" }}>
+          {lang}
+        </div>
+      )}
+      <pre className="lp-mono" style={{ margin: 0, padding: 16, fontSize: 13, lineHeight: 1.65, color: "var(--fg)", overflowX: "auto", whiteSpace: "pre" }}>{children.trim()}</pre>
       <CopyButton text={children.trim()} />
     </div>
   );
@@ -34,26 +35,25 @@ function Code({ lang, children }: { lang?: string; children: string }) {
 
 /* ── Note / Warning / Tip boxes ─────────────────────────────────────── */
 function Note({ type = "info", children }: { type?: "info"|"warning"|"success"; children: React.ReactNode }) {
-  const styles = {
-    info:    { bg: "bg-blue-50 border-blue-200",   icon: Info,          ic: "text-blue-500",   tx: "text-blue-800" },
-    warning: { bg: "bg-amber-50 border-amber-200", icon: AlertTriangle, ic: "text-amber-500",  tx: "text-amber-800" },
-    success: { bg: "bg-emerald-50 border-emerald-200", icon: CheckCircle2, ic: "text-emerald-500", tx: "text-emerald-800" },
+  const t = {
+    info:    { c: "var(--accent)", soft: "var(--accent-soft)", line: "var(--accent-line)", Icon: Info },
+    warning: { c: "oklch(0.62 0.14 75)", soft: "oklch(0.62 0.14 75 / 0.1)", line: "oklch(0.62 0.14 75 / 0.3)", Icon: AlertTriangle },
+    success: { c: "var(--adv)", soft: "var(--adv-soft)", line: "var(--adv-line)", Icon: CheckCircle2 },
   }[type];
-  const Icon = styles.icon;
   return (
-    <div className={`flex gap-3 p-4 rounded-xl border ${styles.bg} my-4`}>
-      <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${styles.ic}`} strokeWidth={2} />
-      <div className={`text-[14px] leading-relaxed ${styles.tx}`}>{children}</div>
+    <div style={{ display: "flex", gap: 12, padding: 16, borderRadius: 14, border: `1px solid ${t.line}`, background: t.soft, margin: "16px 0" }}>
+      <t.Icon size={16} color={t.c} strokeWidth={2} style={{ marginTop: 3, flexShrink: 0 }} />
+      <div style={{ fontSize: 14, lineHeight: 1.65, color: "var(--fg2)" }}>{children}</div>
     </div>
   );
 }
 
 /* ── Section heading ─────────────────────────────────────────────────── */
 function H2({ id, children }: { id: string; children: React.ReactNode }) {
-  return <h2 id={id} className="text-[24px] font-bold text-gray-900 mt-12 mb-4 pt-4 scroll-mt-20">{children}</h2>;
+  return <h2 id={id} style={{ fontSize: 26, fontWeight: 600, letterSpacing: "-0.025em", color: "var(--fg)", margin: "56px 0 16px", paddingTop: 8, scrollMarginTop: 96 }}>{children}</h2>;
 }
 function H3({ id, children }: { id?: string; children: React.ReactNode }) {
-  return <h3 id={id} className="text-[17px] font-semibold text-gray-900 mt-8 mb-3 scroll-mt-20">{children}</h3>;
+  return <h3 id={id} style={{ fontSize: 18, fontWeight: 600, letterSpacing: "-0.01em", color: "var(--fg)", margin: "32px 0 12px", scrollMarginTop: 96 }}>{children}</h3>;
 }
 
 /* ── Sidebar nav items ───────────────────────────────────────────────── */
@@ -72,8 +72,8 @@ const navSections = [
   ]},
   { label: "LLM-as-Judge", items: [
     { label: "How it works", href: "#eval" },
-    { label: "Writing criteria", href: "#criteria" },
-    { label: "Judge models", href: "#judge-models" },
+    { label: "Evaluation criteria", href: "#criteria" },
+    { label: "The judge model", href: "#judge-models" },
     { label: "Composite scoring", href: "#scoring" },
   ]},
   { label: "Auto-Rollback", items: [
@@ -105,50 +105,45 @@ export default function DocsPage() {
     : [];
 
   return (
-    <div className="min-h-screen bg-white" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
-      {/* ── Nav ── */}
-      <nav className="border-b border-gray-100 px-6 py-4 flex items-center justify-between sticky top-0 bg-white z-40 shadow-sm">
-        <Link href="/" className="flex items-center gap-2.5">
-          <Image src="/repath.png" alt="Repath" width={32} height={32} className="rounded-lg" />
-          <span className="font-bold text-[18px] text-gray-900">Repath</span>
-          <span className="ml-1 text-[13px] text-gray-400 font-normal">/ Docs</span>
-        </Link>
-        <div className="flex items-center gap-4">
-          <div className="relative hidden md:block">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+    <MarketingShell>
+      <div className="lp-docs lp-pad" style={{ maxWidth: 1280, margin: "0 auto", padding: "0 40px", display: "flex", gap: 48 }}>
+        {/* ── Sidebar ── */}
+        <aside className="lp-docs-side" style={{ width: 240, flexShrink: 0, position: "sticky", top: 72, height: "calc(100vh - 72px)", overflowY: "auto", padding: "40px 0" }}>
+          <div style={{ position: "relative", marginBottom: 24 }}>
+            <Search size={15} color="var(--fg4)" style={{ position: "absolute", left: 11, top: 11 }} />
             <input
-              type="text" placeholder="Search docs..."
-              value={query} onChange={e => setQuery(e.target.value)}
-              className="pl-9 pr-4 py-2 rounded-lg border border-gray-200 text-[14px] text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent w-64"
+              type="text"
+              placeholder="Search docs"
+              aria-label="Search docs"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              style={{ width: "100%", height: 38, padding: "0 12px 0 34px", borderRadius: 10, border: "1px solid var(--line)", background: "var(--panel)", color: "var(--fg)", fontSize: 14, fontFamily: "inherit" }}
             />
             {searchResults.length > 0 && (
-              <div className="absolute top-full mt-1 left-0 right-0 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden">
-                {searchResults.map(r => (
-                  <a key={r.href} href={r.href} onClick={() => setQuery("")}
-                    className="block px-4 py-2.5 text-[14px] text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors">
+              <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, zIndex: 50, borderRadius: 12, border: "1px solid var(--line2)", background: "var(--panel)", boxShadow: "var(--shadow)", overflow: "hidden" }}>
+                {searchResults.map((r) => (
+                  <a key={r.href} href={r.href} onClick={() => setQuery("")} className="lp-docs-navitem" style={{ display: "block", padding: "9px 14px", fontSize: 14 }}>
                     {r.label}
                   </a>
                 ))}
               </div>
             )}
           </div>
-          <Link href="/login" className="text-[14px] text-gray-500 hover:text-gray-900">Sign in</Link>
-          <Link href="/signup" className="px-4 py-2 bg-gray-900 text-white text-[13px] font-medium rounded-lg hover:bg-gray-800">Start free trial</Link>
-        </div>
-      </nav>
-
-      <div className="max-w-7xl mx-auto flex">
-        {/* ── Sidebar ── */}
-        <aside className="hidden lg:block w-64 shrink-0 sticky top-[65px] h-[calc(100vh-65px)] overflow-y-auto border-r border-gray-100 py-8 px-4">
-          {navSections.map(s => (
-            <div key={s.label} className="mb-6">
-              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-3 mb-2">{s.label}</p>
-              <ul className="space-y-0.5">
-                {s.items.map(item => (
+          {navSections.map((sec) => (
+            <div key={sec.label} style={{ marginBottom: 24 }}>
+              <p className="lp-mono" style={{ fontSize: 10, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--fg4)", margin: "0 0 8px", padding: "0 10px" }}>
+                {sec.label}
+              </p>
+              <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+                {sec.items.map((item) => (
                   <li key={item.href}>
-                    <a href={item.href}
+                    <a
+                      href={item.href}
                       onClick={() => setActiveSection(item.href)}
-                      className={`block px-3 py-2 rounded-lg text-[14px] transition-colors ${activeSection === item.href ? "bg-violet-50 text-violet-700 font-medium" : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"}`}>
+                      className="lp-docs-navitem"
+                      data-active={activeSection === item.href}
+                      style={{ display: "block", padding: "7px 10px", borderRadius: 8, fontSize: 14 }}
+                    >
                       {item.label}
                     </a>
                   </li>
@@ -159,7 +154,7 @@ export default function DocsPage() {
         </aside>
 
         {/* ── Content ── */}
-        <main className="flex-1 px-8 py-12 max-w-3xl">
+        <article style={{ flex: 1, minWidth: 0, maxWidth: 760, padding: "40px 0 120px" }}>
 
           {/* ════ GETTING STARTED ════ */}
           <H2 id="intro">Introduction</H2>
@@ -388,7 +383,7 @@ response = client.chat.completions.create(
           </p>
           <Code lang="yaml">{`spec:
   baseline:
-    provider: openai          # openai | anthropic | gemini
+    provider: openai          # openai · anthropic · gemini · openrouter · vercel
     model: gpt-4o-mini
     prompt:
       system: "Current system prompt"
@@ -728,15 +723,15 @@ GET /api/v1/rollouts/:id/decisions
           </Note>
 
           {/* ── Footer ── */}
-          <div className="mt-16 pt-8 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-[13px] text-gray-400">Last updated: June 2026 · Repath v0.1.0</p>
-            <div className="flex gap-4">
-              <a href="mailto:hello@tryrepath.com" className="text-[13px] text-violet-600 hover:underline">Get help</a>
-              <a href="https://github.com/repathhq/repath/discussions" target="_blank" rel="noopener noreferrer" className="text-[13px] text-violet-600 hover:underline">GitHub Discussions</a>
+          <div style={{ marginTop: 64, paddingTop: 24, borderTop: "1px solid var(--line2)", display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", fontSize: 13 }}>
+            <p className="lp-mono" style={{ margin: 0, color: "var(--fg4)", fontSize: 12 }}>Last updated October 2026</p>
+            <div style={{ display: "flex", gap: 18 }}>
+              <a href="mailto:hello@tryrepath.com" className="lp-doclink">Get help</a>
+              <a href="https://github.com/repathhq/repath/issues" target="_blank" rel="noopener noreferrer" className="lp-doclink">Report an issue</a>
             </div>
           </div>
-        </main>
+        </article>
       </div>
-    </div>
+    </MarketingShell>
   );
 }

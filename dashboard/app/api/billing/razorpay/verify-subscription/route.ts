@@ -98,6 +98,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "This subscription belongs to another account." }, { status: 403 });
   }
 
+  // The subscription this one replaces, if any. Read before activation
+  // overwrites it: an upgrade creates a new Razorpay subscription, and the old
+  // one would otherwise keep renewing — charging the customer for two plans
+  // while only the new one is tracked.
+  const previous = await fetch(`${GATEWAY}/api/v1/cloud/tenants/${tenantId}/usage`, {
+    headers: { Authorization: `Bearer ${API_TOKEN}` },
+    signal: AbortSignal.timeout(10000),
+  })
+    .then((r) => (r.ok ? (r.json() as Promise<{ subscription_id?: string | null }>) : null))
+    .catch(() => null);
+  const replaced = previous?.subscription_id && previous.subscription_id !== sub.id ? previous.subscription_id : null;
+
   const upgradeRes = await fetch(
     `${GATEWAY}/api/v1/cloud/tenants/${tenantId}/subscription`,
     {
@@ -121,10 +133,29 @@ export async function POST(req: NextRequest) {
     console.error(`[billing] activation failed: ${detail}`);
     return NextResponse.json(
       {
-        error: `Payment succeeded but activation failed. Contact support@tryrepath.com with payment ID: ${razorpay_payment_id}`,
+        error: `Payment succeeded but activation failed. Email hello@tryrepath.com with payment ID: ${razorpay_payment_id}`,
       },
       { status: 502 }
     );
+  }
+
+  if (replaced) {
+    // Immediately, not at cycle end: the new plan is already active and paid.
+    const cancel = await fetch(
+      `https://api.razorpay.com/v1/subscriptions/${encodeURIComponent(replaced)}/cancel`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Basic ${credentials}` },
+        body: JSON.stringify({ cancel_at_cycle_end: 0 }),
+        signal: AbortSignal.timeout(15000),
+      }
+    ).catch(() => null);
+    if (!cancel?.ok) {
+      const detail = cancel ? await cancel.text().catch(() => "") : "unreachable";
+      // Loud on purpose: this customer will be billed twice until someone
+      // cancels the old subscription by hand in the Razorpay dashboard.
+      console.error(`[billing] ACTION NEEDED: could not cancel replaced subscription ${replaced} for ${tenantId}: ${detail}`);
+    }
   }
 
   return NextResponse.json({ ok: true, plan });

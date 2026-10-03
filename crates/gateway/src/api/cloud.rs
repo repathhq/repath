@@ -400,6 +400,10 @@ pub async fn get_usage(
             t.trial_ends_at,
             t.active,
             t.api_key_prefix,
+            t.subscription_id,
+            t.subscription_status,
+            t.current_period_end,
+            t.cancel_at_period_end,
             date_trunc('month', NOW()) AS month_start
         FROM tenants t
         WHERE t.id = $1
@@ -428,6 +432,11 @@ pub async fn get_usage(
                 "active": row.get::<bool, _>("active"),
                 "api_key_prefix": row.try_get::<Option<String>, _>("api_key_prefix").ok().flatten(),
                 "month_start": row.get::<DateTime<Utc>, _>("month_start"),
+                // Billing needs these to offer, or confirm, a cancellation.
+                "subscription_id": row.get::<Option<String>, _>("subscription_id"),
+                "subscription_status": row.get::<Option<String>, _>("subscription_status"),
+                "current_period_end": row.get::<Option<DateTime<Utc>>, _>("current_period_end"),
+                "cancel_at_period_end": row.get::<bool, _>("cancel_at_period_end"),
             }))
             .into_response()
         }
@@ -1007,6 +1016,7 @@ pub async fn activate_subscription(
                subscription_id     = $3,
                subscription_status = $4,
                current_period_end  = $5,
+               cancel_at_period_end = FALSE,
                last_synced_at      = NOW(),
                trial_ends_at       = NULL,
                active              = true,
@@ -1062,6 +1072,56 @@ pub async fn activate_subscription(
             .into_response()
         }
         Ok(None) => cloud_error(StatusCode::NOT_FOUND, format!("Tenant not found: {id}")),
+        Err(e) => cloud_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct CancelSubscriptionRequest {
+    pub subscription_id: String,
+}
+
+/// POST /api/v1/cloud/tenants/:id/subscription/cancel
+///
+/// Records that the customer cancelled. The dashboard calls this after
+/// Razorpay has accepted a cancel-at-cycle-end, so the plan is untouched
+/// here: the customer keeps what they paid for until the period ends, when
+/// Razorpay marks the subscription cancelled and the reconciler removes it.
+///
+/// The subscription id must match the tenant's current one, so a stale
+/// request for a replaced subscription cannot flag the new one.
+pub async fn cancel_subscription(
+    State(state): State<AppState>,
+    Extension(auth): Extension<AuthContext>,
+    Path(id): Path<String>,
+    Json(body): Json<CancelSubscriptionRequest>,
+) -> impl IntoResponse {
+    if let Some(resp) = reject_non_admin(&auth) {
+        return resp;
+    }
+
+    let result = sqlx::query(
+        "UPDATE tenants \
+            SET cancel_at_period_end = TRUE, updated_at = NOW() \
+          WHERE id = $1 AND subscription_id = $2 \
+      RETURNING current_period_end",
+    )
+    .bind(&id)
+    .bind(&body.subscription_id)
+    .fetch_optional(&state.db_pool)
+    .await;
+
+    match result {
+        Ok(Some(row)) => {
+            let ends: Option<DateTime<Utc>> = row.get("current_period_end");
+            tracing::info!(tenant_id = %id, subscription_id = %body.subscription_id, "Subscription set to cancel at period end");
+            Json(json!({ "cancel_at_period_end": true, "current_period_end": ends }))
+                .into_response()
+        }
+        Ok(None) => cloud_error(
+            StatusCode::NOT_FOUND,
+            "No such subscription on this account".to_string(),
+        ),
         Err(e) => cloud_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
 }

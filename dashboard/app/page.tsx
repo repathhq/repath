@@ -12,10 +12,10 @@
  * landing.css or wired here, rather than approximated inline.
  */
 
-import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import "./landing.css";
+import { MarketingFooter, MarketingNav } from "@/components/marketing/Marketing";
 
 // ── Interactive demo ─────────────────────────────────────────────────────
 // The ladder the controller walks, and the thresholds it walks it by. These
@@ -43,7 +43,6 @@ const seedLog = (): Decision[] => [
   },
 ];
 
-const MONO = "var(--font-geist-mono), ui-monospace, monospace";
 
 // ── Small shared pieces ──────────────────────────────────────────────────
 
@@ -297,13 +296,17 @@ function CodeCard({ title, code }: { title: string; code: string }) {
 
 // ── Comparison table data ────────────────────────────────────────────────
 type Cell = boolean | string;
+// Compared by kind of tool rather than by vendor: products change faster
+// than this page does, and a stale claim about someone else's product is
+// worse than none.
+const COMPARE_COLUMNS = ["Feature flags", "LLM gateway", "LLM observability"];
 const COMPARISON: Array<[string, Cell, Cell, Cell, Cell]> = [
-  ["Canary deployments for prompts", true, "Enterprise", false, false],
-  ["LLM quality evaluation", true, false, false, "View only"],
-  ["Automatic rollback on quality", true, "Enterprise", false, false],
-  ["Open source", true, false, true, true],
-  ["Self-hostable", true, false, true, true],
-  ["Price for startups", "Free", "$100K+/yr", "Free", "Free"],
+  ["Split traffic between prompt or model versions", true, true, "Weighted routing", false],
+  ["Score live responses for quality", true, false, false, true],
+  ["Advance or roll back on quality, automatically", true, "On error metrics", false, false],
+  ["Every rollout decision logged with its scores", true, false, false, false],
+  ["Drop-in for OpenAI-compatible clients", true, false, true, "Via SDK"],
+  ["Self-hostable", "Source-available", "Varies", "Varies", "Varies"],
 ];
 
 function CompareCell({ value }: { value: Cell }) {
@@ -339,42 +342,7 @@ function CompareCell({ value }: { value: Cell }) {
   );
 }
 
-// ── Theme ────────────────────────────────────────────────────────────────
-// The theme lives on <html data-lp-theme>, written by a blocking inline
-// script in layout.tsx before first paint — so there is no flash of the wrong
-// theme on load. React subscribes to that attribute rather than owning it;
-// mirroring it into state via an effect would repaint after hydration and
-// reintroduce the flash the script exists to prevent.
-type Theme = "light" | "dark";
-const THEME_KEY = "repath-landing-theme";
-const themeListeners = new Set<() => void>();
-
-function subscribeTheme(cb: () => void) {
-  themeListeners.add(cb);
-  return () => themeListeners.delete(cb);
-}
-function readTheme(): Theme {
-  return document.documentElement.dataset.lpTheme === "dark" ? "dark" : "light";
-}
-// The server has no DOM and no localStorage, so it always renders light —
-// matching what the inline script paints before React arrives.
-function readThemeOnServer(): Theme {
-  return "light";
-}
-function writeTheme(next: Theme) {
-  document.documentElement.dataset.lpTheme = next;
-  try {
-    localStorage.setItem(THEME_KEY, next);
-  } catch {
-    // Private browsing, or storage disabled. Not being able to remember the
-    // choice is not a reason to refuse it for this visit.
-  }
-  themeListeners.forEach((l) => l());
-}
-
 export default function LandingPage() {
-  const theme = useSyncExternalStore(subscribeTheme, readTheme, readThemeOnServer);
-  const chooseTheme = useCallback((next: Theme) => writeTheme(next), []);
 
   // ── Reveal on scroll ───────────────────────────────────────────────────
   //
@@ -514,19 +482,6 @@ export default function LandingPage() {
     setLog(seedLog());
   }, []);
 
-  const pill = (active: boolean) => ({
-    border: "none",
-    cursor: "pointer",
-    height: 26,
-    padding: "0 11px",
-    borderRadius: 999,
-    fontFamily: MONO,
-    fontSize: 11,
-    letterSpacing: "0.02em",
-    transition: "background .25s, color .25s",
-    background: active ? "var(--btn-bg)" : "transparent",
-    color: active ? "var(--btn-fg)" : "var(--fg2)",
-  });
 
   return (
     <div ref={rootRef} className="lp">
@@ -580,101 +535,15 @@ export default function LandingPage() {
       />
 
       {/* ── Nav ──────────────────────────────────────────────────────── */}
-      <nav
-        style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 80,
-          background: "var(--nav)",
-          backdropFilter: "blur(18px) saturate(160%)",
-          WebkitBackdropFilter: "blur(18px) saturate(160%)",
-          borderBottom: "1px solid var(--line2)",
-        }}
-      >
-        <div
-          className="lp-pad"
-          style={{
-            maxWidth: 1280,
-            margin: "0 auto",
-            padding: "16px 40px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 32,
-          }}
-        >
-          <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <Image src="/logo-icon.png" alt="" width={26} height={26} style={{ objectFit: "contain" }} />
-            <span style={{ fontWeight: 600, fontSize: 18, letterSpacing: "-0.03em", color: "var(--fg)" }}>
-              Repath
-            </span>
-          </Link>
-
-          <div
-            className="lp-nav-links"
-            style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 14, fontWeight: 450 }}
-          >
-            <a className="lp-navlink" href="#how">How it works</a>
-            <a className="lp-navlink" href="#demo">Live demo</a>
-            <a className="lp-navlink" href="#features">Features</a>
-            <a className="lp-navlink" href="#compare">Compare</a>
-            <a className="lp-navlink" href="#selfhost">Self-host</a>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <div
-              role="group"
-              aria-label="Colour theme"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 2,
-                padding: 3,
-                borderRadius: 999,
-                border: "1px solid var(--line2)",
-                background: "var(--chip)",
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => chooseTheme("light")}
-                aria-pressed={theme === "light"}
-                style={pill(theme === "light")}
-              >
-                light
-              </button>
-              <button
-                type="button"
-                onClick={() => chooseTheme("dark")}
-                aria-pressed={theme === "dark"}
-                style={pill(theme === "dark")}
-              >
-                dark
-              </button>
-            </div>
-            <Link href="/login" style={{ fontSize: 14, fontWeight: 450, color: "var(--fg2)" }}>
-              Sign in
-            </Link>
-            <Link
-              href="/signup"
-              className="lp-btn-primary"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                height: 38,
-                padding: "0 18px",
-                borderRadius: 10,
-                background: "var(--btn-bg)",
-                color: "var(--btn-fg)",
-                fontSize: 14,
-                fontWeight: 550,
-              }}
-            >
-              Start free
-            </Link>
-          </div>
-        </div>
-      </nav>
+      <MarketingNav
+        links={[
+          ["How it works", "#how"],
+          ["Live demo", "#demo"],
+          ["Features", "#features"],
+          ["Compare", "#compare"],
+          ["Pricing", "/pricing"],
+        ]}
+      />
 
       {/* ── Hero ─────────────────────────────────────────────────────── */}
       <header
@@ -718,22 +587,9 @@ export default function LandingPage() {
               animation: "lp-pulse 2s ease-in-out infinite",
             }}
           />
-          <span style={{ color: "var(--fg)" }}>Controller live</span>
+          <span style={{ color: "var(--fg)" }}>Now open</span>
           <span style={{ color: "var(--fg5)" }}>·</span>
-          <span>4,812 rollouts gated this week</span>
-          <span
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              height: 22,
-              padding: "0 8px",
-              borderRadius: 999,
-              background: "var(--hover)",
-              color: "var(--fg)",
-            }}
-          >
-            v1.4
-          </span>
+          <span style={{ paddingRight: 6 }}>7-day free trial, no card</span>
         </div>
 
         <h1
@@ -832,7 +688,7 @@ export default function LandingPage() {
           <span style={{ color: "var(--fg5)" }}>·</span>
           <span>No card</span>
           <span style={{ color: "var(--fg5)" }}>·</span>
-          <span>One base_url to integrate</span>
+          <span>Works with your existing OpenAI SDK</span>
         </div>
       </header>
 
@@ -929,7 +785,7 @@ export default function LandingPage() {
                       Judge quality score
                     </div>
                     <div className="lp-mono" style={{ fontSize: 12, color: "var(--fg3)", marginTop: 5 }}>
-                      gpt-4o-mini · rolling 200-sample mean
+                      LLM judge · rolling mean
                     </div>
                   </div>
                   <div className="lp-mono" style={{ display: "flex", gap: 22, fontSize: 12 }}>
@@ -1049,61 +905,6 @@ export default function LandingPage() {
         </figcaption>
       </figure>
 
-      {/* ── Logo marquee ─────────────────────────────────────────────── */}
-      <section
-        data-reveal
-        className="lp-pad lp-section"
-        style={{ position: "relative", zIndex: 1, maxWidth: 1280, margin: "96px auto 0", padding: "0 40px" }}
-      >
-        <div
-          className="lp-mono"
-          style={{
-            textAlign: "center",
-            fontSize: 11,
-            letterSpacing: "0.16em",
-            textTransform: "uppercase",
-            color: "var(--fg4)",
-            marginBottom: 34,
-          }}
-        >
-          Gating production traffic at
-        </div>
-        <div
-          style={{
-            position: "relative",
-            overflow: "hidden",
-            maskImage: "linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)",
-            WebkitMaskImage: "linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)",
-          }}
-        >
-          <div style={{ display: "flex", gap: 56, width: "max-content", animation: "lp-marquee 32s linear infinite" }}>
-            {[0, 1].map((group) => (
-              <div key={group} aria-hidden={group === 1} style={{ display: "flex", gap: 56, alignItems: "center" }}>
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="lp-mono"
-                    style={{
-                      width: 150,
-                      height: 44,
-                      border: "1px dashed var(--line)",
-                      borderRadius: 8,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: 10,
-                      color: "var(--fg5)",
-                    }}
-                  >
-                    logo
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* ── 01 The silent failure mode ───────────────────────────────── */}
       <section
         data-reveal
@@ -1118,8 +919,8 @@ export default function LandingPage() {
           {[
             {
               stat: "97.6 → 2.4%",
-              title: "Accuracy fell off a cliff",
-              body: "A 2023 Stanford study measured GPT-4's accuracy on one coding task dropping from 97.6% to 2.4% inside a month. The API returned 200 the entire time.",
+              title: "Same model name, different model",
+              body: "A 2023 Stanford and Berkeley study measured GPT-4 identifying prime numbers at 97.6% in March and 2.4% in June. Same endpoint, same model name, a 200 on every call.",
             },
             {
               stat: "0 errors",
@@ -1127,9 +928,9 @@ export default function LandingPage() {
               body: "Status codes, latency and error rates are blind to quality. A regression that halves usefulness looks identical to a clean deploy.",
             },
             {
-              stat: "34 days",
+              stat: "via tickets",
               title: "Found by customers, not by you",
-              body: "A subtle prompt edit degraded responses for over a month before anyone tied the support tickets back to the deploy that caused them.",
+              body: "Without a quality signal on live traffic, a worse prompt is found the slow way — in support tickets, long after the deploy that caused it.",
             },
           ].map((c) => (
             <div
@@ -1187,8 +988,13 @@ export default function LandingPage() {
             <div style={{ color: "var(--fg5)", marginTop: 12 }}># after</div>
             <div style={{ color: "var(--fg)", whiteSpace: "nowrap" }}>
               client = <span style={{ color: "var(--accent)" }}>OpenAI</span>(api_key=
-              <span style={{ color: "var(--adv)" }}>&quot;sk-…&quot;</span>, base_url=
-              <span style={{ color: "var(--adv)" }}>&quot;https://api.tryrepath.com/v1&quot;</span>)
+              <span style={{ color: "var(--adv)" }}>&quot;sk-…&quot;</span>,
+            </div>
+            <div style={{ color: "var(--fg)", whiteSpace: "nowrap", paddingLeft: "2ch" }}>
+              base_url=<span style={{ color: "var(--adv)" }}>&quot;https://api.tryrepath.com/v1&quot;</span>,
+            </div>
+            <div style={{ color: "var(--fg)", whiteSpace: "nowrap", paddingLeft: "2ch" }}>
+              default_headers={"{"}<span style={{ color: "var(--adv)" }}>&quot;X-Repath-Key&quot;</span>: <span style={{ color: "var(--adv)" }}>&quot;rp_live_…&quot;</span>{"}"})
             </div>
           </div>
         </div>
@@ -1235,7 +1041,7 @@ export default function LandingPage() {
                 <Connector h={18} />
                 <FlowBox>
                   PYTHON EVALUATOR<br />
-                  <span style={{ color: "var(--fg3)" }}>checks + gpt-4o-mini judge</span>
+                  <span style={{ color: "var(--fg3)" }}>checks + LLM judge</span>
                 </FlowBox>
                 <Connector h={18} />
                 <FlowBox>
@@ -1427,16 +1233,16 @@ export default function LandingPage() {
             {
               n: "4.2",
               title: "A judge model scores every response",
-              body: "Describe what good looks like in plain English. Repath scores each response with gpt-4o-mini plus your programmatic checks. No metric schemas to design.",
-              file: "judge.yaml",
-              code: "judge_prompt: |\n  Score this response 0-1.\n  Criteria: accuracy, clarity,\n  relevance to the query.",
+              body: "Describe what good looks like in plain English. Repath scores responses with a fast judge model plus your programmatic checks. No metric schemas to design.",
+              file: "rollout.yaml",
+              code: 'evaluation:\n  - type: llm_judge\n    criteria:\n      - name: helpfulness\n        prompt: "Does this give specific,\n          actionable help?"',
             },
             {
               n: "4.3",
-              title: "Rollback in under 500ms",
-              body: "When the rolling score crosses your threshold, candidate weight is zero before the next request is routed. Not eventually — on that tick.",
-              file: "controller.yaml",
-              code: "controller:\n  check_interval: 30s\n  rollback_threshold: 0.7\n  action: instant",
+              title: "Rollback without a human",
+              body: "The controller checks every rollout every 30 seconds. When quality crosses your threshold, the candidate goes to zero on that check, and the gateway stops routing to it within seconds.",
+              file: "rollout.yaml",
+              code: 'rollback:\n  trigger:\n    quality_score: "< 0.7"\n    error_rate: "> 0.1"\n  action: instant',
             },
             {
               n: "4.4",
@@ -1477,7 +1283,7 @@ export default function LandingPage() {
                 <th style={{ textAlign: "center", padding: "18px 24px", borderBottom: "1px solid var(--line2)", fontSize: 15, fontWeight: 600, color: "var(--fg)", background: "var(--accent-soft)" }}>
                   Repath
                 </th>
-                {["LaunchDarkly", "LiteLLM", "Langfuse"].map((n) => (
+                {COMPARE_COLUMNS.map((n) => (
                   <th key={n} className="lp-mono" style={{ textAlign: "center", padding: "18px 24px", borderBottom: "1px solid var(--line2)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--fg4)", fontWeight: 400 }}>
                     {n}
                   </th>
@@ -1577,49 +1383,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Footer ───────────────────────────────────────────────────── */}
-      <footer style={{ position: "relative", zIndex: 1, borderTop: "1px solid var(--line2)", padding: "56px 0 40px" }}>
-        <div className="lp-pad" style={{ maxWidth: 1280, margin: "0 auto", padding: "0 40px" }}>
-          <div className="lp-foot" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 48 }}>
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-                <Image src="/logo-icon.png" alt="" width={22} height={22} style={{ objectFit: "contain" }} />
-                <span style={{ fontWeight: 600, letterSpacing: "-0.03em" }}>Repath</span>
-              </div>
-              <p style={{ fontSize: 14, lineHeight: 1.65, color: "var(--fg3)", margin: "0 0 10px", maxWidth: "34ch" }}>
-                Progressive delivery for AI. Canary rollouts, quality gates and automatic rollback for
-                prompts and models.
-              </p>
-              <p className="lp-mono" style={{ fontSize: 11, color: "var(--fg5)", margin: 0 }}>Rust · Python · BSL 1.1</p>
-            </div>
-            {[
-              { h: "Product", links: [["Docs", "/docs"], ["Pricing", "/pricing"], ["Status", "/status"], ["GitHub", "https://github.com/repathhq/repath"]] },
-              { h: "Company", links: [["About", "/about"], ["Careers", "/careers"], ["Contact", "/contact"]] },
-              { h: "Legal", links: [["Terms", "/terms"], ["Privacy", "/privacy"]] },
-            ].map((col) => (
-              <div key={col.h}>
-                <h4 className="lp-mono" style={{ fontSize: 10, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--fg4)", fontWeight: 400, margin: "0 0 16px" }}>
-                  {col.h}
-                </h4>
-                <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 11, fontSize: 14 }}>
-                  {col.links.map(([label, href]) => (
-                    <li key={label}>
-                      <Link href={href} className="lp-footlink">{label}</Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-          <div
-            className="lp-mono"
-            style={{ borderTop: "1px solid var(--line2)", marginTop: 44, paddingTop: 22, display: "flex", justifyContent: "space-between", gap: 24, fontSize: 11, color: "var(--fg5)", flexWrap: "wrap" }}
-          >
-            <span>© {new Date().getFullYear()} Repath</span>
-            <span>tryrepath.com</span>
-          </div>
-        </div>
-      </footer>
+      <MarketingFooter />
     </div>
   );
 }

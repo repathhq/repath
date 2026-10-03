@@ -162,6 +162,10 @@ fn cloud_routes() -> Router<AppState> {
             "/tenants/:id/subscription",
             post(cloud::activate_subscription),
         )
+        .route(
+            "/tenants/:id/subscription/cancel",
+            post(cloud::cancel_subscription),
+        )
         .route("/tenants/:id/payments", get(cloud::list_payments))
         .route("/tenants/by-email/:email", get(cloud::get_tenant_by_email))
         .route(
