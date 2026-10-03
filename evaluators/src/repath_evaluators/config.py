@@ -64,7 +64,19 @@ class Settings(BaseSettings):
     # ── LLM Judge settings ────────────────────────────────────────────────
     openai_api_key: str = Field(
         default="",
-        description="OpenAI API key for LLM-as-judge evaluation",
+        description="OpenAI API key — the judge's key when no judge-specific one is set",
+    )
+    # Any OpenAI-compatible endpoint can host the judge. Production uses the
+    # Vercel AI Gateway: one key reaches every vendor, so no single provider's
+    # balance or outage can take judging down — which is what happened when
+    # the OpenAI account ran out of credit on 2026-10-02.
+    llm_judge_base_url: str = Field(
+        default="",
+        description="OpenAI-compatible base URL for the judge (empty = OpenAI)",
+    )
+    llm_judge_api_key: str = Field(
+        default="",
+        description="Key for llm_judge_base_url (empty = openai_api_key)",
     )
     llm_judge_model: str = Field(
         default="gpt-4o-mini",
@@ -77,6 +89,16 @@ class Settings(BaseSettings):
         ge=0.0,
         le=1.0,
         description="Fraction of responses to evaluate with LLM judge",
+    )
+    # Responses judged at once. The worker used to judge one response at a
+    # time and score its criteria one after another, which capped throughput
+    # at ~530 responses/hour on gpt-6-luna; a busy tenant could back up every
+    # rollout's decisions. Bounded so a burst cannot trip provider limits.
+    judge_concurrency: int = Field(
+        default=6,
+        ge=1,
+        le=64,
+        description="Responses evaluated concurrently",
     )
     # Max seconds to wait for a judge response before giving up
     llm_judge_timeout_secs: int = Field(

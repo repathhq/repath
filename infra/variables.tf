@@ -48,6 +48,24 @@ variable "openai_api_key" {
   sensitive   = true
 }
 
+variable "llm_judge_api_key" {
+  description = <<-EOT
+    Vercel AI Gateway key for the LLM judge. When set, the judge runs through
+    the gateway on openai/gpt-6-luna; when empty it falls back to OpenAI with
+    openai_api_key. Through a gateway, one vendor's empty balance or outage
+    cannot stop judging — which an empty OpenAI balance did on 2026-10-02.
+  EOT
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "llm_judge_model" {
+  description = "Judge model, in the gateway's vendor/model form. Chosen by benchmark on 2026-10-03."
+  type        = string
+  default     = "openai/gpt-6-luna"
+}
+
 variable "razorpay_key_id" {
   description = "Razorpay test key id"
   type        = string

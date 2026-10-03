@@ -39,6 +39,7 @@ The scoring prompt is intentionally simple:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -73,8 +74,41 @@ def is_permanent(exc: BaseException) -> bool:
     )
 
 
+class JudgeResponseError(Exception):
+    """The judge answered, but not with a usable score.
+
+    This used to become a silent 3/5 — "average" — for every criterion, so a
+    judge whose replies were truncated or empty made every answer look
+    middling instead of reporting that nothing was being judged. Measured on
+    2026-10-03: gpt-5-nano under the old request returned no content at all
+    (its 100-token budget went to hidden reasoning) and scored 14 of 14 test
+    answers, good and bad alike, exactly 0.5.
+    """
+
+
 def _should_retry(exc: BaseException) -> bool:
+    if isinstance(exc, JudgeResponseError):
+        return True
     return isinstance(exc, (RateLimitError, APIError)) and not is_permanent(exc)
+
+
+def request_options(model: str) -> dict:
+    """Sampling and budget for the judge call, by model family.
+
+    OpenAI's reasoning families spend completion tokens on hidden reasoning
+    before answering, so a tight budget truncates the JSON mid-reason and the
+    old 100-token cap failed on them. With reasoning at "minimal" they answer
+    directly — measured: gpt-6-luna 1.7 s with zero reasoning tokens — and
+    they take no temperature. Other models keep temperature 0.
+    """
+    bare = model.rsplit("/", 1)[-1].lower()
+    reasoning = bare.startswith(("gpt-5", "gpt-6", "o1", "o3", "o4"))
+    opts: dict = {"max_tokens": 300}
+    if reasoning:
+        opts["reasoning_effort"] = "minimal"
+    else:
+        opts["temperature"] = 0.0  # deterministic — consistent scores
+    return opts
 
 # Score mapping: integer 1–5 → float 0.0–1.0
 _SCORE_MAP: dict[int, float] = {1: 0.0, 2: 0.25, 3: 0.5, 4: 0.75, 5: 1.0}
@@ -234,13 +268,20 @@ class LlmJudgeEvaluator:
         start_ms = int(time.monotonic() * 1000)
         scored_criteria: list[CriterionScore] = []
 
-        for criterion in self._criteria:
-            score = await self._score_criterion(
-                user_message=user_message,
-                ai_response=ai_response,
-                criterion_name=criterion["name"],
-                criterion_description=criterion["description"],
+        # One prompt per criterion (see above), sent together: a response's
+        # judging time is its slowest criterion, not the sum of all three.
+        scores = await asyncio.gather(
+            *(
+                self._score_criterion(
+                    user_message=user_message,
+                    ai_response=ai_response,
+                    criterion_name=criterion["name"],
+                    criterion_description=criterion["description"],
+                )
+                for criterion in self._criteria
             )
+        )
+        for criterion, score in zip(self._criteria, scores, strict=True):
             scored_criteria.append(
                 CriterionScore(
                     name=criterion["name"],
@@ -289,28 +330,29 @@ class LlmJudgeEvaluator:
                 {"role": "system", "content": _JUDGE_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.0,   # Deterministic — we want consistent scores
-            max_tokens=100,    # Score + one-sentence reason fits in 100 tokens
             response_format={"type": "json_object"},
+            **request_options(self._model),
             timeout=self._timeout,
         )
 
-        raw_text = response.choices[0].message.content or "{}"
+        raw_text = response.choices[0].message.content or ""
 
         try:
             parsed = json.loads(raw_text)
-            raw_score = int(parsed.get("score", 3))
+            # No default: a reply without a score is not a 3, it is no answer.
+            raw_score = int(parsed["score"])
             # Clamp to valid range in case the model goes out of bounds
             raw_score = max(1, min(5, raw_score))
             reason = str(parsed.get("reason", ""))
-        except (json.JSONDecodeError, ValueError, TypeError):
+        except (json.JSONDecodeError, ValueError, TypeError, KeyError) as exc:
             log.warning(
-                "Failed to parse judge response",
+                "Judge reply had no usable score — retrying",
                 criterion=criterion_name,
                 raw=raw_text[:200],
             )
-            raw_score = 3  # Default to middle score on parse failure
-            reason = f"Parse error — defaulting to {raw_score}"
+            # Retried by the decorator; if it keeps failing, the scorer falls
+            # back to programmatic and records the response as unjudged.
+            raise JudgeResponseError(f"No usable score in judge reply: {raw_text[:120]!r}") from exc
 
         return {
             "raw": raw_score,

@@ -62,6 +62,11 @@ services:
       REPATH_DATABASE_URL: ${REPATH_DATABASE_URL}
       REPATH_REDIS_URL: redis://redis:6379
       REPATH_OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # The judge runs through the Vercel AI Gateway when these are set (SSM,
+      # via Terraform); empty falls back to OpenAI with the key above.
+      REPATH_LLM_JUDGE_BASE_URL: ${REPATH_LLM_JUDGE_BASE_URL:-}
+      REPATH_LLM_JUDGE_API_KEY: ${REPATH_LLM_JUDGE_API_KEY:-}
+      REPATH_LLM_JUDGE_MODEL: ${REPATH_LLM_JUDGE_MODEL:-}
       REPATH_LOG_FORMAT: json
     depends_on:
       redis:

@@ -133,22 +133,26 @@ jobs:
       - name: Check the LLM judge can score
         id: judge
         run: |
+          # The evaluator's own settings and request shape, so this tests what
+          # judging actually does — endpoint, key and model — not a stand-in.
           PROBE=$(base64 -w0 <<'PY'
-          import json, os, urllib.error, urllib.request
-          req = urllib.request.Request(
-              "https://api.openai.com/v1/chat/completions",
-              data=json.dumps({"model": "gpt-4o-mini", "max_tokens": 1,
-                               "messages": [{"role": "user", "content": "ok"}]}).encode(),
-              headers={"Authorization": "Bearer " + os.environ["REPATH_OPENAI_API_KEY"],
-                       "Content-Type": "application/json"})
+          from openai import OpenAI
+          from repath_evaluators.config import settings
+          from repath_evaluators.evaluators.llm_judge import request_options
+          model = settings.llm_judge_model
+          via = settings.llm_judge_base_url or "openai"
           try:
-              urllib.request.urlopen(req, timeout=20)
-              print("JUDGE_OK")
-          except urllib.error.HTTPError as e:
-              err = json.loads(e.read() or b"{}").get("error", {})
-              print("JUDGE_DOWN", e.code, err.get("code") or err.get("type"), (err.get("message") or "")[:200])
+              client = OpenAI(api_key=settings.llm_judge_api_key or settings.openai_api_key,
+                              base_url=settings.llm_judge_base_url or None, timeout=30)
+              client.chat.completions.create(
+                  model=model,
+                  messages=[{"role": "user", "content": 'Reply in JSON: {"ok": true}'}],
+                  response_format={"type": "json_object"},
+                  **request_options(model))
+              print("JUDGE_OK", model, "via", via)
           except Exception as e:
-              print("JUDGE_DOWN unreachable", type(e).__name__)
+              code = getattr(e, "code", None) or getattr(e, "type", None) or type(e).__name__
+              print("JUDGE_DOWN", getattr(e, "status_code", ""), code, model, "via", via, str(e)[:160])
           PY
           )
           CMD="echo $PROBE | base64 -d | docker exec -i repath-evaluator python -"
@@ -185,9 +189,9 @@ jobs:
               --body "$(printf '%s\n' \
                 "The production judge call failed: \`$RESULT\`" "" \
                 "While this lasts, no response is judged: rollouts hold (they never advance on unjudged traffic) and judge-based rollback cannot trigger." "" \
-                "- \`insufficient_quota\` / \`credit_balance_exhausted\`: add credit at https://platform.openai.com/settings/organization/billing" \
-                "- \`invalid_api_key\`: update /repath/prod/OPENAI_API_KEY in SSM, then redeploy" \
-                "- \`model_not_found\`: the judge model was retired; change REPATH_LLM_JUDGE_MODEL" "" \
+                "- No credit (\`insufficient_quota\`, \`credit_balance_exhausted\`, 402): top up the account the judge runs on — the Vercel AI Gateway (vercel.com → AI Gateway) when REPATH_LLM_JUDGE_BASE_URL is set, otherwise OpenAI billing" \
+                "- \`invalid_api_key\` / 401: set the new key as llm_judge_api_key (or openai_api_key) in infra/terraform.tfvars, terraform apply, then redeploy" \
+                "- \`model_not_found\` / 404: the judge model was retired; change llm_judge_model in Terraform" "" \
                 "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}")"
           fi
 

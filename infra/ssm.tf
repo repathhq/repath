@@ -15,16 +15,22 @@ resource "random_password" "jwt_secret" {
 locals {
   ssm_prefix = "/${var.project_name}/prod"
   ssm_values = {
-    "REPATH_API_TOKEN"     = random_password.api_token.result
-    "JWT_SECRET"           = random_password.jwt_secret.result
-    "OPENAI_API_KEY"       = var.openai_api_key
-    "REPATH_DATABASE_URL"  = "postgresql://repath:${random_password.db.result}@${aws_db_instance.postgres.endpoint}/repath?sslmode=require"
-    "REPATH_REDIS_URL"     = "redis://redis:6379"
-    "RAZORPAY_KEY_ID"      = var.razorpay_key_id
-    "RAZORPAY_KEY_SECRET"  = var.razorpay_key_secret
-    "RAZORPAY_LIVE_KEY"    = var.razorpay_live_key
+    "REPATH_API_TOKEN"        = random_password.api_token.result
+    "JWT_SECRET"              = random_password.jwt_secret.result
+    "OPENAI_API_KEY"          = var.openai_api_key
+    "REPATH_DATABASE_URL"     = "postgresql://repath:${random_password.db.result}@${aws_db_instance.postgres.endpoint}/repath?sslmode=require"
+    "REPATH_REDIS_URL"        = "redis://redis:6379"
+    "RAZORPAY_KEY_ID"         = var.razorpay_key_id
+    "RAZORPAY_KEY_SECRET"     = var.razorpay_key_secret
+    "RAZORPAY_LIVE_KEY"       = var.razorpay_live_key
     "RAZORPAY_LIVE_SECRET"    = var.razorpay_live_secret
     "RAZORPAY_WEBHOOK_SECRET" = var.razorpay_webhook_secret
+    # The judge's endpoint, key and model travel together: a gateway URL or a
+    # vendor/model id without a gateway key would break judging rather than
+    # fall back, so none is written unless the key is.
+    "REPATH_LLM_JUDGE_API_KEY"  = var.llm_judge_api_key
+    "REPATH_LLM_JUDGE_BASE_URL" = var.llm_judge_api_key != "" ? "https://ai-gateway.vercel.sh/v1" : ""
+    "REPATH_LLM_JUDGE_MODEL"    = var.llm_judge_api_key != "" ? var.llm_judge_model : ""
   }
 }
 

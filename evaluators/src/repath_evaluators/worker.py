@@ -181,8 +181,15 @@ class Worker:
             await self._handle_messages(entries)
 
     async def _handle_messages(self, entries: list[tuple[str, dict]]) -> None:
-        """Process a list of (entry_id, fields) pairs."""
-        for entry_id, raw_fields in entries:
+        """Process a list of (entry_id, fields) pairs, several at a time.
+
+        Each message is independent — its own request, its own evaluation row,
+        its own ack — so order does not matter, and a slow judge reply on one
+        no longer holds up the rest of the batch.
+        """
+        limit = asyncio.Semaphore(settings.judge_concurrency)
+
+        async def one(entry_id, raw_fields) -> None:
             # Redis returns bytes in some modes — decode to str
             fields = {
                 (k.decode() if isinstance(k, bytes) else k): (
@@ -190,8 +197,10 @@ class Worker:
                 )
                 for k, v in raw_fields.items()
             }
+            async with limit:
+                await self._process_one(entry_id, fields)
 
-            await self._process_one(entry_id, fields)
+        await asyncio.gather(*(one(e, f) for e, f in entries))
 
     async def _process_one(
         self,
@@ -334,9 +343,12 @@ def _build_scorer() -> Scorer:
     )
 
     llm_judge: LlmJudgeEvaluator | None = None
-    if settings.openai_api_key:
+    judge_key = settings.llm_judge_api_key or settings.openai_api_key
+    if judge_key:
         client = AsyncOpenAI(
-            api_key=settings.openai_api_key,
+            api_key=judge_key,
+            # None keeps the SDK's default (OpenAI, or OPENAI_BASE_URL).
+            base_url=settings.llm_judge_base_url or None,
             timeout=settings.llm_judge_timeout_secs,
         )
         llm_judge = LlmJudgeEvaluator(

@@ -78,10 +78,12 @@ services:
     environment:
       REPATH_DATABASE_URL: postgres://repath:e2e@postgres:5432/repath
       REPATH_REDIS_URL: redis://redis:6379
-      REPATH_OPENAI_API_KEY: sk-e2e-mock
-      # The OpenAI SDK honours this when no base_url is passed, which is how
-      # the evaluator constructs its client — so the judge calls the mock.
-      OPENAI_BASE_URL: http://mock-llm:9999/v1
+      # Configured exactly as production: the judge reached through a gateway
+      # by its own URL, key and vendor/model id (production: the Vercel AI
+      # Gateway with openai/gpt-6-luna). Here the "gateway" is the mock.
+      REPATH_LLM_JUDGE_BASE_URL: http://mock-llm:9999/v1
+      REPATH_LLM_JUDGE_API_KEY: vck-e2e-mock
+      REPATH_LLM_JUDGE_MODEL: openai/gpt-6-luna
       REPATH_LOG_FORMAT: json
     depends_on:
       gateway: { condition: service_healthy }
