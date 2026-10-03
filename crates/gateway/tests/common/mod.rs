@@ -67,26 +67,38 @@ impl TempDb {
 
 impl Drop for TempDb {
     fn drop(&mut self) {
-        // The pool must close before the database can be dropped, and Drop
-        // cannot await — hence the short-lived runtime on its own thread.
-        if let Some(pool) = self.pool.take() {
-            let name = self.name.clone();
-            let admin = admin_url(&self.base);
-            std::thread::spawn(move || {
-                if let Ok(rt) = tokio::runtime::Runtime::new() {
-                    rt.block_on(async {
-                        pool.close().await;
-                        if let Ok(mut c) = PgConnection::connect(&admin).await {
-                            let _ = c
-                                .execute(format!("DROP DATABASE IF EXISTS \"{name}\"").as_str())
-                                .await;
-                        }
-                    });
-                }
-            })
-            .join()
-            .ok();
-        }
+        // Never touch the test's own pool from another runtime. This used to
+        // `pool.close().await` on a fresh runtime while the test's runtime —
+        // which owns the pool's sockets — sat blocked in `.join()` below. Each
+        // side waited on the other: an intermittent deadlock that held CI's
+        // test job for 40+ minutes (twice) until it was cancelled.
+        //
+        // Instead: release the pool without waiting, then drop the database
+        // from a brand-new connection on a brand-new runtime. WITH (FORCE)
+        // (Postgres 13+) ends any session the released pool has not closed
+        // yet, so the drop cannot wait on it either.
+        drop(self.pool.take());
+        let name = self.name.clone();
+        let admin = admin_url(&self.base);
+        std::thread::spawn(move || {
+            if let Ok(rt) = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            {
+                rt.block_on(async {
+                    if let Ok(mut c) = PgConnection::connect(&admin).await {
+                        let _ = c
+                            .execute(
+                                format!("DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)").as_str(),
+                            )
+                            .await;
+                        let _ = c.close().await;
+                    }
+                });
+            }
+        })
+        .join()
+        .ok();
     }
 }
 
