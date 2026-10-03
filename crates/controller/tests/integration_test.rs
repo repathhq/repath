@@ -1091,3 +1091,85 @@ async fn test_programmatic_only_evaluations_do_not_advance() {
         other => panic!("programmatic-only data must never advance a rollout, got {other:?}"),
     }
 }
+
+/// Each step's weight applies when the step starts, and passing its gate
+/// moves straight to the next step's weight.
+///
+/// Found live on 2026-10-03: starting a rollout set the first step's weight,
+/// and the first "advance" then targeted that same weight ("advance 0.2 →
+/// 0.2"), wasting a cycle; and since the next step only activated a cycle
+/// later, each step's minimum duration was spent at the previous step's
+/// weight. The start decision also recorded no weight at all.
+#[tokio::test]
+async fn test_steps_advance_to_the_next_weight_and_start_at_their_own() {
+    if std::env::var("DATABASE_URL").is_err() {
+        return;
+    }
+    let db = TestDb::new().await;
+    let pool = db.pool();
+    let policy = standard_policy();
+    let (rollout_id, _, _) = insert_rollout(pool, "sequencing", &policy, "created", 0.0).await;
+
+    assert!(store::start_rollout(pool, rollout_id).await.expect("start"));
+    let first: f64 = sqlx::query("SELECT current_weight FROM rollouts WHERE id = $1")
+        .bind(rollout_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+        .get("current_weight");
+
+    // The start decision records the weight it applied.
+    let start_new: Option<f64> = sqlx::query(
+        "SELECT new_weight FROM decisions WHERE rollout_id = $1 AND reason = 'Rollout started'",
+    )
+    .bind(rollout_id)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+    .get("new_weight");
+    assert_eq!(
+        start_new,
+        Some(first),
+        "the start decision must record the weight it set"
+    );
+
+    // The advance target is the next step's weight, never the current one.
+    let next = store::next_pending_step_weight(pool, rollout_id)
+        .await
+        .unwrap()
+        .expect("a second step");
+    assert!(
+        next > first,
+        "next step ({next}) must be above the first ({first})"
+    );
+
+    assert!(store::apply_advance(
+        pool,
+        rollout_id,
+        next,
+        "canary",
+        "gates passed",
+        first,
+        json!({})
+    )
+    .await
+    .unwrap());
+
+    // ...and that next step is active immediately, its clock started, so its
+    // minimum duration is spent at its own weight.
+    let row = sqlx::query(
+        "SELECT target_weight, started_at IS NOT NULL AS started FROM rollout_steps \
+          WHERE rollout_id = $1 AND status = 'active'",
+    )
+    .bind(rollout_id)
+    .fetch_one(pool)
+    .await
+    .expect("the next step must be active right after the advance");
+    let active_weight: f64 = row.get("target_weight");
+    let started: bool = row.get("started");
+    assert!(
+        (active_weight - next).abs() < 1e-9,
+        "active step should be the one just applied"
+    );
+    assert!(started, "its duration clock must start at the advance");
+}

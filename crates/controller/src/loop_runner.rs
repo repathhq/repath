@@ -196,8 +196,15 @@ async fn process_rollout(
                     .map(|t| (Utc::now() - t).num_seconds().max(0) as u64)
                     .unwrap_or(0);
                 let duration = step.pause_duration_seconds.unwrap_or(0).max(0) as u64;
-                let is_final = step.target_weight >= 1.0;
-                (elapsed, step.target_weight, is_final, duration)
+                // The active step's weight is the one being served — it was
+                // applied when the step began. Passing its gate moves to the
+                // *next* step's weight. Targeting the active step's own
+                // weight instead made the first advance of every rollout a
+                // no-op ("advance 0.2 → 0.2") that cost a full cycle.
+                let next = store::next_pending_step_weight(pool, rollout.id)
+                    .await?
+                    .unwrap_or(step.target_weight);
+                (elapsed, next, next >= 1.0, duration)
             }
             None => {
                 // No active step — either all steps passed or none started yet.

@@ -210,6 +210,14 @@ pub async fn apply_advance(
         source: e.into(),
     })?;
 
+    // The step whose weight this advance applies becomes active now, so its
+    // minimum duration and its gate are measured at its own weight. They used
+    // to start a cycle later while traffic still sat at the previous step's
+    // weight — a "10 minutes at 25%" step spent its ten minutes at 5%.
+    if new_state != "promoted" {
+        activate_next_step(pool, rollout_id).await?;
+    }
+
     insert_decision(
         pool,
         rollout_id,
@@ -331,6 +339,26 @@ pub async fn activate_next_step(pool: &PgPool, rollout_id: Uuid) -> Result<Optio
 }
 
 /// Get the currently active step for a rollout.
+/// The weight of the next step still to come, if any.
+pub async fn next_pending_step_weight(pool: &PgPool, rollout_id: Uuid) -> Result<Option<f64>> {
+    let row = sqlx::query(
+        "SELECT target_weight FROM rollout_steps \
+          WHERE rollout_id = $1 AND status = 'pending' \
+          ORDER BY step_number ASC LIMIT 1",
+    )
+    .bind(rollout_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| Error::Database {
+        operation: "next pending step".to_string(),
+        source: e.into(),
+    })?;
+    Ok(row.map(|r| {
+        use sqlx::Row;
+        r.get::<f64, _>("target_weight")
+    }))
+}
+
 pub async fn get_active_step(pool: &PgPool, rollout_id: Uuid) -> Result<Option<ActiveStepRow>> {
     let row = sqlx::query(
         r#"
@@ -468,7 +496,9 @@ pub async fn start_rollout(pool: &PgPool, rollout_id: Uuid) -> Result<bool> {
         "advance",
         "Rollout started",
         Some(0.0),
-        None,
+        // The first step's weight is applied here; the decision says so
+        // rather than recording a start with no weight.
+        Some(first_step_weight),
         "controller",
         None,
     )
