@@ -148,6 +148,15 @@ async fn openrouter_is_a_permitted_provider_type() {
     .await
     .expect("openrouter must be an accepted provider_type");
 
+    // Migration 014: the Vercel AI Gateway.
+    sqlx::query(
+        "INSERT INTO providers (name, base_url, api_key_encrypted, provider_type) \
+         VALUES ('vercel', 'https://ai-gateway.vercel.sh/v1', 'x', 'vercel')",
+    )
+    .execute(pool)
+    .await
+    .expect("vercel must be an accepted provider_type");
+
     // ...and the constraint must still reject genuine nonsense.
     let bad = sqlx::query(
         "INSERT INTO providers (name, base_url, api_key_encrypted, provider_type) \

@@ -675,6 +675,7 @@ fn provider_base_url(provider: &str) -> String {
         "anthropic" => "https://api.anthropic.com/v1".to_string(),
         "gemini" => "https://generativelanguage.googleapis.com/v1beta/openai".to_string(),
         "openrouter" => "https://openrouter.ai/api/v1".to_string(),
+        "vercel" => "https://ai-gateway.vercel.sh/v1".to_string(),
         "openai" => "https://api.openai.com/v1".to_string(),
         // Anything else is treated as a literal base URL, which is how
         // custom/self-hosted providers are configured.

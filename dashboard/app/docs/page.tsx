@@ -314,6 +314,7 @@ spec:
                   ["Anthropic", "https://api.tryrepath.com/v1", "Request translation automatic"],
                   ["Google Gemini", "https://api.tryrepath.com/v1", "Via OpenAI-compat endpoint"],
                   ["OpenRouter", "https://api.tryrepath.com/v1", "Auto-failover hub"],
+                  ["Vercel AI Gateway", "https://api.tryrepath.com/v1", "One key, every vendor (e.g. openai/gpt-6-luna)"],
                   ["Other models", "https://api.tryrepath.com/v1", "Through OpenRouter (e.g. x-ai/grok-4.7); custom endpoints on self-hosted Repath"],
                 ].map(([p, u, n]) => (
                   <tr key={p} className="hover:bg-gray-50">
@@ -507,15 +508,17 @@ response = client.chat.completions.create(
             across all of your rollouts.
           </Note>
           <Note type="info">
-            <strong>Cost tip:</strong> judging costs roughly $0.15 per 1,000 evaluated responses. At 10,000 requests a day,
-            that is about $1.50 a day.
+            <strong>Included in your plan:</strong> judging runs on Repath&apos;s own key and counts against your plan&apos;s
+            monthly evaluation quota. You never pay a model provider for it. Past the quota, requests keep flowing and keep
+            their health checks; only the judging pauses until the next month or an upgrade.
           </Note>
 
           <H2 id="judge-models">The Judge Model</H2>
           <p className="text-[14px] text-gray-600 mb-3">
-            Every judged request is scored by <code className="bg-gray-100 px-1 rounded font-mono text-[13px]">gpt-4o-mini</code>,
+            Every judged request is scored by <code className="bg-gray-100 px-1 rounded font-mono text-[13px]">gpt-6-luna</code>,
             the same judge for every account, so a score of 0.82 means the same thing in every rollout you run. The judge
             is independent of the models you are comparing: your baseline and candidate can be any provider and any model.
+            It runs through the Vercel AI Gateway, so one vendor&apos;s outage or billing issue cannot stop judging.
           </p>
           <Note type="info">
             Choosing your own judge model is on the roadmap. Until then, scores are comparable across all your rollouts,
@@ -634,8 +637,12 @@ curl -H "Authorization: Bearer $REPATH_API_TOKEN" \\
             </table>
           </div>
           <p className="text-[14px] text-gray-600 mt-3">
-            OpenRouter needs no mapping: Repath namespaces the model for it (<code className="bg-gray-100 px-1 rounded font-mono text-[13px]">gpt-5.4</code> becomes{" "}
-            <code className="bg-gray-100 px-1 rounded font-mono text-[13px]">openai/gpt-5.4</code>), which makes it a good last entry in the chain.
+            OpenRouter and the Vercel AI Gateway need no mapping: Repath namespaces the model for them
+            (<code className="bg-gray-100 px-1 rounded font-mono text-[13px]">gpt-5.4</code> becomes{" "}
+            <code className="bg-gray-100 px-1 rounded font-mono text-[13px]">openai/gpt-5.4</code>, and{" "}
+            <code className="bg-gray-100 px-1 rounded font-mono text-[13px]">claude-sonnet-5-5</code> becomes{" "}
+            <code className="bg-gray-100 px-1 rounded font-mono text-[13px]">anthropic/claude-sonnet-5.5</code>, their spelling), which makes
+            either a good last entry in the chain.
           </p>
 
           <H2 id="circuit">Circuit Breaker</H2>

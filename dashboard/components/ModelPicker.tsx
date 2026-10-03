@@ -88,7 +88,11 @@ export default function ModelPicker({
             className={className}
             aria-label="Model id"
             placeholder={
-              value.provider === "openrouter" ? "vendor/model, e.g. x-ai/grok-4.7" : "exact model id"
+              value.provider === "openrouter"
+                ? "vendor/model, e.g. x-ai/grok-4.7"
+                : value.provider === "vercel"
+                  ? "vendor/model, e.g. openai/gpt-6-luna"
+                  : "exact model id"
             }
             value={value.model}
             spellCheck={false}

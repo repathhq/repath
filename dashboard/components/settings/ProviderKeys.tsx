@@ -19,6 +19,7 @@ const PROVIDERS = [
   { id: "anthropic", name: "Anthropic", placeholder: "sk-ant-…" },
   { id: "gemini", name: "Google Gemini", placeholder: "AIza…" },
   { id: "openrouter", name: "OpenRouter", placeholder: "sk-or-v1-…" },
+  { id: "vercel", name: "Vercel AI Gateway", placeholder: "vck_…" },
 ];
 
 const input =

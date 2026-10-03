@@ -125,6 +125,7 @@ const PRICES: &[(&str, u64, u64)] = &[
     ("qwen3.8-max-0902", c(200), c(600)),
     ("kimi-k3", c(270), c(1_350)),
     ("mistral-medium-3-5", c(150), c(750)),
+    ("mistral-medium-3.5", c(150), c(750)), // the Vercel AI Gateway's spelling
     ("llama-4-maverick", c(19), c(65)),
 ];
 
@@ -156,7 +157,14 @@ pub fn estimate_micro_usd(
     // An OpenRouter model id is namespaced, e.g. "anthropic/claude-3-5-sonnet".
     // Price on the part after the slash so those resolve too.
     let bare = model.rsplit('/').next().unwrap_or(model);
-    let needle = bare.to_ascii_lowercase();
+    let mut needle = bare.to_ascii_lowercase();
+    // OpenRouter and the Vercel AI Gateway spell Anthropic versions with a
+    // dot ("claude-sonnet-5.5"); the table uses Anthropic's own hyphenated
+    // ids. Only Claude ids are rewritten — elsewhere a dot is part of the
+    // version ("gpt-5.4") and must not be turned into a boundary.
+    if needle.starts_with("claude-") {
+        needle = needle.replace('.', "-");
+    }
 
     // Longest match wins, so "gpt-4o-mini" is not priced as "gpt-4o".
     let (_, in_rate, out_rate) = PRICES
@@ -250,6 +258,23 @@ mod tests {
     }
 
     #[test]
+    fn aggregator_spellings_of_claude_are_priced() {
+        assert_eq!(
+            estimate_micro_usd("anthropic/claude-sonnet-5.5", Some(1_000_000), Some(0)),
+            Some(usd(2.00))
+        );
+        assert_eq!(
+            estimate_micro_usd("anthropic/claude-haiku-4.5", Some(1_000_000), Some(0)),
+            Some(usd(1.00))
+        );
+        // ...without turning dots elsewhere into boundaries.
+        assert_eq!(
+            estimate_micro_usd("gpt-5.7-nova", Some(1000), Some(1000)),
+            None
+        );
+    }
+
+    #[test]
     fn unknown_model_is_none_not_zero() {
         // Zero would render as "$0.00" and read as "this request was free",
         // which is a different claim from "we do not know".
@@ -319,6 +344,15 @@ mod tests {
             "moonshotai/kimi-k3",
             "mistralai/mistral-medium-3-5",
             "meta-llama/llama-4-maverick",
+            "openai/gpt-6-luna",
+            "openai/gpt-6.1-sol",
+            "anthropic/claude-sonnet-5.5",
+            "anthropic/claude-haiku-4.5",
+            "google/gemini-3.8-flash",
+            "spacexai/grok-4.7",
+            "deepseek/deepseek-v4.1-flash",
+            "alibaba/qwen3.8-max-0902",
+            "moonshotai/kimi-k3",
         ] {
             assert!(
                 estimate_micro_usd(m, Some(1000), Some(1000)).is_some(),

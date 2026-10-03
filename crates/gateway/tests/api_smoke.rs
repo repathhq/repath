@@ -416,6 +416,11 @@ async fn a_rollout_routes_to_the_provider_it_names() {
             "x-ai/grok-4.7",
             "https://openrouter.ai/api/v1",
         ),
+        (
+            "vercel",
+            "openai/gpt-6-luna",
+            "https://ai-gateway.vercel.sh/v1",
+        ),
     ] {
         let body = json!({
             "apiVersion": "repath/v1", "kind": "Rollout",

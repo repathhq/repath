@@ -205,6 +205,7 @@ fn known_provider(name: &str) -> Option<(&'static str, &'static str)> {
             "gemini",
         ),
         "openrouter" => ("https://openrouter.ai/api/v1", "openrouter"),
+        "vercel" => ("https://ai-gateway.vercel.sh/v1", "vercel"),
         _ => return None,
     })
 }
@@ -234,9 +235,9 @@ fn check_providers(config: &RolloutConfig, custom_allowed: bool) -> Result<(), S
         }
         if !custom_allowed {
             return Err(format!(
-                "The {label} provider must be one of openai, anthropic, gemini or openrouter \
-                 (got '{p}'). OpenRouter reaches most other models; custom endpoints are \
-                 available on self-hosted Repath."
+                "The {label} provider must be one of openai, anthropic, gemini, openrouter or \
+                 vercel (got '{p}'). OpenRouter and the Vercel AI Gateway reach most other \
+                 models; custom endpoints are available on self-hosted Repath."
             ));
         }
         if !(p.starts_with("https://") || p.starts_with("http://")) {
@@ -707,7 +708,7 @@ mod tests {
 
     #[test]
     fn named_providers_are_always_allowed() {
-        for p in ["openai", "anthropic", "gemini", "openrouter"] {
+        for p in ["openai", "anthropic", "gemini", "openrouter", "vercel"] {
             let mut c = valid();
             c.spec.candidate.provider = p.into();
             assert!(check_providers(&c, false).is_ok(), "{p}");

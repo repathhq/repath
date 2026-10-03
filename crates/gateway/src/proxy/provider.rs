@@ -34,6 +34,9 @@ pub enum Provider {
     /// recognised explicitly so incidents and metrics attribute to it by name
     /// rather than to "unknown", and so it gets its attribution headers.
     OpenRouter,
+    /// Vercel AI Gateway. OpenAI-compatible with vendor-prefixed model ids,
+    /// so it is handled like OpenRouter: no body or auth translation.
+    Vercel,
     Unknown,
 }
 
@@ -50,6 +53,8 @@ impl Provider {
             Provider::Azure
         } else if url.contains("openrouter.ai") {
             Provider::OpenRouter
+        } else if url.contains("ai-gateway.vercel.sh") {
+            Provider::Vercel
         } else if url.contains("api.openai.com") {
             Provider::OpenAI
         } else {
@@ -64,6 +69,7 @@ impl Provider {
             Provider::Gemini => "gemini",
             Provider::Azure => "azure",
             Provider::OpenRouter => "openrouter",
+            Provider::Vercel => "vercel",
             Provider::Unknown => "unknown",
         }
     }
@@ -142,7 +148,7 @@ pub fn translate_request_body(body: &Bytes, provider: &Provider) -> Bytes {
         // or OpenRouter, which reject it with a 400 — and a 400 is not
         // retried, so the failover that should have rescued the request
         // turned a provider outage into a client error instead.
-        Provider::Gemini | Provider::OpenRouter | Provider::OpenAI => {
+        Provider::Gemini | Provider::OpenRouter | Provider::Vercel | Provider::OpenAI => {
             rewrite_model(body, |m| map_model_for(provider, m))
         }
         _ => body.clone(),
@@ -338,6 +344,26 @@ fn tier(model: &str) -> Tier {
     }
 }
 
+/// Anthropic's id in the form the aggregators use.
+///
+/// Anthropic names a model `claude-sonnet-5-5`; OpenRouter and the Vercel AI
+/// Gateway both list it as `claude-sonnet-5.5` (checked against both live
+/// catalogs on 2026-10-03). Only a trailing `-<major>-<minor>` of short
+/// numbers is rewritten, so `claude-opus-5` and the legacy `claude-3-haiku`
+/// are left alone, and so is a dated snapshot whose last segment is a date.
+fn anthropic_aggregator_id(bare: &str) -> String {
+    let parts: Vec<&str> = bare.split('-').collect();
+    let short_num =
+        |s: &str| !s.is_empty() && s.len() <= 2 && s.bytes().all(|b| b.is_ascii_digit());
+    if bare.starts_with("claude-") && parts.len() >= 4 {
+        let (major, minor) = (parts[parts.len() - 2], parts[parts.len() - 1]);
+        if short_num(major) && short_num(minor) {
+            return format!("{}.{minor}", parts[..parts.len() - 1].join("-"));
+        }
+    }
+    bare.to_string()
+}
+
 /// The model to send to `provider` for a request that named `model`.
 ///
 /// A model that already belongs to the target provider passes through
@@ -385,23 +411,28 @@ fn map_model_for(provider: &Provider, model: &str) -> String {
             }
             .to_string()
         }
-        // OpenRouter routes on vendor-namespaced ids ("openai/gpt-5.4"). A
-        // bare id is namespaced by family; an already-namespaced one, or one
-        // we cannot place, is left for OpenRouter to judge.
-        Provider::OpenRouter => {
+        // OpenRouter and the Vercel AI Gateway both route on vendor-namespaced
+        // ids ("openai/gpt-5.4", "google/gemini-3.8-flash"). A bare id is
+        // namespaced by family; an already-namespaced one, or one we cannot
+        // place, is left for the gateway to judge.
+        Provider::OpenRouter | Provider::Vercel => {
+            // Already namespaced: keep the client's choice, except that an
+            // Anthropic id in Anthropic's own spelling would be rejected.
+            if let Some(rest) = model.strip_prefix("anthropic/") {
+                return format!("anthropic/{}", anthropic_aggregator_id(rest));
+            }
             if model.contains('/') {
                 return model.to_string();
             }
-            let vendor = if is_openai {
-                "openai"
+            if is_openai {
+                format!("openai/{model}")
             } else if bare.starts_with("claude") {
-                "anthropic"
+                format!("anthropic/{}", anthropic_aggregator_id(bare))
             } else if bare.starts_with("gemini") {
-                "google"
+                format!("google/{model}")
             } else {
-                return model.to_string();
-            };
-            format!("{vendor}/{model}")
+                model.to_string()
+            }
         }
         _ => model.to_string(),
     }
@@ -584,7 +615,8 @@ mod openrouter_tests {
         );
         assert_eq!(
             map_model_for(&Provider::OpenRouter, "claude-sonnet-5-5"),
-            "anthropic/claude-sonnet-5-5"
+            // Both aggregators spell Anthropic versions with a dot.
+            "anthropic/claude-sonnet-5.5"
         );
         assert_eq!(
             map_model_for(&Provider::OpenRouter, "gemini-3.8-flash"),
@@ -634,6 +666,63 @@ mod openrouter_tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn vercel_ai_gateway_is_detected_and_gets_namespaced_ids() {
+        assert_eq!(
+            Provider::from_url("https://ai-gateway.vercel.sh/v1"),
+            Provider::Vercel
+        );
+        assert_eq!(Provider::Vercel.to_str(), "vercel");
+        assert_eq!(
+            map_model_for(&Provider::Vercel, "gpt-6-luna"),
+            "openai/gpt-6-luna"
+        );
+        assert_eq!(
+            map_model_for(&Provider::Vercel, "gemini-3.8-flash"),
+            "google/gemini-3.8-flash"
+        );
+        assert_eq!(
+            map_model_for(&Provider::Vercel, "anthropic/claude-opus-5"),
+            "anthropic/claude-opus-5"
+        );
+        // Anthropic spells versions with a hyphen, both aggregators with a dot.
+        assert_eq!(
+            map_model_for(&Provider::Vercel, "claude-haiku-4-5"),
+            "anthropic/claude-haiku-4.5"
+        );
+        assert_eq!(
+            map_model_for(&Provider::Vercel, "anthropic/claude-sonnet-5-5"),
+            "anthropic/claude-sonnet-5.5"
+        );
+        assert_eq!(
+            map_model_for(&Provider::Vercel, "anthropic/claude-sonnet-5.5"),
+            "anthropic/claude-sonnet-5.5"
+        );
+        let body = Bytes::from(r#"{"model":"claude-sonnet-5-5","messages":[]}"#);
+        let out: Value =
+            serde_json::from_slice(&translate_request_body(&body, &Provider::Vercel)).unwrap();
+        assert_eq!(out["model"], "anthropic/claude-sonnet-5.5");
+    }
+
+    #[test]
+    fn only_a_short_major_minor_pair_is_dotted() {
+        assert_eq!(
+            anthropic_aggregator_id("claude-opus-5-5"),
+            "claude-opus-5.5"
+        );
+        assert_eq!(
+            anthropic_aggregator_id("claude-fable-5-1"),
+            "claude-fable-5.1"
+        );
+        assert_eq!(anthropic_aggregator_id("claude-opus-5"), "claude-opus-5");
+        assert_eq!(anthropic_aggregator_id("claude-3-haiku"), "claude-3-haiku");
+        // A dated snapshot keeps its form rather than becoming "4-5.20251001".
+        assert_eq!(
+            anthropic_aggregator_id("claude-haiku-4-5-20251001"),
+            "claude-haiku-4-5-20251001"
+        );
     }
 
     #[test]

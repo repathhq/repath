@@ -25,7 +25,7 @@ use uuid::Uuid;
 
 /// Providers we know how to call. Anything else is rejected rather than stored
 /// and silently ignored at request time.
-const KNOWN_PROVIDERS: &[&str] = &["openai", "anthropic", "gemini", "openrouter"];
+const KNOWN_PROVIDERS: &[&str] = &["openai", "anthropic", "gemini", "openrouter", "vercel"];
 
 fn err(status: StatusCode, message: impl Into<String>) -> Response {
     (

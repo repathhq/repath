@@ -16,7 +16,7 @@
  * is usable tomorrow, without waiting for this file.
  */
 
-export type ProviderId = "openai" | "anthropic" | "gemini" | "openrouter";
+export type ProviderId = "openai" | "anthropic" | "gemini" | "openrouter" | "vercel";
 
 export interface ModelOption {
   provider: ProviderId;
@@ -30,6 +30,7 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = {
   anthropic: "Anthropic",
   gemini: "Google Gemini",
   openrouter: "OpenRouter",
+  vercel: "Vercel AI Gateway",
 };
 
 export const MODELS: ModelOption[] = [
@@ -70,6 +71,18 @@ export const MODELS: ModelOption[] = [
   { provider: "openrouter", model: "moonshotai/kimi-k3" },
   { provider: "openrouter", model: "mistralai/mistral-medium-3-5" },
   { provider: "openrouter", model: "meta-llama/llama-4-maverick" },
+  // Vercel AI Gateway — one key, every vendor. Ids are Vercel's own spelling
+  // from its live catalog: Anthropic versions take a dot ("claude-sonnet-5.5"),
+  // xAI is "spacexai/". A hyphenated Claude id is corrected by the gateway.
+  { provider: "vercel", model: "openai/gpt-6-luna", note: "cheapest" },
+  { provider: "vercel", model: "openai/gpt-6.1-sol" },
+  { provider: "vercel", model: "anthropic/claude-sonnet-5.5" },
+  { provider: "vercel", model: "anthropic/claude-haiku-4.5", note: "fastest" },
+  { provider: "vercel", model: "google/gemini-3.8-flash" },
+  { provider: "vercel", model: "spacexai/grok-4.7" },
+  { provider: "vercel", model: "deepseek/deepseek-v4.1-flash" },
+  { provider: "vercel", model: "alibaba/qwen3.8-max-0902" },
+  { provider: "vercel", model: "moonshotai/kimi-k3" },
 ];
 
 /** A sensible starting point: current, cheap, and good enough to judge well. */
