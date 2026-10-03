@@ -59,6 +59,12 @@ export default function PrivacyPage() {
                 <>
                   <strong>Technical logs:</strong> request paths, errors and timings needed to run and secure the service.
                 </>,
+                <>
+                  <strong>Product analytics:</strong> which pages of tryrepath.com and the dashboard you visit, what you
+                  click, the page that referred you, your approximate location from your IP address, and recordings of
+                  sessions in the dashboard. Recordings mask every form field, API key, prompt, response and request
+                  body before they leave your browser, so none of those are ever recorded.
+                </>,
               ]}
             />
           ),
@@ -71,6 +77,10 @@ export default function PrivacyPage() {
                 To run the service: route and proxy your requests, judge response quality, decide whether a rollout
                 advances or rolls back, show you the request log, bill your plan, send transactional email (password
                 resets, receipts, alerts you configure) and keep the service secure.
+              </P>
+              <P>
+                Product analytics show us where the site and the dashboard are confusing or broken, so we can fix
+                them.
               </P>
               <P>We do not sell your data, use it for advertising, or use it to train models.</P>
             </>
@@ -97,6 +107,7 @@ export default function PrivacyPage() {
                 </>,
                 <>You can switch prompt and response capture off in Settings at any time.</>,
                 <>Request metadata and evaluations: while your account exists.</>,
+                <>Product analytics: events up to one year; session recordings 30 days.</>,
                 <>
                   Your account and everything in it: deleted within 30 days of your request. Backups containing it
                   expire within a further seven days.
@@ -123,6 +134,10 @@ export default function PrivacyPage() {
                     <strong>Razorpay</strong> — subscriptions and payments.
                   </>,
                   <>
+                    <strong>PostHog</strong> (United States) — product analytics and session recordings, as described
+                    above.
+                  </>,
+                  <>
                     <strong>The model providers you configure</strong> — your requests are forwarded to them, using your
                     own keys and accounts, under their terms.
                   </>,
@@ -137,7 +152,9 @@ export default function PrivacyPage() {
           body: (
             <P>
               One cookie keeps you signed in; it is HttpOnly and sent only over HTTPS. Your light or dark theme choice
-              is remembered in your browser&apos;s local storage. There are no analytics, advertising or tracking cookies.
+              is remembered in your browser&apos;s local storage. PostHog sets a first-party cookie to recognise
+              return visits for product analytics. There are no advertising cookies, and nothing is shared with ad
+              networks.
             </P>
           ),
         },

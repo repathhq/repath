@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { createSession, cookieOptions } from "@/lib/auth";
+import { captureServer } from "@/lib/analytics-server";
 
 export async function POST(req: NextRequest) {
   // Read per-request, not at module load: on Amplify's SSR compute a
@@ -47,6 +48,12 @@ export async function POST(req: NextRequest) {
   }
 
   const tenant = await res.json();
+
+  await captureServer(tenant.id, "signed_up", {
+    plan: tenant.plan ?? "trial",
+    $set: { email, name, plan: tenant.plan ?? "trial" },
+    $set_once: { signed_up_at: new Date().toISOString() },
+  });
 
   // Create session JWT
   const token = await createSession({

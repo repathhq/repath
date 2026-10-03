@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useState, useSyncExternalStore } from "react";
 import { NEW_KEY_STORAGE } from "@/lib/new-api-key";
+import { track } from "@/lib/analytics";
 import { Check, Copy, ArrowRight, ExternalLink, Terminal, Plug, Eye, Rocket } from "lucide-react";
 
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL ?? "https://api.tryrepath.com";
@@ -60,6 +61,7 @@ export default function OnboardingPage() {
 
   const copy = (idx: number, text: string) => {
     navigator.clipboard.writeText(text);
+    track(idx === -1 ? "api_key_copied" : "onboarding_snippet_copied", idx === -1 ? {} : { step: idx + 1 });
     setCopiedIdx(idx);
     setTimeout(() => setCopiedIdx(null), 2000);
   };
@@ -123,7 +125,7 @@ export default function OnboardingPage() {
                 <Link href="/settings" className="underline">Settings</Link>.
               </p>
               <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2">
-                <code className="flex-1 min-w-0 truncate font-mono text-[12.5px] text-gray-900">{apiKey}</code>
+                <code data-ph-mask className="flex-1 min-w-0 truncate font-mono text-[12.5px] text-gray-900">{apiKey}</code>
                 <button
                   onClick={() => copy(-1, apiKey)}
                   className="flex items-center gap-1.5 text-[11.5px] text-gray-500 hover:text-gray-900 px-2 py-1 rounded hover:bg-gray-100 shrink-0"

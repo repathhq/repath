@@ -71,6 +71,9 @@ resource "aws_amplify_app" "dashboard" {
     RAZORPAY_KEY_ID           = var.razorpay_live_key
     RAZORPAY_KEY_SECRET       = var.razorpay_live_secret
     REPATH_TEST_COUPON        = var.repath_test_coupon
+    # PostHog's project key is public by design (it ships in page code); it
+    # identifies the project to write events to and cannot read anything.
+    NEXT_PUBLIC_POSTHOG_KEY   = "phc_tQ4D7pWqskfBrKFWXnqrwTEH2VULgr6GYsnnYAetBCHw"
     AMPLIFY_MONOREPO_APP_ROOT = "dashboard"
     AMPLIFY_DIFF_DEPLOY       = "false"
   }

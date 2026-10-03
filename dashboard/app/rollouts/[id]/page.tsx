@@ -267,7 +267,7 @@ export default function RolloutDetailPage({
                   </div>
                   <p className="text-[13px] font-semibold text-gray-900">{v.model}</p>
                   {v.prompt && (
-                    <p className="mt-1 text-[11px] text-gray-400 font-mono leading-relaxed line-clamp-3">
+                    <p data-ph-mask className="mt-1 text-[11px] text-gray-400 font-mono leading-relaxed line-clamp-3">
                       {v.prompt}
                     </p>
                   )}

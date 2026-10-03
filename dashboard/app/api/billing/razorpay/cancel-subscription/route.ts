@@ -12,6 +12,7 @@
  */
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { captureServer } from "@/lib/analytics-server";
 
 export async function POST() {
   const keyId = process.env.RAZORPAY_KEY_ID;
@@ -79,6 +80,8 @@ export async function POST() {
   if (!mark?.ok) {
     console.error(`[billing] cancelled ${subscriptionId} at Razorpay but could not record it locally`);
   }
+
+  await captureServer(session.tenantId, "subscription_cancelled", { $set: { paying: false, cancelled: true } });
 
   return NextResponse.json({ ok: true });
 }

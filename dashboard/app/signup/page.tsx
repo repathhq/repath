@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { ArrowRight, Check, Eye, EyeOff, Loader2 } from "lucide-react";
 import { PLANS, isPlanId } from "@/lib/plans";
 import { NEW_KEY_STORAGE } from "@/lib/new-api-key";
+import { identify, track } from "@/lib/analytics";
 
 function SignupForm() {
   const params = useSearchParams();
@@ -32,6 +33,8 @@ function SignupForm() {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "Signup failed. Please try again."); return; }
+      identify({ tenantId: data.tenantId, email: form.email, name: form.name, plan: "trial" });
+      track("signup_form_completed", { chosen_plan: chosen?.id ?? null });
       // The key is returned exactly once; onboarding shows it from here.
       try {
         if (data.apiKey) sessionStorage.setItem(NEW_KEY_STORAGE, data.apiKey);

@@ -103,6 +103,7 @@ function DetailPanel({ id, onClose }: { id: string; onClose: () => void }) {
 
   return (
     <aside
+      data-ph-mask
       className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[720px] flex-col border-l border-gray-200 bg-white shadow-2xl"
       role="dialog"
       aria-label="Request detail"

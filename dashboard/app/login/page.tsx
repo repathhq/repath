@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { track } from "@/lib/analytics";
 import Image from "next/image";
 import { useState } from "react";
 import { ArrowRight, Eye, EyeOff, Loader2 } from "lucide-react";
@@ -19,6 +20,7 @@ export default function LoginPage() {
         body: JSON.stringify(form),
       });
       if (!res.ok) { const d = await res.json(); setError((d as {error?:string}).error ?? "Login failed"); return; }
+      track("logged_in");
       window.location.href = "/rollouts";
     } catch { setError("Network error. Please try again."); }
     finally { setLoading(false); }

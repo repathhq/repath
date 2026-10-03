@@ -16,6 +16,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { captureServer } from "@/lib/analytics-server";
 
 /** Paths any signed-in user may read; they expose no tenant-owned data. */
 const UNSCOPED_PATHS = new Set(["system/health", "system/providers"]);
@@ -61,6 +62,10 @@ async function proxy(req: NextRequest, path: string) {
     // returned the unfiltered first page.
     const res = await fetch(`${GATEWAY}/api/v1/${path}${req.nextUrl.search}`, init);
     const body = await res.text();
+    // Activation: an account's first real use of the product.
+    if (req.method === "POST" && path === "rollouts" && res.ok) {
+      await captureServer(session.tenantId, "rollout_created");
+    }
     return new NextResponse(body, {
       status: res.status,
       headers: { "Content-Type": "application/json" },

@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getSession } from "@/lib/auth";
+import { captureServer } from "@/lib/analytics-server";
 
 export async function POST(req: NextRequest) {
   const keyId = process.env.RAZORPAY_KEY_ID;
@@ -138,6 +139,13 @@ export async function POST(req: NextRequest) {
       { status: 502 }
     );
   }
+
+  await captureServer(tenantId, "subscription_activated", {
+    plan,
+    upgrade: Boolean(replaced),
+    test_coupon: Boolean((sub.notes as { coupon?: string } | undefined)?.coupon),
+    $set: { plan, paying: true },
+  });
 
   if (replaced) {
     // Immediately, not at cycle end: the new plan is already active and paid.

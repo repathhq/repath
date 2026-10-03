@@ -16,6 +16,7 @@ import Link from "next/link";
 import { ArrowRight, Check, Loader2, AlertTriangle, BarChart3, Zap, CreditCard, Star, Receipt, ExternalLink } from "lucide-react";
 import { PLANS, type PlanId } from "@/lib/plans";
 import type { BillingDetails } from "@/lib/billing";
+import { track } from "@/lib/analytics";
 
 interface Usage {
   plan: string;
@@ -163,7 +164,12 @@ export default function BillingPage() {
       subscription_id: order.subscriptionId,
       prefill: { email: order.email, name: order.name },
       theme: { color: "#7c3aed" },
-      modal: { ondismiss: () => setUpgrading(null) },
+      modal: {
+        ondismiss: () => {
+          track("checkout_dismissed", { plan });
+          setUpgrading(null);
+        },
+      },
       handler: async (response: {
         razorpay_payment_id: string;
         razorpay_subscription_id: string;
@@ -218,6 +224,7 @@ export default function BillingPage() {
       theme: { color: "#7c3aed" },
       modal: { ondismiss: () => setChangingCard(false) },
       handler: () => {
+        track("card_changed");
         setChangingCard(false);
         setSuccess("Card updated. Future charges go to the new card.");
         loadDetails();
@@ -227,6 +234,7 @@ export default function BillingPage() {
   };
 
   const handleUpgrade = async (planId: PlanId) => {
+    track("checkout_started", { plan: planId, from_plan: usage?.plan, coupon: couponApplied });
     setUpgrading(planId);
     setError("");
     setSuccess("");
@@ -387,7 +395,13 @@ export default function BillingPage() {
                     </div>
                   </div>
                 ) : (
-                  <button onClick={() => setConfirmCancel(true)} className="text-[13px] text-gray-500 hover:text-red-600 transition-colors">
+                  <button
+                    onClick={() => {
+                      track("cancel_started", { plan: usage?.plan });
+                      setConfirmCancel(true);
+                    }}
+                    className="text-[13px] text-gray-500 hover:text-red-600 transition-colors"
+                  >
                     Cancel subscription
                   </button>
                 )}

@@ -16,11 +16,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CreditCard,
   GitBranch,
   HelpCircle,
+  LogOut,
   Menu,
   RefreshCw,
   ScrollText,
@@ -30,6 +31,7 @@ import {
 } from "lucide-react";
 import { useSystemHealth } from "@/lib/hooks";
 import { useTheme } from "@/lib/theme";
+import { identify, resetAnalytics } from "@/lib/analytics";
 import "../app/dashboard.css";
 
 const NAV_MAIN = [
@@ -44,6 +46,8 @@ const NAV_ACCOUNT = [
   { href: "/billing", label: "Billing", icon: CreditCard },
   { href: "/settings", label: "Settings", icon: SettingsIcon },
 ];
+
+let identifiedThisLoad = false;
 
 export default function DashShell({
   children,
@@ -65,6 +69,25 @@ export default function DashShell({
   const pathname = usePathname();
   const [theme, setTheme] = useTheme();
   const [railOpen, setRailOpen] = useState(false);
+
+  // Identify the signed-in account for analytics, once per page load, so a
+  // returning visitor's sessions join their history.
+  useEffect(() => {
+    if (identifiedThisLoad) return;
+    identifiedThisLoad = true;
+    fetch("/api/auth/session")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((s: { tenantId?: string; email?: string; name?: string; plan?: string } | null) => {
+        if (s?.tenantId) identify({ tenantId: s.tenantId, email: s.email, name: s.name, plan: s.plan });
+      })
+      .catch(() => {});
+  }, []);
+
+  const signOut = async () => {
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    resetAnalytics();
+    window.location.assign("/login");
+  };
 
   const { data: health } = useSystemHealth();
   const healthy = health?.status === "ok";
@@ -263,6 +286,15 @@ export default function DashShell({
             <HelpCircle size={15} strokeWidth={1.9} />
             <span style={{ flex: 1 }}>Docs &amp; support</span>
           </Link>
+          <button
+            type="button"
+            onClick={signOut}
+            className="dash-navitem"
+            style={{ padding: "7px 8px", fontSize: 12.5, width: "100%", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}
+          >
+            <LogOut size={15} strokeWidth={1.9} />
+            <span style={{ flex: 1 }}>Sign out</span>
+          </button>
         </div>
       </aside>
 
