@@ -13,8 +13,9 @@
 import { useState, useEffect } from "react";
 import DashShell from "@/components/DashShell";
 import Link from "next/link";
-import { ArrowRight, Check, Loader2, AlertTriangle, BarChart3, Zap, CreditCard, Star } from "lucide-react";
+import { ArrowRight, Check, Loader2, AlertTriangle, BarChart3, Zap, CreditCard, Star, Receipt, ExternalLink } from "lucide-react";
 import { PLANS, type PlanId } from "@/lib/plans";
+import type { BillingDetails } from "@/lib/billing";
 
 interface Usage {
   plan: string;
@@ -44,6 +45,32 @@ const RANK: Record<string, number> = { trial: 0, free: 0, indie: 1, starter: 2, 
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
 
+const shortDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+
+const money = (minor: number, currency: string) =>
+  new Intl.NumberFormat("en-IN", { style: "currency", currency, maximumFractionDigits: minor % 100 ? 2 : 0 }).format(minor / 100);
+
+/** Loads Razorpay's checkout script once; false if it cannot (offline, blocked). */
+async function loadCheckout(): Promise<boolean> {
+  if (window.Razorpay) return true;
+  await new Promise<void>((resolve) => {
+    const s = document.createElement("script");
+    s.src = "https://checkout.razorpay.com/v1/checkout.js";
+    s.onload = () => resolve();
+    s.onerror = () => resolve();
+    document.head.appendChild(s);
+  });
+  return Boolean(window.Razorpay);
+}
+
+const INVOICE_STATUS: Record<string, { label: string; cls: string }> = {
+  paid: { label: "Paid", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  issued: { label: "Due", cls: "bg-amber-50 text-amber-700 border-amber-200" },
+  partially_paid: { label: "Part paid", cls: "bg-amber-50 text-amber-700 border-amber-200" },
+  cancelled: { label: "Cancelled", cls: "bg-gray-50 text-gray-500 border-gray-200" },
+  expired: { label: "Expired", cls: "bg-gray-50 text-gray-500 border-gray-200" },
+};
+
 export default function BillingPage() {
   const [usage, setUsage] = useState<Usage | null>(null);
   const [now, setNow] = useState<number | null>(null);
@@ -58,6 +85,14 @@ export default function BillingPage() {
   const [couponError, setCouponError] = useState("");
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [details, setDetails] = useState<BillingDetails | null>(null);
+  const [changingCard, setChangingCard] = useState(false);
+
+  const loadDetails = () =>
+    fetch("/api/billing/razorpay/details")
+      .then((r) => (r.ok ? (r.json() as Promise<BillingDetails>) : null))
+      .then((d) => setDetails(d))
+      .catch(() => {});
 
   const load = () =>
     fetch("/api/billing/usage")
@@ -79,6 +114,7 @@ export default function BillingPage() {
 
   useEffect(() => {
     load();
+    loadDetails();
   }, []);
 
   const daysLeft =
@@ -114,18 +150,10 @@ export default function BillingPage() {
       plan: string;
       planName: string;
     };
-    if (!window.Razorpay) {
-      await new Promise<void>((resolve, reject) => {
-        const s = document.createElement("script");
-        s.src = "https://checkout.razorpay.com/v1/checkout.js";
-        s.onload = () => resolve();
-        s.onerror = () => reject(new Error("checkout script"));
-        document.head.appendChild(s);
-      }).catch(() => setError("Could not load Razorpay checkout. Check your connection or ad blocker and try again."));
-      if (!window.Razorpay) {
-        setUpgrading(null);
-        return;
-      }
+    if (!(await loadCheckout())) {
+      setError("Could not load Razorpay checkout. Check your connection or ad blocker and try again.");
+      setUpgrading(null);
+      return;
     }
     new window.Razorpay({
       key: order.keyId,
@@ -164,6 +192,36 @@ export default function BillingPage() {
           );
           setUpgrading(null);
         }
+      },
+    }).open();
+  };
+
+  // Razorpay's own card-change checkout for an existing mandate. The new card
+  // is authorised by Razorpay; nothing on our side changes, so on success
+  // the page just re-reads the method on file.
+  const handleChangeCard = async () => {
+    if (!details?.key_id || !details.subscription) return;
+    setChangingCard(true);
+    setError("");
+    setSuccess("");
+    if (!(await loadCheckout())) {
+      setError("Could not load Razorpay checkout. Check your connection or ad blocker and try again.");
+      setChangingCard(false);
+      return;
+    }
+    new window.Razorpay({
+      key: details.key_id,
+      name: "Repath",
+      description: "Update the card for your subscription",
+      subscription_id: details.subscription.id,
+      subscription_card_change: 1,
+      theme: { color: "#7c3aed" },
+      modal: { ondismiss: () => setChangingCard(false) },
+      handler: () => {
+        setChangingCard(false);
+        setSuccess("Card updated. Future charges go to the new card.");
+        loadDetails();
+        load();
       },
     }).open();
   };
@@ -256,6 +314,11 @@ export default function BillingPage() {
                       : `Renews on ${formatDate(usage.current_period_end)}.`}
                   </p>
                 )}
+                {userRank > 0 && !usage.subscription_id && usage.plan !== "enterprise" && (
+                  <p className="text-[13px] text-gray-500 mt-1.5">
+                    Complimentary plan — there is no payment method on file and nothing will be charged.
+                  </p>
+                )}
                 {!usage.trial_active && userRank === 0 && (
                   <p className="text-[13px] text-gray-500 mt-1.5">
                     Your requests still pass through Repath. Choose a plan to route rollouts and judge responses again.
@@ -333,6 +396,109 @@ export default function BillingPage() {
           </div>
         )}
 
+        {/* A renewal that failed: Razorpay retries, and the customer should know */}
+        {details?.subscription && ["pending", "halted"].includes(details.subscription.status) && (
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-xl border border-amber-200 bg-amber-50 mb-6">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+            <p className="text-[14px] text-amber-800 flex-1">
+              {details.subscription.status === "halted"
+                ? "Your last payments failed and Razorpay has stopped retrying. Update your card to keep your plan."
+                : "Your last payment failed. Razorpay will retry it; updating your card now avoids losing your plan."}
+            </p>
+            {details.payment_method?.changeable && (
+              <button onClick={handleChangeCard} className="shrink-0 px-3.5 py-2 rounded-lg bg-amber-600 text-white text-[13px] font-semibold hover:bg-amber-700">
+                Update card
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Payment method and invoices */}
+        {hasSubscription && details?.subscription && (
+          <div className="grid md:grid-cols-[1fr_1.6fr] gap-4 mb-6">
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm flex flex-col">
+              <p className="text-[12px] font-semibold text-gray-400 uppercase tracking-wider mb-3">Payment method</p>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-7 rounded-md border border-gray-200 bg-gray-50 flex items-center justify-center shrink-0">
+                  <CreditCard className="w-4 h-4 text-gray-500" strokeWidth={1.8} />
+                </div>
+                <span className="text-[14px] font-medium text-gray-900">
+                  {details.payment_method?.label ?? "On file with Razorpay"}
+                </span>
+              </div>
+              {!usage?.cancel_at_period_end && details.subscription.charge_at && (
+                <p className="text-[13px] text-gray-500">
+                  Next charge{" "}
+                  <span className="text-gray-900 font-medium">
+                    {money(details.invoices[0]?.amount_minor ?? PLANS[usage?.plan as PlanId]?.amountMinor ?? 0, details.invoices[0]?.currency ?? "INR")}
+                  </span>{" "}
+                  on {formatDate(details.subscription.charge_at)}.
+                </p>
+              )}
+              <div className="mt-auto pt-4">
+                {details.payment_method?.changeable ? (
+                  <button
+                    onClick={handleChangeCard}
+                    disabled={changingCard}
+                    className="flex items-center gap-2 px-3.5 py-2 rounded-lg border border-gray-300 bg-white text-[13px] font-medium text-gray-900 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {changingCard && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    Change card
+                  </button>
+                ) : details.payment_method ? (
+                  <p className="text-[12px] text-gray-400">
+                    Razorpay only lets card mandates switch in place. To pay another way, cancel and subscribe again once
+                    this period ends.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+              <div className="flex items-center gap-2 px-6 pt-5 pb-3">
+                <Receipt className="w-4 h-4 text-gray-400" strokeWidth={1.8} />
+                <p className="text-[12px] font-semibold text-gray-400 uppercase tracking-wider">Invoices</p>
+              </div>
+              {details.invoices.length === 0 ? (
+                <p className="px-6 pb-6 text-[13px] text-gray-500">Your first invoice appears here once it is charged.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[13px]">
+                    <tbody>
+                      {details.invoices.map((inv) => {
+                        const st = INVOICE_STATUS[inv.status] ?? { label: inv.status, cls: "bg-gray-50 text-gray-500 border-gray-200" };
+                        return (
+                          <tr key={inv.id} className="border-t border-gray-100">
+                            <td className="pl-6 py-3">
+                              <div className="text-gray-900 whitespace-nowrap">{inv.date ? shortDate(inv.date) : "—"}</div>
+                              {inv.period_start && inv.period_end && (
+                                <div className="text-[12px] text-gray-400">
+                                  {shortDate(inv.period_start)} – {shortDate(inv.period_end)}
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-3 px-3 text-gray-900 font-mono whitespace-nowrap text-right">{money(inv.amount_minor, inv.currency)}</td>
+                            <td className="py-3 px-3 whitespace-nowrap">
+                              <span className={`px-2 py-0.5 rounded-md border text-[11px] font-semibold ${st.cls}`}>{st.label}</span>
+                            </td>
+                            <td className="py-3 pr-6 text-right whitespace-nowrap">
+                              {inv.receipt_url && (
+                                <a href={inv.receipt_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-violet-600 hover:underline">
+                                  {inv.status === "paid" ? "Receipt" : "Pay"} <ExternalLink className="w-3 h-3" />
+                                </a>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Plans */}
         {(!usage || usage.plan !== "enterprise") && (
           <div id="upgrade">
@@ -403,7 +569,11 @@ export default function BillingPage() {
                       </div>
                     ) : isDowngrade ? (
                       <div className="w-full flex items-center justify-center py-3 rounded-xl text-[13px] font-medium bg-gray-50 text-gray-400 border border-gray-200 text-center px-3">
-                        {usage?.cancel_at_period_end ? "Available once your current plan ends" : "To move down a plan, cancel first"}
+                        {!hasSubscription
+                          ? "Included in your plan"
+                          : usage?.cancel_at_period_end
+                            ? "Available once your current plan ends"
+                            : "To move down a plan, cancel first"}
                       </div>
                     ) : (
                       <button

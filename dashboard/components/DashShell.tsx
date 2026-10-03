@@ -112,7 +112,7 @@ export default function DashShell({
             borderBottom: "1px solid var(--line2)",
           }}
         >
-          <Image src="/logo-icon.png" alt="" width={24} height={24} style={{ objectFit: "contain" }} />
+          <Image src="/repath-mark.png" alt="" width={24} height={24} style={{ objectFit: "contain" }} />
           <span style={{ fontWeight: 600, fontSize: 16, letterSpacing: "-0.03em" }}>Repath</span>
           <span
             className="dash-mono"

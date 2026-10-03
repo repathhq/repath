@@ -11,7 +11,7 @@ export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
 export default async function Image() {
-  const logo = await readFile(join(process.cwd(), "public/logo-icon.png"));
+  const logo = await readFile(join(process.cwd(), "public/repath-mark.png"));
   const logoSrc = `data:image/png;base64,${logo.toString("base64")}`;
 
   return new ImageResponse(

@@ -71,7 +71,7 @@ export function MarketingNav({ links = SITE_LINKS }: { links?: Array<[string, st
         data-nav-row
       >
         <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <Image src="/logo-icon.png" alt="" width={26} height={26} style={{ objectFit: "contain" }} />
+          <Image src="/repath-mark.png" alt="" width={26} height={26} style={{ objectFit: "contain" }} />
           <span style={{ fontWeight: 600, fontSize: 18, letterSpacing: "-0.03em", color: "var(--fg)" }}>
             Repath
           </span>
@@ -151,7 +151,7 @@ export function MarketingFooter() {
         <div className="lp-foot" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 48 }}>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-              <Image src="/logo-icon.png" alt="" width={22} height={22} style={{ objectFit: "contain" }} />
+              <Image src="/repath-mark.png" alt="" width={22} height={22} style={{ objectFit: "contain" }} />
               <span style={{ fontWeight: 600, letterSpacing: "-0.03em" }}>Repath</span>
             </div>
             <p style={{ fontSize: 14, lineHeight: 1.65, color: "var(--fg3)", margin: "0 0 10px", maxWidth: "34ch" }}>

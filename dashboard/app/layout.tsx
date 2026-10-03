@@ -50,10 +50,6 @@ export const metadata: Metadata = {
     description: DESCRIPTION,
   },
   twitter: { card: "summary_large_image", title: "Repath — Progressive Delivery for AI", description: DESCRIPTION },
-  icons: {
-    icon: "/favicon.ico",
-    apple: "/repath.png",
-  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

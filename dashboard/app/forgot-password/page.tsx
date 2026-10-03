@@ -49,7 +49,7 @@ export default function ForgotPasswordPage() {
     >
       <nav className="px-6 py-4">
         <Link href="/" className="flex items-center gap-2.5 w-fit">
-          <Image src="/repath.png" alt="Repath" width={32} height={32} className="rounded-lg" />
+          <Image src="/repath-mark.png" alt="" width={26} height={26} />
           <span className="font-bold text-[18px] text-gray-900">Repath</span>
         </Link>
       </nav>
