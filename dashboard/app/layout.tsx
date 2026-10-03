@@ -1,30 +1,37 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono, Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const inter = Inter({
+// Fonts ship with the app (app/fonts, OFL-1.1, latin variable weights from
+// Fontsource). next/font/google downloads them from Google at *build* time,
+// and that download failed twice in two days — an Amplify build on
+// 2026-10-02 and the CI dashboard check on 2026-10-03 — each time blocking a
+// release that had nothing to do with fonts. Local files make the build
+// independent of fonts.gstatic.com; next/font still self-hosts and preloads
+// them, so a late webfont never shifts the landing headline after paint.
+const inter = localFont({
+  src: "./fonts/inter-latin-wght-normal.woff2",
   variable: "--font-inter",
-  subsets: ["latin"],
+  weight: "100 900",
   display: "swap",
 });
-const jetbrains = JetBrains_Mono({
+const jetbrains = localFont({
+  src: "./fonts/jetbrains-mono-latin-wght-normal.woff2",
   variable: "--font-jetbrains",
-  subsets: ["latin"],
+  weight: "100 800",
   display: "swap",
 });
-// Geist carries the marketing pages. Loaded through next/font rather than a
-// Google Fonts <link> so it is self-hosted and preloaded — a webfont that
-// arrives late on a landing page shifts the headline after paint.
-const geist = Geist({
+// Geist carries the marketing pages.
+const geist = localFont({
+  src: "./fonts/geist-latin-wght-normal.woff2",
   variable: "--font-geist",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
+  weight: "100 900",
   display: "swap",
 });
-const geistMono = Geist_Mono({
+const geistMono = localFont({
+  src: "./fonts/geist-mono-latin-wght-normal.woff2",
   variable: "--font-geist-mono",
-  subsets: ["latin"],
-  weight: ["400", "500"],
+  weight: "100 900",
   display: "swap",
 });
 
