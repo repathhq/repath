@@ -155,6 +155,9 @@ impl TestDb {
             CREATE TABLE rollouts (
                 id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 name                 VARCHAR(255) NOT NULL UNIQUE,
+                -- In production since migration 002; the controller reads it
+                -- every cycle, so a test that runs real cycles needs it.
+                tenant_id            VARCHAR(64),
                 baseline_version_id  UUID NOT NULL REFERENCES versions(id) ON DELETE RESTRICT,
                 candidate_version_id UUID NOT NULL REFERENCES versions(id) ON DELETE RESTRICT,
                 state                VARCHAR(50)       NOT NULL DEFAULT 'created',
@@ -1172,4 +1175,108 @@ async fn test_steps_advance_to_the_next_weight_and_start_at_their_own() {
         "active step should be the one just applied"
     );
     assert!(started, "its duration clock must start at the advance");
+}
+
+/// A rollout walks every step, through real controller cycles, to promotion.
+///
+/// Store-level tests passed while production stuck: on 2026-10-03 one
+/// advance activated two steps (apply_advance and decision.rs both did it),
+/// the next advance found no step left, logged "advance 0.5 → 0.5", and the
+/// rollout stopped at 50% for good. Driving `run_once` exercises the same
+/// path the controller does.
+#[tokio::test]
+async fn test_a_rollout_walks_every_step_through_real_cycles() {
+    if std::env::var("DATABASE_URL").is_err() {
+        return;
+    }
+    let db = TestDb::new().await;
+    let pool = db.pool();
+    let policy = standard_policy();
+    let (rollout_id, baseline_id, candidate_id) =
+        insert_rollout(pool, "walk-the-steps", &policy, "created", 0.0).await;
+
+    let config = repath_controller::loop_runner::ControllerConfig {
+        decision_interval_secs: 30,
+        confidence_level: 0.95,
+        metric_window_minutes: 10,
+        metrics: std::sync::Arc::new(repath_controller::metrics::ControllerMetrics::new()),
+        http_client: reqwest::Client::new(),
+    };
+    let state = || async {
+        let r = sqlx::query("SELECT state, current_weight FROM rollouts WHERE id = $1")
+            .bind(rollout_id)
+            .fetch_one(pool)
+            .await
+            .unwrap();
+        (
+            r.get::<String, _>("state"),
+            r.get::<f64, _>("current_weight"),
+        )
+    };
+    let active_steps = || async {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM rollout_steps WHERE rollout_id = $1 AND status = 'active'",
+        )
+        .bind(rollout_id)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+    };
+
+    // Cycle 1 starts it at the first step's weight.
+    repath_controller::loop_runner::run_once(pool, &config)
+        .await
+        .unwrap();
+    assert_eq!(state().await, ("canary".into(), 0.10));
+    assert_eq!(active_steps().await, 1);
+
+    // Healthy, judged traffic on both sides.
+    for _ in 0..12 {
+        insert_request_with_eval(pool, rollout_id, baseline_id, 0.95, 300).await;
+        insert_request_with_eval(pool, rollout_id, candidate_id, 0.95, 280).await;
+    }
+
+    // Each cycle moves exactly one step, and never more than one is active.
+    let mut weights = vec![];
+    for _ in 0..5 {
+        repath_controller::loop_runner::run_once(pool, &config)
+            .await
+            .unwrap();
+        let (s, w) = state().await;
+        weights.push(w);
+        assert!(active_steps().await <= 1, "two steps active at once");
+        if s == "promoted" {
+            break;
+        }
+    }
+    assert_eq!(
+        state().await,
+        ("promoted".into(), 1.0),
+        "weights seen: {weights:?}"
+    );
+    assert_eq!(
+        weights,
+        vec![0.25, 1.0],
+        "one step per cycle, no no-op advance"
+    );
+
+    // The decision log tells the same story, with no "advance x → x".
+    let log: Vec<(Option<f64>, Option<f64>)> = sqlx::query(
+        "SELECT previous_weight, new_weight FROM decisions WHERE rollout_id = $1 ORDER BY created_at",
+    )
+    .bind(rollout_id)
+    .fetch_all(pool)
+    .await
+    .unwrap()
+    .iter()
+    .map(|r| (r.get("previous_weight"), r.get("new_weight")))
+    .collect();
+    assert_eq!(
+        log,
+        vec![
+            (Some(0.0), Some(0.10)),
+            (Some(0.10), Some(0.25)),
+            (Some(0.25), Some(1.0))
+        ]
+    );
 }

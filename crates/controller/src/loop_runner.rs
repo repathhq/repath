@@ -126,7 +126,11 @@ pub async fn run(pool: PgPool, config: ControllerConfig) {
 /// Returns the number of active rollouts processed on success, or `Err` on
 /// database failures that affect all rollouts. Per-rollout failures are logged
 /// and skipped.
-async fn run_once(pool: &PgPool, config: &ControllerConfig) -> Result<usize> {
+/// One decision cycle over every active rollout. Public so integration tests
+/// can drive real cycles rather than calling store functions in isolation —
+/// which is how a double step-activation once passed every test and stuck a
+/// live rollout at 50%.
+pub async fn run_once(pool: &PgPool, config: &ControllerConfig) -> Result<usize> {
     let rollouts = store::fetch_active_rollouts(pool).await?;
 
     if rollouts.is_empty() {

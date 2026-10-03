@@ -115,8 +115,9 @@ pub async fn apply_verdict(
             if is_final {
                 Ok(DecisionOutcome::Promoted { rollout_id })
             } else {
-                // Activate the next step so the loop can track duration
-                store::activate_next_step(pool, rollout_id).await?;
+                // apply_advance has already activated the next step; doing it
+                // here too activated two steps at once, and the rollout then
+                // ran out of steps and stuck below 100%.
                 Ok(DecisionOutcome::Advanced {
                     rollout_id,
                     new_weight,
