@@ -116,6 +116,7 @@ function StartFree({ delay, href = "/signup" }: { delay: string; href?: string }
           position: "absolute",
           top: 0,
           bottom: 0,
+          left: -60,
           width: 60,
           background: "linear-gradient(90deg,transparent,var(--sheen),transparent)",
           animation: `lp-sheen 4.5s ease-in-out infinite ${delay}`,
@@ -187,7 +188,9 @@ function LogRow({
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "auto 1fr auto",
+        // A fixed first column, so every row's move and reason start at the same
+        // x whatever the chip says; with "auto" each row sized to its own chip.
+        gridTemplateColumns: "84px minmax(0, 1fr) auto",
         gap: 12,
         padding: "13px 22px",
         borderTop: "1px solid var(--line2)",
@@ -207,6 +210,7 @@ function LogRow({
           borderRadius: 5,
           padding: "3px 7px",
           height: "fit-content",
+          justifySelf: "start",
         }}
       >
         {action}
@@ -302,8 +306,10 @@ type Cell = boolean | string;
 const COMPARE_COLUMNS = ["Feature flags", "LLM gateway", "LLM observability"];
 const COMPARISON: Array<[string, Cell, Cell, Cell, Cell]> = [
   ["Split traffic between prompt or model versions", true, true, "Weighted routing", false],
-  ["Score live responses for quality", true, false, false, true],
-  ["Advance or roll back on quality, automatically", true, "On error metrics", false, false],
+  // Feature-flag platforms now sell LLM judges and quality-guarded rollouts as
+  // an add-on (LaunchDarkly AgentControl, 2026); saying they can't would be false.
+  ["Score live responses for quality", true, "Add-on", false, true],
+  ["Advance or roll back on quality, automatically", true, "Add-on", false, false],
   ["Every rollout decision logged with its scores", true, false, false, false],
   ["Drop-in for OpenAI-compatible clients", true, false, true, "Via SDK"],
   ["Self-hostable", "Source-available", "Varies", "Varies", "Varies"],
@@ -731,9 +737,11 @@ export default function LandingPage() {
                     />
                   ))}
                 </span>
-                <span style={{ color: "var(--fg)" }}>rollout / support-triage</span>
+                <span style={{ color: "var(--fg)", whiteSpace: "nowrap" }}>rollout / support-triage</span>
                 <span
+                  className="lp-hero-version"
                   style={{
+                    whiteSpace: "nowrap",
                     display: "inline-flex",
                     alignItems: "center",
                     height: 20,
@@ -802,7 +810,8 @@ export default function LandingPage() {
 
                 <div style={{ padding: "4px 12px 0" }}>
                   <svg
-                    viewBox="0 0 900 320"
+                    viewBox="0 0 880 300"
+                    className="lp-hero-chart"
                     style={{ width: "100%", height: "auto", display: "block", overflow: "visible" }}
                     role="img"
                     aria-label="Candidate quality declining from 0.93 to 0.68 while baseline holds near 0.92, with a rollback marked at 0.68."
@@ -826,8 +835,11 @@ export default function LandingPage() {
                     ))}
                     <line x1="60" y1="78" x2="860" y2="78" strokeDasharray="5 6" style={{ stroke: "var(--adv)", strokeWidth: 1, opacity: 0.8 }} />
                     <line x1="60" y1="174" x2="860" y2="174" strokeDasharray="5 6" style={{ stroke: "var(--roll)", strokeWidth: 1, opacity: 0.8 }} />
-                    <text x="866" y="75" fontFamily="var(--font-geist-mono), monospace" fontSize="11" style={{ fill: "var(--adv)" }}>advance ≥ 0.90</text>
-                    <text x="866" y="171" fontFamily="var(--font-geist-mono), monospace" fontSize="11" style={{ fill: "var(--roll)" }}>rollback &lt; 0.70</text>
+                    {/* Inside the plot, at its left end: the candidate line only starts at 14:16,
+                        so nothing runs there. Past the right edge they spilled into the
+                        decisions column beside the chart. */}
+                    <text x="68" y="94" fontFamily="var(--font-geist-mono), monospace" fontSize="11" style={{ fill: "var(--adv)" }}>advance ≥ 0.90</text>
+                    <text x="68" y="166" fontFamily="var(--font-geist-mono), monospace" fontSize="11" style={{ fill: "var(--roll)" }}>rollback &lt; 0.70</text>
 
                     <path
                       d="M260,58.3 L310,59.8 L360,62.6 L410,67.9 L460,76.6 L510,88.6 L560,104.4 L610,120.2 L660,139.9 L710,162.5 L760,183.1 L760,270 L260,270 Z"
@@ -844,7 +856,7 @@ export default function LandingPage() {
                       fill="none" strokeLinejoin="round" strokeLinecap="round" strokeDasharray="2000" strokeDashoffset="2000"
                       style={{ stroke: "var(--accent)", strokeWidth: 2.5, animation: "lp-draw 1.5s cubic-bezier(.4,0,.2,1) .75s forwards" }}
                     />
-                    <g style={{ animation: "lp-fade .6s ease-out 2.1s both" }}>
+                    <g className="lp-hero-callout" style={{ animation: "lp-fade .6s ease-out 2.1s both" }}>
                       <line x1="760" y1="183.1" x2="760" y2="284" strokeDasharray="3 4" style={{ stroke: "var(--roll)", strokeWidth: 1 }} />
                       <circle cx="760" cy="183.1" r="10" style={{ fill: "var(--roll)", opacity: 0.16 }} />
                       <circle cx="760" cy="183.1" r="4.5" style={{ fill: "var(--roll)" }} />
@@ -1025,7 +1037,7 @@ export default function LandingPage() {
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
                 <Connector />
                 <FlowBox>
-                  OPENAI · ANTHROPIC · GEMINI · OPENROUTER<br />
+                  OPENAI · ANTHROPIC · GEMINI · OPENROUTER · VERCEL<br />
                   <span style={{ color: "var(--fg3)" }}>baseline and candidate</span>
                 </FlowBox>
                 <div style={{ flex: 1 }} />

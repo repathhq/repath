@@ -54,7 +54,7 @@
   --glow-a: oklch(0.7 0.14 210 / 0.2);
   --glow-b: oklch(0.62 0.17 285 / 0.14);
   --cta: linear-gradient(160deg, #f4f5f6, #ffffff);
-  --sheen: rgba(255, 255, 255, 0.65);
+  --sheen: rgba(255, 255, 255, 0.32);
   --dash: rgba(11, 11, 14, 0.16);
   --track: rgba(11, 11, 14, 0.14);
   --thumb: #0b0b0e;
@@ -114,7 +114,7 @@ html[data-lp-theme="dark"] .lp {
   --glow-a: oklch(0.72 0.15 195 / 0.16);
   --glow-b: oklch(0.62 0.19 285 / 0.14);
   --cta: linear-gradient(160deg, #0e1016, #090a0e);
-  --sheen: rgba(255, 255, 255, 0.55);
+  --sheen: rgba(255, 255, 255, 0.4);
   --dash: rgba(255, 255, 255, 0.18);
   --track: #282b35;
   --thumb: #f2f3f5;
@@ -141,7 +141,10 @@ html[data-lp-theme="dark"] .lp {
 @keyframes lp-rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
 @keyframes lp-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.82); } }
 @keyframes lp-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-@keyframes lp-sheen { 0% { transform: translateX(-120%); } 60%, 100% { transform: translateX(220%); } }
+/* The sheen travels the whole button and leaves it. It used to stop at 220%
+   of its own 60px width, i.e. about 130px in, and sat parked there as a
+   white bar across the label for 40% of every cycle. */
+@keyframes lp-sheen { 0% { left: -60px; } 60%, 100% { left: 100%; } }
 @keyframes lp-float { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(0, -24px, 0); } }
 
 /* Anyone who has asked their system not to animate gets a static page.
@@ -305,6 +308,16 @@ html[data-lp-theme="dark"] .lp {
   .lp-flow-2 { grid-template-columns: 1fr !important; }
   .lp-table-wrap { overflow-x: auto; }
   .lp-table { min-width: 640px; }
+}
+
+/* The hero chart is drawn at 880 units wide; on a phone that scales its 11-unit
+   labels down to about 4px. Larger glyphs keep them readable, and the
+   rollback callout goes (the decision list right below says the same). */
+@media (max-width: 600px) {
+  .lp-hero-chart text { font-size: 19px; }
+  .lp-hero-chart .lp-hero-callout rect,
+  .lp-hero-chart .lp-hero-callout text { display: none; }
+  .lp-hero-version { display: none !important; }
 }
 
 /* A phone has room for the logo and the two actions that matter; the theme
